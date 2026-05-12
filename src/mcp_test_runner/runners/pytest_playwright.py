@@ -365,6 +365,7 @@ class PytestPlaywrightRunner(TestRunner):
         filename: str,
         url: str | None = None,
         module: dict | None = None,
+        business_context: str | None = None,
     ) -> str:
         if not filename.startswith("test_"):
             filename = f"test_{filename}"
@@ -375,17 +376,45 @@ class PytestPlaywrightRunner(TestRunner):
         # If caller hands us a module from analyze_url, render a runnable
         # skeleton with concrete selectors instead of a `# TODO` stub.
         if isinstance(module, dict) and module.get("kind") == "form":
-            content = self._render_form_test(description, slug, url, module)
+            content = self._render_form_test(description, slug, url, module, business_context)
         elif isinstance(module, dict):
-            content = self._render_generic_module_test(description, slug, url, module)
+            content = self._render_generic_module_test(description, slug, url, module, business_context)
         else:
-            content = TEST_TEMPLATE.format(description=description, slug=slug)
+            content = self._render_basic_test(description, slug, business_context)
 
         target = PROJECT_ROOT / filename
         target.write_text(content)
         return f"已產生 {target}，內容：\n\n{content}"
 
-    def _render_form_test(self, description: str, slug: str, url: str | None, module: dict) -> str:
+    def _business_context_block(self, business_context: str | None) -> str:
+        """Indented `# Business context:` comment block for inside a test fn.
+
+        Why a comment vs a docstring: the docstring slot is already the case
+        name (single-line summary). Business context is supplementary
+        detail — putting it as comments keeps it visible in the source but
+        out of the way of automated docstring tooling / report headers.
+        """
+        if not business_context or not str(business_context).strip():
+            return ""
+        lines = ["    # Business context:"]
+        for raw in str(business_context).strip().splitlines():
+            stripped = raw.rstrip()
+            lines.append(f"    # {stripped}" if stripped else "    #")
+        return "\n".join(lines) + "\n"
+
+    def _render_basic_test(self, description: str, slug: str, business_context: str | None) -> str:
+        bc = self._business_context_block(business_context)
+        return (
+            "from playwright.sync_api import Page, expect\n\n\n"
+            f"def test_{slug}(page: Page):\n"
+            f"    {description!r}\n"
+            f"{bc}"
+            "    # TODO: 由 Claude 補完實作\n"
+            '    page.goto("https://example.com")\n'
+            '    expect(page).to_have_title("Example Domain")\n'
+        )
+
+    def _render_form_test(self, description: str, slug: str, url: str | None, module: dict, business_context: str | None = None) -> str:
         sel = module.get("selectors") or {}
         fields = sel.get("fields") or []
         submit = sel.get("submit")
@@ -413,11 +442,13 @@ class PytestPlaywrightRunner(TestRunner):
         # description goes on the *function* docstring so the HTML reporter
         # picks it up as the case name. Module docstring keeps just the
         # auto-gen trace for grep-ability.
+        bc = self._business_context_block(business_context)
         return (
             f'"""Auto-generated from analyze_url module: {module.get("name", "(unnamed)")} (kind=form)"""\n'
             "from playwright.sync_api import Page, expect\n\n\n"
             f"def test_{slug}(page: Page):\n"
             f"    {description!r}\n"
+            f"{bc}"
             f"    page.goto({goto_url!r})\n"
             f"{fills_body}\n"
             f"{submit_body}\n"
@@ -427,18 +458,20 @@ class PytestPlaywrightRunner(TestRunner):
               '    # expect(page.get_by_text("成功")).to_be_visible()\n'
         )
 
-    def _render_generic_module_test(self, description: str, slug: str, url: str | None, module: dict) -> str:
+    def _render_generic_module_test(self, description: str, slug: str, url: str | None, module: dict, business_context: str | None = None) -> str:
         kind = module.get("kind", "unknown")
         sel = module.get("selectors") or {}
         target_sel = sel.get("container") or sel.get("trigger") or "body"
         tcs = module.get("candidate_tcs") or []
         tc_block = "\n".join(f"    # TC: {tc}" for tc in tcs[:3])
         goto_url = url or "https://example.com"
+        bc = self._business_context_block(business_context)
         return (
             f'"""Auto-generated from analyze_url module: {module.get("name", "(unnamed)")} (kind={kind})"""\n'
             "from playwright.sync_api import Page, expect\n\n\n"
             f"def test_{slug}(page: Page):\n"
             f"    {description!r}\n"
+            f"{bc}"
             f"    page.goto({goto_url!r})\n"
             f"    target = page.locator({target_sel!r})\n"
             "    expect(target).to_be_visible()\n"

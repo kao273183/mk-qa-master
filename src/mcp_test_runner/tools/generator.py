@@ -8,8 +8,9 @@ def generate_test(
     filename: str,
     url: str | None = None,
     module: dict | None = None,
+    business_context: str | None = None,
 ) -> str:
-    """Pass url/module through only to runners that declare them.
+    """Pass url/module/business_context through only to runners that declare them.
 
     Why inspect: other runners (jest/cypress/go_test) keep the narrow
     (description, filename) signature. Calling them with extra kwargs would
@@ -22,6 +23,8 @@ def generate_test(
         extra["url"] = url
     if "module" in sig.parameters:
         extra["module"] = module
+    if "business_context" in sig.parameters:
+        extra["business_context"] = business_context
     return runner.generate_test(description, filename, **extra)
 
 

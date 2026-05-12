@@ -1,3 +1,6 @@
-from . import runner, reporter, generator, analyzer, telemetry, optimizer
+from . import runner, reporter, generator, analyzer, telemetry, optimizer, qa_context
 
-__all__ = ["runner", "reporter", "generator", "analyzer", "telemetry", "optimizer"]
+__all__ = [
+    "runner", "reporter", "generator", "analyzer",
+    "telemetry", "optimizer", "qa_context",
+]

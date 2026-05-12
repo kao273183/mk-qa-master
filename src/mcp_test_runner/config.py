@@ -14,3 +14,8 @@ TOOL_USAGE_LOG = TELEMETRY_DIR / "tool-usage.jsonl"
 GENERATION_LOG = TELEMETRY_DIR / "generation-log.jsonl"
 MODULES_LOG = TELEMETRY_DIR / "discovered-modules.jsonl"
 OPTIMIZATION_PATH = PROJECT_ROOT / "optimization-plan.md"
+# Business / domain knowledge file — drives "real QA" generation, escaping
+# the rule-based monkey-testing default. Override via QA_KNOWLEDGE_FILE env.
+QA_KNOWLEDGE_PATH = Path(
+    os.getenv("QA_KNOWLEDGE_FILE", str(PROJECT_ROOT / "qa-knowledge.md"))
+).resolve()

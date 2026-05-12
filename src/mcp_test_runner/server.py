@@ -6,7 +6,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent, Resource
 from pydantic import AnyUrl
 
-from .tools import runner, reporter, generator, analyzer, telemetry, optimizer
+from .tools import runner, reporter, generator, analyzer, telemetry, optimizer, qa_context
 from .runners import get_runner, REGISTRY
 from .reporters import html as html_reporter
 from .config import REPORT_PATH, OPTIMIZATION_PATH
@@ -92,6 +92,15 @@ async def list_tools() -> list[Tool]:
                         "type": "object",
                         "description": "選填，analyze_url 結果 modules[] 中的一個項目；提供後會用 selectors 預填",
                     },
+                    "business_context": {
+                        "type": "string",
+                        "description": (
+                            "選填，業務規則 / 歷史 Bug / 標準斷言文字 等領域知識。"
+                            "提供後會以 `# Business context:` 註解區塊印進 test 函式內，"
+                            "讓人類 reviewer 與後續 AI 都能看到設計依據。"
+                            "建議先 call get_qa_context() 拿到相關 section 再傳入。"
+                        ),
+                    },
                 },
                 "required": ["description", "filename"],
             },
@@ -174,6 +183,27 @@ async def list_tools() -> list[Tool]:
                     },
                 },
                 "required": ["url"],
+            },
+        ),
+        Tool(
+            name="get_qa_context",
+            description=(
+                "讀取受測專案的 qa-knowledge.md（業務規則 / 歷史 Bug / 標準斷言文字 / "
+                "User Journeys 等領域知識），用 ## H2 區段拆分。"
+                "用法：先 call 拿到整份或指定 section，再把相關段落以 business_context "
+                "傳給 generate_test，產出的 test 就會自帶業務知識註解 — 跳脫 monkey testing。"
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "section": {
+                        "type": "string",
+                        "description": (
+                            "選填，只取單一 H2 section（不區分大小寫、支援部分匹配）。"
+                            "省略則回整份檔 + 所有 section 名稱清單。"
+                        ),
+                    },
+                },
             },
         ),
         Tool(
@@ -304,6 +334,7 @@ async def _dispatch(name: str, args: dict) -> list[TextContent]:
             args["filename"],
             url=args.get("url"),
             module=module,
+            business_context=args.get("business_context"),
         )
         # Tagging the source lets the optimizer track "URL → AI-generated → adopted"
         # adoption rate per analyze_url module.
@@ -313,6 +344,10 @@ async def _dispatch(name: str, args: dict) -> list[TextContent]:
             source = "manual"
         telemetry.log_generation(args["filename"], args.get("description", ""), source=source)
         return [TextContent(type="text", text=msg)]
+
+    if name == "get_qa_context":
+        result = qa_context.load_context(args.get("section"))
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
 
     if name == "codegen":
         msg = generator.codegen(args["url"], args.get("output", "recorded_test.py"))
