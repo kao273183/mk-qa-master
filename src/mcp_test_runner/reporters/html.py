@@ -137,17 +137,20 @@ def _render_test_meta(title: str | None, nodeid: str) -> str:
 
 
 def _render_steps_html(steps: list[dict]) -> str:
-    """Render the Playwright action list as an ordered list.
+    """Render the action list as an ordered list.
 
-    `steps` is what runner._extract_steps returns: each item has `api` and
-    `title`. Returns '' if there are no steps so we don't emit a stray block.
+    Each item has `api` (always shown, monospace accent) and `title` (the
+    descriptive payload, may be empty). When `title` is empty — common for
+    arg-less Maestro actions like `- launchApp` — we render the api alone
+    without duplicating it in the muted column.
     """
     if not steps:
         return ""
     items: list[str] = []
     for s in steps:
         api = escape(str(s.get("api") or ""))
-        title = escape(str(s.get("title") or s.get("api") or ""))
+        title_raw = s.get("title")
+        title = escape(str(title_raw)) if title_raw else ""
         items.append(
             f'<li><code class="step-api">{api}</code>'
             f'<span class="step-title">{title}</span></li>'

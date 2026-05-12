@@ -6,12 +6,13 @@
 
 一個基於 **Model Context Protocol** 的伺服器，讓 Claude Desktop / Cursor / 任何 MCP client 端到端驅動你的測試流程：執行測試、檢視失敗（截圖 + 影片 + Playwright trace）、分析一個 URL 自動產生候選測試案例，並在每次跑完後吐出一份**下一輪該優化什麼**的優先級行動清單。
 
-| `QA_RUNNER` | 框架 | 語言 |
-|---|---|---|
-| `pytest` / `pytest-playwright` / `playwright` | pytest + Playwright | Python |
-| `jest` | Jest | JavaScript |
-| `cypress` | Cypress | JavaScript |
-| `go` / `go-test` | `go test` | Go |
+| `QA_RUNNER` | 框架 | 語言 | 目標 |
+|---|---|---|---|
+| `pytest` / `pytest-playwright` / `playwright` | pytest + Playwright | Python | Web |
+| `jest` | Jest | JavaScript | Web |
+| `cypress` | Cypress | JavaScript | Web |
+| `go` / `go-test` | `go test` | Go | Backend |
+| `maestro` / `mobile` | Maestro | YAML | iOS + Android |
 
 完整設計文件：[`framework.md`](framework.md)。
 
