@@ -3,10 +3,16 @@ import json
 import re
 import shutil
 import subprocess
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from .base import TestRunner
 from ..config import PROJECT_ROOT, REPORT_PATH, JUNIT_PATH, ARTIFACTS_DIR, HISTORY_DIR
+
+
+# Trace events whose apiName we want to surface as user-visible "steps".
+# Internal book-keeping (browserContext.*, tracing.*, etc.) is filtered out.
+_STEP_KEEP_PATTERN = re.compile(r"^(page|locator|frame|expect|keyboard|mouse|elementHandle)\.")
 
 
 # Detect once at module load — pytest-rerunfailures lets us auto-retry transient
@@ -57,9 +63,13 @@ class PytestPlaywrightRunner(TestRunner):
         cmd = [
             "pytest",
             f"--browser={browser}",
-            "--screenshot=only-on-failure",
+            # always-on: reporter surfaces pass-state screenshots + step lists,
+            # not just failures. Video stays retain-on-failure (heavy + only
+            # useful for debugging breaks); tracing has to be on for step
+            # extraction even on passes.
+            "--screenshot=on",
             "--video=retain-on-failure",
-            "--tracing=retain-on-failure",
+            "--tracing=on",
             f"--output={ARTIFACTS_DIR}",
             "--json-report",
             f"--json-report-file={REPORT_PATH}",
@@ -189,6 +199,82 @@ class PytestPlaywrightRunner(TestRunner):
         except Exception:
             # Optimizer failures should never block test running.
             pass
+
+    def get_all_test_details(self) -> list[dict]:
+        """Per-test details (outcome / duration / artifacts / steps).
+
+        The reporter uses this to render pass + fail sections in one pass.
+        `rerun` records are skipped — pytest-rerunfailures emits them as a
+        pre-marker before the final outcome and we don't want them shown as
+        their own test.
+        """
+        if not REPORT_PATH.exists():
+            return []
+        try:
+            data = json.loads(REPORT_PATH.read_text())
+        except (OSError, json.JSONDecodeError):
+            return []
+        results: list[dict] = []
+        for t in data.get("tests", []) or []:
+            nodeid = t.get("nodeid")
+            outcome = t.get("outcome")
+            if not nodeid or outcome == "rerun":
+                continue
+            artifacts = self._find_artifacts(nodeid)
+            results.append({
+                "nodeid": nodeid,
+                "outcome": outcome,
+                "duration": (t.get("call") or {}).get("duration"),
+                "message": (t.get("call") or {}).get("longrepr", "") if outcome == "failed" else "",
+                "steps": self._extract_steps(artifacts.get("trace")),
+                **artifacts,
+            })
+        return results
+
+    def _extract_steps(self, trace_zip_path: str | None) -> list[dict]:
+        """Parse trace.zip → list of {api, title} user-facing actions.
+
+        Why dedup by callId: trace JSONL emits before+after pairs per action,
+        and we want each action once. Why pattern-match apiName: skip internal
+        bookkeeping (tracing.*, browserContext.*) — keep only what a reader
+        would recognize as a test step.
+        """
+        if not trace_zip_path:
+            return []
+        p = Path(trace_zip_path)
+        if not p.is_file():
+            return []
+        seen_ids: set[str] = set()
+        steps: list[dict] = []
+        try:
+            with zipfile.ZipFile(p) as z:
+                target = next(
+                    (n for n in z.namelist() if n.endswith("trace.trace")),
+                    None,
+                )
+                if not target:
+                    return []
+                with z.open(target) as f:
+                    for raw in f:
+                        try:
+                            ev = json.loads(raw.decode("utf-8", "replace"))
+                        except json.JSONDecodeError:
+                            continue
+                        api = ev.get("apiName") or ""
+                        if not api or not _STEP_KEEP_PATTERN.match(api):
+                            continue
+                        call_id = ev.get("callId") or ""
+                        if call_id and call_id in seen_ids:
+                            continue
+                        if call_id:
+                            seen_ids.add(call_id)
+                        steps.append({
+                            "api": api,
+                            "title": ev.get("title") or api,
+                        })
+        except (zipfile.BadZipFile, OSError):
+            return []
+        return steps
 
     def get_history(self, limit: int = 10) -> list[dict]:
         if not HISTORY_DIR.exists():

@@ -117,11 +117,74 @@ def _render_trend(history: list[dict], current_failed: int) -> str:
     )
 
 
+def _render_steps_html(steps: list[dict]) -> str:
+    """Render the Playwright action list as an ordered list.
+
+    `steps` is what runner._extract_steps returns: each item has `api` and
+    `title`. Returns '' if there are no steps so we don't emit a stray block.
+    """
+    if not steps:
+        return ""
+    items: list[str] = []
+    for s in steps:
+        api = escape(str(s.get("api") or ""))
+        title = escape(str(s.get("title") or s.get("api") or ""))
+        items.append(
+            f'<li><code class="step-api">{api}</code>'
+            f'<span class="step-title">{title}</span></li>'
+        )
+    return f'<ol class="steps">{"".join(items)}</ol>'
+
+
+def _render_pass_section(passes: list[dict]) -> str:
+    """Build the collapsed Passed-tests group with one detail card per test.
+
+    Passes are hidden by default so the report stays focused on failures.
+    Cards include the step list and screenshot for transparency on what
+    "passed" actually exercised.
+    """
+    if not passes:
+        return ""
+    cards: list[str] = []
+    for t in passes:
+        nodeid = escape(str(t.get("nodeid", "unknown")))
+        dur = t.get("duration")
+        dur_str = f"{dur:.3f}s" if isinstance(dur, (int, float)) else ""
+        steps_html = _render_steps_html(t.get("steps") or [])
+        shot_html = _embed_screenshot(t.get("screenshot"))
+        cards.append(
+            f'<details class="pass">'
+            f'<summary>'
+            f'<span class="pass-badge">PASS</span>'
+            f'<span class="fail-name">{nodeid}</span>'
+            f'<span class="fail-dur">{dur_str}</span>'
+            f'</summary>'
+            f'{steps_html}'
+            f'{shot_html}'
+            f'</details>'
+        )
+    return (
+        '<div class="section-title">Passed</div>'
+        '<details class="pass-group">'
+        f'<summary><span class="pass-count">{len(passes)}</span> tests passed — click to expand</summary>'
+        f'<div class="pass-list">{"".join(cards)}</div>'
+        '</details>'
+    )
+
+
 def render_report() -> str:
     """Render the latest test report as a self-contained HTML string."""
     runner = get_runner()
     summary = runner.get_report_summary()
-    failures = runner.get_failure_details()
+    # Prefer the rich details (with steps) when available; fall back to the
+    # legacy failure-only path so non-pytest runners still render.
+    all_details = runner.get_all_test_details() if hasattr(runner, "get_all_test_details") else []
+    if all_details:
+        failures = [t for t in all_details if t.get("outcome") == "failed"]
+        passes = [t for t in all_details if t.get("outcome") == "passed"]
+    else:
+        failures = runner.get_failure_details() or []
+        passes = []
 
     has_error = isinstance(summary, dict) and "error" in summary
     total = int(summary.get("total", 0) or 0) if not has_error else 0
@@ -153,6 +216,7 @@ def render_report() -> str:
             open_attr = "open" if i < 3 else ""
             shot_html = _embed_screenshot(f.get("screenshot") if isinstance(f, dict) else None)
             links_html = _artifact_links(f if isinstance(f, dict) else {})
+            steps_html = _render_steps_html(f.get("steps") or []) if isinstance(f, dict) else ""
             cards.append(
                 f'<details class="failure" {open_attr}>'
                 f'<summary>'
@@ -161,6 +225,7 @@ def render_report() -> str:
                 f'<span class="fail-dur">{dur_str}</span>'
                 f'</summary>'
                 f'<pre>{message}</pre>'
+                f'{steps_html}'
                 f'{shot_html}'
                 f'{links_html}'
                 f'</details>'
@@ -169,6 +234,7 @@ def render_report() -> str:
 
     history = runner.get_history(limit=10) if hasattr(runner, "get_history") else []
     trend_html = _render_trend(history, failed)
+    passed_html = _render_pass_section(passes)
 
     flaky_stat_html = (
         f'<div class="stat flaky"><div class="label">Flaky (retried)</div>'
@@ -191,6 +257,7 @@ def render_report() -> str:
         "{{PASS_RATE_INT}}": str(int(pass_rate)),
         "{{TREND_SECTION}}": trend_html,
         "{{FAILURE_SECTION}}": failure_html,
+        "{{PASSED_SECTION}}": passed_html,
         "{{YEAR}}": str(datetime.now().year),
     }
     for k, v in replacements.items():
@@ -417,6 +484,76 @@ TEMPLATE = """<!DOCTYPE html>
     padding: 12px 20px 16px; background: var(--bg);
     border-top: 1px solid var(--border);
   }
+  /* Steps */
+  .steps {
+    margin: 0; padding: 12px 20px 16px 40px;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    font-family: var(--mono); font-size: 12px;
+    line-height: 1.8; color: var(--text);
+  }
+  .steps li { margin: 0; padding: 1px 0; }
+  .steps .step-api {
+    color: var(--accent); font-weight: 600;
+    margin-right: 10px; display: inline-block; min-width: 100px;
+  }
+  .steps .step-title { color: var(--text-muted); }
+
+  /* Passed tests */
+  .pass-group {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .pass-group > summary {
+    list-style: none; cursor: pointer;
+    padding: 14px 20px;
+    color: var(--text-muted); font-family: var(--mono);
+    font-size: 13px; user-select: none;
+  }
+  .pass-group > summary::-webkit-details-marker { display: none; }
+  .pass-group > summary::before {
+    content: "▸"; color: var(--text-muted);
+    transition: transform 0.15s; font-size: 12px;
+    margin-right: 10px; display: inline-block;
+  }
+  .pass-group[open] > summary::before { transform: rotate(90deg); }
+  .pass-count {
+    color: var(--green); font-weight: 700;
+    font-family: var(--mono); margin-right: 4px;
+  }
+  .pass-list { padding: 0 14px 14px; }
+  .pass {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--green);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    overflow: hidden;
+  }
+  .pass summary {
+    list-style: none; cursor: pointer;
+    padding: 10px 16px;
+    display: flex; align-items: center; gap: 10px;
+    user-select: none;
+  }
+  .pass summary::-webkit-details-marker { display: none; }
+  .pass summary::before {
+    content: "▸"; color: var(--text-muted);
+    transition: transform 0.15s; font-size: 12px;
+    flex-shrink: 0;
+  }
+  .pass[open] summary::before { transform: rotate(90deg); }
+  .pass-badge {
+    background: rgba(63, 185, 80, 0.15);
+    color: var(--green);
+    border: 1px solid rgba(63, 185, 80, 0.3);
+    padding: 2px 8px; border-radius: 4px;
+    font-family: var(--mono); font-size: 11px; font-weight: 700;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
   .artifact-link {
     display: inline-flex; align-items: center; gap: 8px;
     padding: 6px 10px; border-radius: 6px;
@@ -519,6 +656,8 @@ TEMPLATE = """<!DOCTYPE html>
 
   <div class="section-title">Failures</div>
   {{FAILURE_SECTION}}
+
+  {{PASSED_SECTION}}
 
   <footer>
     Generated by <strong style="color: var(--text);">MCP Test Runner</strong> ·

@@ -33,3 +33,11 @@ class TestRunner(ABC):
         Default: empty — runners override to expose trends.
         """
         return []
+
+    def get_all_test_details(self) -> list[dict]:
+        """Return per-test details (outcome + duration + artifacts + steps).
+
+        Default: empty — runners override when they can surface step traces.
+        The reporter uses this to render pass + fail sections in one pass.
+        """
+        return []
