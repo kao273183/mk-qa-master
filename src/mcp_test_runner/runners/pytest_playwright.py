@@ -10,9 +10,11 @@ from .base import TestRunner
 from ..config import PROJECT_ROOT, REPORT_PATH, JUNIT_PATH, ARTIFACTS_DIR, HISTORY_DIR
 
 
-# Trace events whose apiName we want to surface as user-visible "steps".
-# Internal book-keeping (browserContext.*, tracing.*, etc.) is filtered out.
-_STEP_KEEP_PATTERN = re.compile(r"^(page|locator|frame|expect|keyboard|mouse|elementHandle)\.")
+# Trace events whose class.method we want to surface as user-visible "steps".
+# Real trace.trace (Playwright 1.59+) uses `class` + `method` fields with
+# Capitalized class names — not the older `apiName` string. Internal events
+# (tracing.*, etc.) get filtered out by simply not matching this pattern.
+_STEP_KEEP_PATTERN = re.compile(r"^(Frame|Page|Locator|ElementHandle|BrowserContext|Keyboard|Mouse)\.")
 
 
 # Detect once at module load — pytest-rerunfailures lets us auto-retry transient
@@ -158,7 +160,10 @@ class PytestPlaywrightRunner(TestRunner):
         if not ARTIFACTS_DIR.exists():
             return out
         test_func = nodeid.split("::")[-1]
-        token = re.sub(r"[^\w]+", "-", test_func).strip("-").lower()
+        # \w preserves underscores; playwright-pytest sanitizes those to dashes
+        # too. Excluding underscores from the kept set keeps our token aligned
+        # with the on-disk folder name (e.g. test_a_b → test-a-b).
+        token = re.sub(r"[^a-z0-9]+", "-", test_func.lower()).strip("-")
         if not token:
             return out
         for folder in ARTIFACTS_DIR.iterdir():
@@ -234,10 +239,11 @@ class PytestPlaywrightRunner(TestRunner):
     def _extract_steps(self, trace_zip_path: str | None) -> list[dict]:
         """Parse trace.zip → list of {api, title} user-facing actions.
 
-        Why dedup by callId: trace JSONL emits before+after pairs per action,
-        and we want each action once. Why pattern-match apiName: skip internal
-        bookkeeping (tracing.*, browserContext.*) — keep only what a reader
-        would recognize as a test step.
+        Real trace.trace (Playwright 1.59+) emits one `before` event per call
+        with `class` + `method` fields (no more `apiName`). We only take
+        `before` events — `after` events repeat the callId with timing/error
+        data we don't currently surface. callId dedup is no longer strictly
+        needed but kept as a safety net for older trace formats.
         """
         if not trace_zip_path:
             return []
@@ -260,8 +266,14 @@ class PytestPlaywrightRunner(TestRunner):
                             ev = json.loads(raw.decode("utf-8", "replace"))
                         except json.JSONDecodeError:
                             continue
-                        api = ev.get("apiName") or ""
-                        if not api or not _STEP_KEEP_PATTERN.match(api):
+                        if ev.get("type") != "before":
+                            continue
+                        cls = ev.get("class") or ""
+                        method = ev.get("method") or ""
+                        if not cls or not method:
+                            continue
+                        api = f"{cls}.{method}"
+                        if not _STEP_KEEP_PATTERN.match(api):
                             continue
                         call_id = ev.get("callId") or ""
                         if call_id and call_id in seen_ids:
