@@ -301,8 +301,11 @@ _Based on 6 archived runs._
 
 ### HTML report
 
-See [`sample_report.html`](sample_report.html) — a real rendered output
-showing the stats grid, trend sparkline, failure cards with embedded
+[**Open the live rendered demo →**](https://kao273183.github.io/mcp-test-runner/sample_report.html)
+(served via GitHub Pages — clicking the link in GitHub's UI to
+[`sample_report.html`](sample_report.html) would only show source).
+
+The demo shows the stats grid, trend sparkline, failure cards with embedded
 screenshots + step lists, and the collapsed Passed section.
 
 ---

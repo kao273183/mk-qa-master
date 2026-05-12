@@ -278,7 +278,10 @@ _Based on 6 archived runs._
 
 ### HTML 報告
 
-看 [`sample_report.html`](sample_report.html) — 實際渲染輸出，含統計卡、Trend sparkline、失敗卡片（嵌入截圖 + step list）、折疊的 Passed 區塊。
+[**直接看實際渲染 →**](https://kao273183.github.io/mcp-test-runner/sample_report.html)
+（透過 GitHub Pages；點 GitHub UI 裡的 [`sample_report.html`](sample_report.html) 只會看到原始碼）。
+
+實際渲染內容含統計卡、Trend sparkline、失敗卡片（嵌入截圖 + step list）、折疊的 Passed 區塊。
 
 ---
 
