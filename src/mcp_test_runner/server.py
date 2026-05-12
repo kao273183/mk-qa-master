@@ -72,8 +72,12 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="generate_test",
             description=(
-                "產生測試骨架。若提供 url+module（來自 analyze_url），會用 selectors 預填出"
-                "可直接執行的版本，並把 candidate_tcs 寫成註解；否則回退到通用骨架模板。"
+                "產生 pytest-playwright 測試骨架。"
+                "推薦流程：先呼叫 analyze_url 拿 candidate_tcs，"
+                "再對每條想覆蓋的 TC 呼叫一次 generate_test、把該 candidate_tc 整段字串當 description 傳入"
+                " — 這段會自動寫成 test 函式的 docstring，HTML 報告會把它當作 case 名稱顯示。"
+                "若提供 url+module（來自 analyze_url 的 modules[]），會用 selectors 預填可執行版本。"
+                "若想一次處理整個 URL、不想自己編排，請改用 auto_generate_tests。"
             ),
             inputSchema={
                 "type": "object",
@@ -167,6 +171,35 @@ async def list_tools() -> list[Tool]:
                     "auth_cookie": {
                         "type": "string",
                         "description": "選填，預先注入登入 cookie，格式：name1=value1; name2=value2",
+                    },
+                },
+                "required": ["url"],
+            },
+        ),
+        Tool(
+            name="auto_generate_tests",
+            description=(
+                "一鍵交付：分析 URL → 為每個偵測到的模塊用其 candidate_tcs 自動產出對應 pytest 測試。"
+                "等同於『analyze_url → 對每個 module 連跑 generate_test』，"
+                "適合『給 URL、其他自動』的快速覆蓋場景。"
+                "每條 candidate_tc 會變成對應 test 的 docstring，"
+                "之後 run_tests 跑完、HTML 報告就會用這些 docstring 當 case 名稱。"
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "要分析並產測的 URL"},
+                    "timeout_ms": {"type": "integer", "default": 15000},
+                    "auth_cookie": {
+                        "type": "string",
+                        "description": "選填，登入 cookie，格式：name1=value1; name2=value2",
+                    },
+                    "tests_per_module": {
+                        "type": "integer",
+                        "default": 1,
+                        "minimum": 1,
+                        "maximum": 10,
+                        "description": "每個模塊從 candidate_tcs 取前 N 條各產一條 test（預設 1）",
                     },
                 },
                 "required": ["url"],
@@ -311,7 +344,77 @@ async def _dispatch(name: str, args: dict) -> list[TextContent]:
             telemetry.log_discovered_modules(args["url"], result.get("modules", []))
         return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
 
+    if name == "auto_generate_tests":
+        result = await _auto_generate_tests(
+            url=args["url"],
+            timeout_ms=args.get("timeout_ms", 15000),
+            auth_cookie=args.get("auth_cookie"),
+            tests_per_module=args.get("tests_per_module", 1),
+        )
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
     return [TextContent(type="text", text=f"未知的 tool: {name}")]
+
+
+async def _auto_generate_tests(
+    url: str,
+    timeout_ms: int,
+    auth_cookie: str | None,
+    tests_per_module: int,
+) -> dict:
+    """analyze_url → per module → generate_test × N. All-in-one orchestration.
+
+    Why inline in server.py: the chain is short and stays close to where the
+    individual tools are already wired. Telemetry hooks mirror the manual path
+    so the optimizer still sees the same discovery + generation signals.
+    """
+    analysis = await analyzer.analyze_url(
+        url, timeout_ms=timeout_ms, auth_cookie=auth_cookie,
+    )
+    if isinstance(analysis, dict) and "error" in analysis:
+        return analysis
+    if isinstance(analysis, dict):
+        telemetry.log_discovered_modules(url, analysis.get("modules", []) or [])
+
+    generated: list[dict] = []
+    for module in (analysis.get("modules", []) or []):
+        candidates = module.get("candidate_tcs", []) or []
+        module_name = module.get("name", "module")
+        for i, tc in enumerate(candidates[:tests_per_module]):
+            slug = f"{module_name}_{i}" if i > 0 else module_name
+            try:
+                generator.generate_test(
+                    description=tc,
+                    filename=slug,
+                    url=url,
+                    module=module,
+                )
+                file_out = f"test_{slug}.py"
+                generated.append({
+                    "filename": file_out,
+                    "description": tc,
+                    "module_kind": module.get("kind"),
+                    "module_name": module_name,
+                })
+                telemetry.log_generation(
+                    file_out, tc, source=f"auto_generate_tests:{module_name}",
+                )
+            except Exception as e:
+                generated.append({
+                    "filename": f"test_{slug}.py",
+                    "module_name": module_name,
+                    "error": f"{type(e).__name__}: {e}",
+                })
+
+    return {
+        "url": url,
+        "page_title": analysis.get("page_title"),
+        "module_count": analysis.get("module_count"),
+        "api_endpoint_count": analysis.get("api_endpoint_count"),
+        "tests_generated": sum(1 for g in generated if "error" not in g),
+        "tests_failed": sum(1 for g in generated if "error" in g),
+        "tests": generated,
+    }
 
 
 async def main():
