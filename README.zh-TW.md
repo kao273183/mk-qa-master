@@ -391,7 +391,8 @@ _Based on 6 archived runs._
 
 ## License
 
-MIT © 2026 Jack Kao — 完整授權條款見 [`LICENSE`](LICENSE)。
+MIT © 2026 Jack Kao — 英文原版（具法律效力）見 [`LICENSE`](LICENSE)；
+中文翻譯參考見 [`LICENSE.zh-TW.md`](LICENSE.zh-TW.md)。
 
 白話版：個人用、商用、改寫、再散布都可以，**唯一要求是保留 copyright 跟授權聲明在你的 copy 裡**。
 **不附保證**（warranty）— 用了出問題自己負責，不能反過來告作者。
