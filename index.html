@@ -3,27 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MCP Test Runner — Universal Testing MCP Server</title>
-<meta name="description" content="MCP server for running tests across pytest / Jest / Cypress / Go, with built-in DOM analyzer, run history, and a self-improvement coach.">
-<meta property="og:title" content="MCP Test Runner">
-<meta property="og:description" content="跨框架測試執行 MCP server。含 DOM 分析、運行歷史、自我強化教練。">
-<meta property="og:type" content="website">
-<meta property="og:url" content="https://kao273183.github.io/mcp-test-runner/">
+<title>mcp-test-runner</title>
+<meta name="description" content="MCP server that drives pytest / Jest / Cypress / Go test through Claude, with a self-improvement coach after every run.">
+<meta property="og:title" content="mcp-test-runner">
+<meta property="og:description" content="跨框架測試執行 MCP server，每跑完一次告訴你下一步該改什麼。">
 <style>
   :root {
     --bg: #0D1117;
-    --bg-elevated: #161B22;
-    --bg-surface: #21262D;
+    --bg-elev: #161B22;
     --border: #30363D;
+    --border-dim: #21262D;
     --text: #E6EDF3;
-    --text-muted: #8B949E;
-    --text-dim: #7D8590;
+    --muted: #8B949E;
+    --dim: #6E7681;
     --accent: #7C7FF5;
-    --accent-deep: #6B6EE0;
     --green: #3FB950;
     --yellow: #D29922;
     --red: #F85149;
-    --mono: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+    --mono: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, ui-monospace, monospace;
     --sans: -apple-system, BlinkMacSystemFont, 'Inter', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
   }
   * { box-sizing: border-box; }
@@ -33,540 +30,474 @@
     background: var(--bg);
     color: var(--text);
     font-family: var(--sans);
-    line-height: 1.7;
+    font-size: 15px;
+    line-height: 1.75;
     -webkit-font-smoothing: antialiased;
   }
-  a { color: var(--accent); text-decoration: none; }
+  a { color: var(--accent); }
   a:hover { text-decoration: underline; }
-  .container { max-width: 920px; margin: 0 auto; padding: 0 24px; }
 
-  /* Header */
-  header.site {
-    border-bottom: 1px solid var(--border);
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 28px; }
+
+  /* Minimal header: brand + repo link, no logo box */
+  header.top {
+    border-bottom: 1px solid var(--border-dim);
     padding: 18px 0;
-    position: sticky; top: 0;
-    background: rgba(13, 17, 23, 0.85);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    z-index: 10;
+    font-family: var(--mono);
+    font-size: 13px;
   }
-  header.site .container {
-    display: flex; align-items: center; gap: 12px;
+  header.top .wrap {
+    display: flex; align-items: center;
   }
-  .logo {
-    width: 36px; height: 36px; border-radius: 8px;
-    background: var(--accent); color: #fff;
-    display: flex; align-items: center; justify-content: center;
-    font-family: var(--mono); font-weight: 700; font-size: 14px;
+  header.top .name { color: var(--text); }
+  header.top .name::before { content: "$ "; color: var(--dim); }
+  header.top .right {
+    margin-left: auto;
+    color: var(--muted);
   }
-  .brand { font-weight: 600; font-size: 16px; }
-  .brand-tag {
-    color: var(--text-muted);
-    font-family: var(--mono); font-size: 12px;
-    margin-left: 6px;
-  }
-  .nav { margin-left: auto; display: flex; gap: 20px; }
-  .nav a { color: var(--text-muted); font-size: 14px; }
-  .nav a:hover { color: var(--accent); text-decoration: none; }
+  header.top .right a { color: var(--muted); margin-left: 16px; }
+  header.top .right a:hover { color: var(--accent); text-decoration: none; }
 
-  /* Hero */
-  .hero {
-    padding: 90px 0 70px;
-    text-align: center;
-    border-bottom: 1px solid var(--border);
+  /* Lead */
+  .lead {
+    padding: 64px 0 32px;
   }
-  .hero h1 {
-    font-size: 56px; line-height: 1.1; margin: 0 0 20px;
-    letter-spacing: -0.02em;
-    font-weight: 800;
-  }
-  .hero h1 .accent { color: var(--accent); }
-  .hero .tagline {
-    font-size: 18px;
-    color: var(--text-muted);
-    max-width: 660px;
-    margin: 0 auto 36px;
-  }
-  .cta-row {
-    display: flex; gap: 12px; justify-content: center;
-    flex-wrap: wrap;
-  }
-  .btn {
-    padding: 12px 22px;
-    border-radius: 8px;
-    font-family: var(--sans); font-weight: 500;
-    font-size: 14px;
-    border: 1px solid var(--border);
-    color: var(--text); background: var(--bg-elevated);
-    text-decoration: none;
-    transition: border-color 0.15s, background 0.15s;
-    display: inline-flex; align-items: center; gap: 8px;
-  }
-  .btn:hover {
-    border-color: var(--accent);
-    background: rgba(124,127,245,0.08);
-    text-decoration: none;
-  }
-  .btn.primary {
-    background: var(--accent); color: #fff;
-    border-color: var(--accent);
-  }
-  .btn.primary:hover {
-    background: var(--accent-deep);
-    border-color: var(--accent-deep);
-  }
-
-  /* Section */
-  section.bk {
-    padding: 64px 0;
-    border-bottom: 1px solid var(--border);
-  }
-  section.bk h2 {
-    font-size: 28px; font-weight: 700; margin: 0 0 14px;
+  .lead h1 {
+    font-family: var(--mono);
+    font-size: 28px;
+    margin: 0 0 22px;
+    font-weight: 600;
     letter-spacing: -0.01em;
   }
-  section.bk .subhead {
-    color: var(--text-muted); font-size: 16px;
-    margin: 0 0 36px;
-    max-width: 680px;
+  .lead h1 .prompt { color: var(--dim); }
+  .lead p {
+    font-size: 17px;
+    color: var(--text);
+    margin: 0 0 14px;
   }
+  .lead p.muted { color: var(--muted); font-size: 15px; }
+  .lead .quick-links {
+    margin-top: 22px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .lead .quick-links a { margin-right: 18px; }
 
-  /* Feature grid */
-  .features {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 16px;
+  /* Sections */
+  main section {
+    padding: 36px 0;
   }
-  .feature {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 24px;
+  main section + section { border-top: 1px solid var(--border-dim); }
+  main h2 {
+    font-family: var(--mono);
+    font-size: 16px;
+    margin: 0 0 16px;
+    font-weight: 600;
+    color: var(--accent);
   }
-  .feature .icon {
-    font-size: 28px; margin-bottom: 14px; display: block;
-  }
-  .feature h3 {
-    font-size: 16px; margin: 0 0 8px;
+  main h2::before { content: "## "; color: var(--dim); }
+  main h3 {
+    font-size: 15px; margin: 24px 0 8px;
     font-weight: 600;
   }
-  .feature p {
-    color: var(--text-muted); font-size: 14px;
-    margin: 0; line-height: 1.6;
+  main p {
+    margin: 0 0 14px;
+    color: var(--text);
   }
-
-  /* ASCII flow */
-  pre.flow {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 28px;
-    font-family: var(--mono); font-size: 13px;
-    line-height: 1.7;
-    overflow-x: auto;
-    color: var(--text-muted);
-    margin: 0;
+  main p.note {
+    color: var(--muted); font-size: 14px;
+    border-left: 2px solid var(--border);
+    padding-left: 14px;
+    margin: 18px 0;
   }
-  pre.flow .step { color: var(--accent); }
-  pre.flow .out  { color: var(--green); }
+  main ul { padding-left: 22px; margin: 0 0 14px; }
+  main ul li { margin-bottom: 4px; }
 
-  /* Code blocks */
+  /* Strong emphasis used as inline label */
+  strong.kw { color: var(--accent); font-weight: 600; }
+
+  /* Inline + block code */
+  code, pre {
+    font-family: var(--mono);
+  }
+  p code, li code, td code {
+    background: var(--bg-elev);
+    border: 1px solid var(--border-dim);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 13px;
+    color: var(--accent);
+  }
   pre.code {
-    background: var(--bg-elevated);
+    background: var(--bg-elev);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 18px 20px;
-    font-family: var(--mono); font-size: 13px;
+    border-radius: 6px;
+    padding: 16px 18px;
+    font-size: 13px;
     line-height: 1.7;
     overflow-x: auto;
     margin: 0 0 14px;
     color: var(--text);
   }
-  pre.code .comment   { color: var(--text-dim); }
-  pre.code .accent-kw { color: var(--accent); }
+  pre.code .c { color: var(--dim); }
+  pre.code .k { color: var(--accent); }
 
-  /* Quickstart */
-  .qs-step {
-    display: flex; gap: 18px;
-    margin-bottom: 28px;
+  /* ASCII flow */
+  pre.ascii {
+    background: transparent;
+    border: none;
+    padding: 0;
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: var(--muted);
+    margin: 8px 0 14px;
+    overflow-x: auto;
   }
-  .qs-step:last-child { margin-bottom: 0; }
-  .qs-num {
-    flex-shrink: 0;
-    width: 32px; height: 32px;
-    border-radius: 50%;
-    background: var(--accent); color: #fff;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-family: var(--mono);
-    font-size: 14px;
-  }
-  .qs-content { flex: 1; min-width: 0; }
-  .qs-content h3 {
-    font-size: 17px; margin: 4px 0 10px;
-    font-weight: 600;
-  }
-  .qs-content p {
-    color: var(--text-muted); font-size: 14px;
-    margin: 0 0 12px;
-  }
+  pre.ascii .a { color: var(--accent); }
+  pre.ascii .g { color: var(--green); }
 
-  /* Tool catalogue */
-  .tool-groups {
+  /* Plain key-value list (used for tools, refs) */
+  dl.kv { margin: 0 0 14px; }
+  dl.kv > div {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    grid-template-columns: 130px 1fr;
     gap: 14px;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--border-dim);
   }
-  .tool-group {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px 22px;
+  dl.kv > div:last-child { border-bottom: none; }
+  dl.kv dt {
+    color: var(--muted); font-family: var(--mono);
+    font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    padding-top: 2px;
   }
-  .tool-group h3 {
-    font-size: 11px; margin: 0 0 12px;
-    color: var(--text-muted); font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.08em;
-    font-family: var(--mono);
+  dl.kv dd {
+    margin: 0;
+    font-family: var(--mono); font-size: 13px;
   }
-  .tool-group ul {
+  dl.kv dd code { background: none; border: none; padding: 0; }
+
+  /* Numbered steps — flat */
+  ol.steps {
     list-style: none; padding: 0; margin: 0;
-    font-family: var(--mono); font-size: 13px;
+    counter-reset: stepc;
   }
-  .tool-group li { padding: 4px 0; color: var(--text); }
-  .tool-group code { color: var(--accent); }
-
-  /* Layer / Lens cards */
-  .grid-3 {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 16px;
+  ol.steps > li {
+    counter-increment: stepc;
+    padding: 14px 0 8px;
+    border-top: 1px solid var(--border-dim);
   }
-  .card3 {
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 22px;
-    background: var(--bg-elevated);
-  }
-  .card3 .lbl {
-    font-family: var(--mono); font-size: 11px;
-    color: var(--accent); font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.08em;
-    margin-bottom: 6px;
-  }
-  .card3 h3 {
-    font-size: 16px; margin: 0 0 10px;
-    font-weight: 600;
-  }
-  .card3 p {
-    color: var(--text-muted); font-size: 13px;
-    margin: 0; line-height: 1.6;
-  }
-
-  /* Inline code */
-  code.inline {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 1px 6px;
-    font-family: var(--mono); font-size: 13px;
+  ol.steps > li:first-child { border-top: none; padding-top: 0; }
+  ol.steps > li::before {
+    content: counter(stepc) ".";
+    font-family: var(--mono);
     color: var(--accent);
+    margin-right: 10px;
+    font-weight: 700;
+  }
+  ol.steps > li > .body {
+    display: inline;
+  }
+  ol.steps .body > p:first-child {
+    display: inline;
   }
 
   /* Footer */
-  footer.site {
-    padding: 40px 0 60px;
-    color: var(--text-muted);
-    font-size: 13px;
-    text-align: center;
+  footer.bottom {
+    padding: 32px 0 60px;
+    border-top: 1px solid var(--border-dim);
+    color: var(--muted);
+    font-family: var(--mono); font-size: 13px;
   }
-  footer.site .links {
-    display: flex; gap: 18px; justify-content: center;
-    margin-bottom: 14px;
-    flex-wrap: wrap;
-  }
-  footer.site .links a { color: var(--text-muted); }
-  footer.site .links a:hover { color: var(--accent); }
+  footer.bottom .wrap > div + div { margin-top: 6px; }
+  footer.bottom a { color: var(--muted); margin-right: 14px; }
+  footer.bottom a:hover { color: var(--accent); text-decoration: none; }
+  footer.bottom .cmt { color: var(--dim); }
 
-  @media (max-width: 640px) {
-    .hero { padding: 60px 0 40px; }
-    .hero h1 { font-size: 38px; }
-    .hero .tagline { font-size: 15px; }
-    .nav { display: none; }
-    section.bk { padding: 48px 0; }
+  @media (max-width: 600px) {
+    .wrap { padding: 0 18px; }
+    .lead { padding: 40px 0 24px; }
+    .lead h1 { font-size: 24px; }
+    dl.kv > div { grid-template-columns: 1fr; gap: 2px; }
+    header.top .right a { margin-left: 12px; }
   }
 </style>
 </head>
 <body>
 
-<header class="site">
-  <div class="container">
-    <div class="logo">MTR</div>
-    <div>
-      <span class="brand">MCP Test Runner</span>
-      <span class="brand-tag">v0.1.0</span>
-    </div>
-    <nav class="nav">
-      <a href="#features">Features</a>
-      <a href="#flow">Workflow</a>
-      <a href="#quickstart">Quick start</a>
-      <a href="#tools">Tools</a>
-      <a href="https://github.com/kao273183/mcp-test-runner">GitHub →</a>
-    </nav>
+<header class="top">
+  <div class="wrap">
+    <span class="name">mcp-test-runner</span>
+    <span class="right">
+      <a href="https://github.com/kao273183/mcp-test-runner">github</a>
+      <a href="sample_report.html">demo</a>
+      <a href="https://github.com/kao273183/mcp-test-runner/blob/main/README.md">readme</a>
+    </span>
   </div>
 </header>
 
-<section class="hero">
-  <div class="container">
-    <h1>Run tests via <span class="accent">MCP</span>.<br>Get a coach for free.</h1>
-    <p class="tagline">
-      跨框架測試執行 MCP server — pytest / Jest / Cypress / Go test。
-      內建 DOM 分析器、運行歷史快照、三層自我強化教練，
-      讓 Claude 直接幫你跑測試、寫測試、告訴你下一步該改什麼。
-    </p>
-    <div class="cta-row">
-      <a class="btn primary" href="https://github.com/kao273183/mcp-test-runner">View on GitHub →</a>
-      <a class="btn" href="sample_report.html">Demo Report</a>
-      <a class="btn" href="#quickstart">Quick start ↓</a>
-    </div>
+<div class="wrap">
+
+<section class="lead">
+  <h1><span class="prompt">$&nbsp;</span>mcp-test-runner --serve</h1>
+
+  <p>
+    一個 Model Context Protocol server。讓 Claude / Cursor 直接驅動 pytest /
+    Jest / Cypress / Go test。每跑完一次就告訴你下一步該改什麼。
+  </p>
+  <p class="muted">
+    寫這個的動機很單純：我不想再重複「跑測試 → 看 log → 整理失敗 → 想下次該補哪些」
+    這個迴圈。MCP 讓 Claude 接手執行 + 鑑識 + 教練三件事；我只要回答它指過來的「下一步」。
+  </p>
+
+  <div class="quick-links">
+    →<a href="#what">what it does</a>
+    →<a href="#flow">pipeline</a>
+    →<a href="#install">install</a>
+    →<a href="#tools">tools</a>
+    →<a href="#qa">qa knowledge</a>
+    →<a href="#coach">the coach</a>
   </div>
 </section>
 
-<section class="bk" id="features">
-  <div class="container">
-    <h2>What's in the box</h2>
-    <p class="subhead">
-      一個 MCP server、多個介面。用自然語言對 Claude 下指令，不用記 tool 名稱也能跑全套 QA 流程。
-    </p>
-    <div class="features">
-      <div class="feature">
-        <span class="icon">🧪</span>
-        <h3>Multi-runner 支援</h3>
-        <p>pytest / Jest / Cypress / Go test — 用 <code class="inline">QA_RUNNER</code> 環境變數切換。每個 runner 有對應的 plugin 處理原生輸出格式。</p>
-      </div>
-      <div class="feature">
-        <span class="icon">🔍</span>
-        <h3>DOM 分析器</h3>
-        <p>給 URL → 自動拆 form / nav / dialog / CTA 模塊 + 候選 TC 清單 + 偵測到的 API endpoints。從此不用手寫 locator。</p>
-      </div>
-      <div class="feature">
-        <span class="icon">🎬</span>
-        <h3>失敗鑑識</h3>
-        <p>每條 test 都有 screenshot + video + Playwright trace.zip。HTML 報告含步驟列表跟 base64 內嵌截圖，packaged 給 reviewer 即用。</p>
-      </div>
-      <div class="feature">
-        <span class="icon">📊</span>
-        <h3>自我強化教練</h3>
-        <p>每跑完一次自動寫 <code class="inline">optimization-plan.md</code>。三層分析：flake / broken / coverage_gap / slow_regression 排序、告訴你哪條該先修。</p>
-      </div>
-    </div>
-  </div>
+<main>
+
+<section id="what">
+  <h2>what it does</h2>
+  <p>
+    三件事，按你會用到的頻率排：
+  </p>
+
+  <h3>1. 跑測試</h3>
+  <p>
+    透過 <code>QA_RUNNER</code> 環境變數切 framework。pytest-playwright 已完整實作（含
+    auto-retry / tracing / JUnit XML）；jest / cypress / go test 用同一介面、各自有
+    runner plugin 處理原生輸出。每條 test 都拿 screenshot + video + Playwright trace.zip。
+  </p>
+
+  <h3>2. 從 URL 寫測試</h3>
+  <p>
+    <code>analyze_url</code> 用 headless Chromium 打開頁面、拆 form / nav / dialog /
+    CTA 模塊，順便監聽 fetch/xhr 收集 API endpoints。每個模塊附上候選 TC 清單。
+    <code>generate_test</code> 接過去寫 runnable pytest 骨架 — 用真實的 selectors，
+    不是 <code># TODO 由 AI 補完</code> 占位符。
+  </p>
+
+  <h3>3. 當你的教練</h3>
+  <p>
+    每跑完一次 <code>_archive_report()</code> 自動把 <code>report.json</code> 快照進
+    <code>test-results/history/</code>，並寫一份新的 <code>optimization-plan.md</code>。
+    Optimizer 從三個視角看你的工作：哪些 test 是 flaky / broken / slow_regression、
+    哪些 MCP tool 呼叫模式可以包成 meta-tool、AI 產出的測試最後有沒有被採用。
+  </p>
 </section>
 
-<section class="bk" id="flow">
-  <div class="container">
-    <h2>End-to-end flow</h2>
-    <p class="subhead">
-      迴圈是設計重點：每次 run 餵 optimizer、optimizer 指出最弱環節、下一次 run 優先攻那一環。
-    </p>
-<pre class="flow">
-   <span class="step">[URL]</span>
+<section id="flow">
+  <h2>the pipeline</h2>
+<pre class="ascii">
+   <span class="a">[URL]</span>
         │  analyze_url
         ▼
-   <span class="step">modules + candidate TCs + API endpoints</span>
+   <span class="a">modules + candidate TCs + API endpoints</span>
         │  generate_test (module=...)
         ▼
-   <span class="step">tests/test_*.py</span>  (可直接執行、不再是 # TODO 占位)
+   <span class="a">tests/test_*.py</span>   ← 可直接跑、不是 # TODO 占位
         │  run_tests
         ▼
-   <span class="out">report.json + screenshots + trace.zip + junit.xml</span>
+   <span class="g">report.json + screenshots + trace.zip + junit.xml</span>
         │
-        ├──→ generate_html_report  ──→  <span class="out">self-contained HTML report</span>
-        ├──→ auto archive          ──→  <span class="out">history/ snapshot</span>
-        └──→ optimizer auto-write  ──→  <span class="out">optimization-plan.md</span>
-                                                  │
-                                                  ▼
-                                       next session reads → loops
+        ├──→ generate_html_report  ──→  <span class="g">self-contained HTML</span>
+        ├──→ auto archive          ──→  <span class="g">history/ snapshot</span>
+        └──→ optimizer auto-write  ──→  <span class="g">optimization-plan.md</span>
+                                                 │
+                                                 ▼
+                                      下一個 session 讀進來 → loops
 </pre>
-  </div>
+  <p class="note">
+    迴圈是設計重點。每次 run 餵 optimizer、optimizer 指出最弱環節、下次 run 優先攻那一環。
+    沒有這個迴圈的話、AI 只是個更快的 monkey tester。
+  </p>
 </section>
 
-<section class="bk" id="quickstart">
-  <div class="container">
-    <h2>Quick start</h2>
-    <p class="subhead">
-      三步從 clone 到「Claude 已經幫你跑完測試」。
-    </p>
-
-    <div class="qs-step">
-      <div class="qs-num">1</div>
-      <div class="qs-content">
-        <h3>Install</h3>
-        <p>Clone repo、editable install、裝 Playwright 瀏覽器。</p>
+<section id="install">
+  <h2>install</h2>
 <pre class="code">git clone https://github.com/kao273183/mcp-test-runner.git
 cd mcp-test-runner
 python -m venv .venv &amp;&amp; source .venv/bin/activate
 pip install -e .
 playwright install chromium
-<span class="comment"># 選用 — 啟用 flaky test 自動重試</span>
+<span class="c"># 選用：啟用 flaky test auto-retry</span>
 pip install pytest-rerunfailures</pre>
-      </div>
-    </div>
 
-    <div class="qs-step">
-      <div class="qs-num">2</div>
-      <div class="qs-content">
-        <h3>接到 Claude Desktop</h3>
-        <p>把以下加入 <code class="inline">~/Library/Application Support/Claude/claude_desktop_config.json</code> (macOS)。</p>
+  <h3>接到 Claude Desktop</h3>
+  <p>
+    把以下加進 <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>
+    （macOS；Windows 在 <code>%APPDATA%\Claude\</code>）：
+  </p>
 <pre class="code">{
-  <span class="accent-kw">"mcpServers"</span>: {
-    <span class="accent-kw">"mcp-test-runner"</span>: {
-      <span class="accent-kw">"command"</span>: "/path/to/.venv/bin/python",
-      <span class="accent-kw">"args"</span>: ["-m", "mcp_test_runner.server"],
-      <span class="accent-kw">"cwd"</span>: "/path/to/mcp-test-runner",
-      <span class="accent-kw">"env"</span>: {
-        <span class="accent-kw">"QA_RUNNER"</span>: "pytest",
-        <span class="accent-kw">"QA_PROJECT_ROOT"</span>: "/path/to/your-test-project"
+  <span class="k">"mcpServers"</span>: {
+    <span class="k">"mcp-test-runner"</span>: {
+      <span class="k">"command"</span>: <span class="k">"/path/to/.venv/bin/python"</span>,
+      <span class="k">"args"</span>: [<span class="k">"-m"</span>, <span class="k">"mcp_test_runner.server"</span>],
+      <span class="k">"cwd"</span>: <span class="k">"/path/to/mcp-test-runner"</span>,
+      <span class="k">"env"</span>: {
+        <span class="k">"QA_RUNNER"</span>: <span class="k">"pytest"</span>,
+        <span class="k">"QA_PROJECT_ROOT"</span>: <span class="k">"/path/to/your-test-project"</span>
       }
     }
   }
 }</pre>
-      </div>
-    </div>
 
-    <div class="qs-step">
-      <div class="qs-num">3</div>
-      <div class="qs-content">
-        <h3>對 Claude 下指令</h3>
-        <p>重啟 Claude Desktop。打開 session，試試下面任一條：</p>
-<pre class="code"><span class="comment"># 一鍵：分析 URL 並產出可執行測試</span>
-"測試 https://your-site/login — 對每個模塊產 1 條 test"
+  <h3>第一個 prompt</h3>
+  <p>重啟 Claude Desktop、開 session、試試任一條：</p>
+<pre class="code"><span class="c"># 一鍵：分析 URL 並產出可執行測試</span>
+測試 https://your-site/login — 對每個模塊產 1 條 test
 
-<span class="comment"># 看 optimizer 認為下一步該做什麼</span>
-"下一步該優化什麼？"
+<span class="c"># 看 optimizer 認為下一步該做什麼</span>
+下一步該優化什麼？
 
-<span class="comment"># 結合領域知識寫回歸測試</span>
-"參考 qa 知識的歷史 bug 區段，幫我寫 coupon 連點兩次的回歸測試"</pre>
-      </div>
-    </div>
-  </div>
+<span class="c"># 結合領域知識寫回歸測試</span>
+參考 qa 知識的歷史 bug 區段，幫我寫 coupon 連點兩次的回歸測試</pre>
 </section>
 
-<section class="bk" id="tools">
-  <div class="container">
-    <h2>Tools at a glance</h2>
-    <p class="subhead">
-      14 個 MCP tool 分 5 類。你不用記 tool 名稱 — 自然語言 prompt 對應請見
-      <a href="https://github.com/kao273183/mcp-test-runner/blob/main/README.md#prompting-cookbook">Prompting cookbook</a>。
-    </p>
-    <div class="tool-groups">
-      <div class="tool-group">
-        <h3>Setup</h3>
-        <ul>
-          <li><code>get_runner_info</code></li>
-          <li><code>init_qa_knowledge</code></li>
-          <li><code>get_qa_context</code></li>
-        </ul>
-      </div>
-      <div class="tool-group">
-        <h3>Execution</h3>
-        <ul>
-          <li><code>list_tests</code></li>
-          <li><code>run_tests</code></li>
-          <li><code>run_failed</code></li>
-        </ul>
-      </div>
-      <div class="tool-group">
-        <h3>Authoring</h3>
-        <ul>
-          <li><code>analyze_url</code></li>
-          <li><code>generate_test</code></li>
-          <li><code>auto_generate_tests</code></li>
-          <li><code>codegen</code></li>
-        </ul>
-      </div>
-      <div class="tool-group">
-        <h3>Reporting</h3>
-        <ul>
-          <li><code>get_test_report</code></li>
-          <li><code>get_failure_details</code></li>
-          <li><code>generate_html_report</code></li>
-        </ul>
-      </div>
-      <div class="tool-group">
-        <h3>Coaching</h3>
-        <ul>
-          <li><code>get_test_history</code></li>
-          <li><code>get_optimization_plan</code></li>
-        </ul>
-      </div>
+<section id="tools">
+  <h2>tools</h2>
+  <p>
+    14 個 MCP tool 分 5 類。你不用記名稱 — README 裡的
+    <a href="https://github.com/kao273183/mcp-test-runner/blob/main/README.md#prompting-cookbook">prompting cookbook</a>
+    有對應的中文 prompt 寫法。
+  </p>
+
+  <dl class="kv">
+    <div>
+      <dt>setup</dt>
+      <dd><code>get_runner_info</code>, <code>init_qa_knowledge</code>, <code>get_qa_context</code></dd>
     </div>
-  </div>
+    <div>
+      <dt>execution</dt>
+      <dd><code>list_tests</code>, <code>run_tests</code>, <code>run_failed</code></dd>
+    </div>
+    <div>
+      <dt>authoring</dt>
+      <dd><code>analyze_url</code>, <code>generate_test</code>, <code>auto_generate_tests</code>, <code>codegen</code></dd>
+    </div>
+    <div>
+      <dt>reporting</dt>
+      <dd><code>get_test_report</code>, <code>get_failure_details</code>, <code>generate_html_report</code></dd>
+    </div>
+    <div>
+      <dt>coaching</dt>
+      <dd><code>get_test_history</code>, <code>get_optimization_plan</code></dd>
+    </div>
+  </dl>
 </section>
 
-<section class="bk" id="layers">
-  <div class="container">
-    <h2>跳脫 monkey testing 的三層 QA 知識</h2>
-    <p class="subhead">
-      光看 DOM 只能產「空欄位送出應出錯」這種通用測試。要做真 QA、就得把領域知識疊上來。
-    </p>
-    <div class="grid-3">
-      <div class="card3">
-        <span class="lbl">Layer 1 — Built-in</span>
-        <h3>通用測試方法論</h3>
-        <p>ISTQB 七大原則、等價分割 / 邊界值、決策表、狀態轉換、測試金字塔、Shift-Left、回歸策略、Mobile checklist、QA metrics。MCP 內建、零設定。</p>
-      </div>
-      <div class="card3">
-        <span class="lbl">Layer 2 — Your file</span>
-        <h3>領域業務知識</h3>
-        <p>業務規則、歷史 Bug、標準斷言文字、user journey。寫在受測專案的 <code class="inline">qa-knowledge.md</code>，用 <code class="inline">init_qa_knowledge</code> 一鍵起手。</p>
-      </div>
-      <div class="card3">
-        <span class="lbl">Layer 3 — Per-test</span>
-        <h3>單條測試 inline 註解</h3>
-        <p>把領域 slice 透過 <code class="inline">business_context</code> 帶進 <code class="inline">generate_test</code>，會自動印成 <code class="inline"># Business context:</code> 註解區塊。test 自帶設計依據。</p>
-      </div>
-    </div>
-  </div>
+<section id="qa">
+  <h2>qa knowledge in three layers</h2>
+  <p>
+    光看 DOM 的 analyzer 只能產「空欄位送出應出錯」這種泛例。這就是 monkey testing
+    換個包裝。要寫出真 QA 工程師會寫的測試、必須注入領域知識。
+  </p>
+  <p>
+    所以 MCP 疊了三層：
+  </p>
+  <ul>
+    <li>
+      <strong class="kw">built-in</strong> — ISTQB 七大原則、等價分割 / 邊界值、
+      決策表、狀態轉換、測試金字塔、Shift-Left、回歸策略、Mobile checklist、QA metrics。
+      內建在 server，沒設定任何東西時 <code>get_qa_context</code> 回的就是這份。
+    </li>
+    <li>
+      <strong class="kw">your file</strong> — 受測專案根的 <code>qa-knowledge.md</code>。
+      業務規則、歷史 Bug、標準斷言文字、user journey、技術約束。執行
+      <code>init_qa_knowledge</code> 一鍵起手範本（已含通用方法論 + 5 個 TODO 區段）。
+    </li>
+    <li>
+      <strong class="kw">per-test inline</strong> — 把領域知識 slice 透過
+      <code>business_context</code> 帶進 <code>generate_test</code>、會自動印成
+      <code># Business context:</code> 註解區塊在 test 函式裡。產出的 test 自帶設計依據、
+      reviewer 不用切換到別的 wiki 才看得到「為什麼測這個」。
+    </li>
+  </ul>
+  <p class="note">
+    三層搭配：built-in 告訴你「<em>怎麼測</em>」、your file 告訴你「<em>測什麼</em>」、
+    inline 把這兩個答案固化進產出物。任何一層缺失都會退回 monkey testing。
+  </p>
 </section>
 
-<section class="bk" id="coach">
-  <div class="container">
-    <h2>The self-improvement coach</h2>
-    <p class="subhead">
-      每次 run 結束自動快照進 history，optimizer 從三個視角產優先級行動清單。
-    </p>
-    <div class="grid-3">
-      <div class="card3">
-        <span class="lbl">Lens 1</span>
-        <h3>測試套件品質</h3>
-        <p>每條 test 的 outcomes 字串（<code class="inline">PFPFP</code>）→ 算 flake_score、分類 broken / flaky / slow_regression / stable_passing。連 3 次失敗 + 相同 error signature → 真 bug，不是 flake。</p>
-      </div>
-      <div class="card3">
-        <span class="lbl">Lens 2</span>
-        <h3>MCP 使用模式</h3>
-        <p>從 telemetry 看 top tool、錯誤率、重複 args 模式、常見鏈（A→B 連續呼叫）。提示哪裡可以包 meta-tool 或加 cache。</p>
-      </div>
-      <div class="card3">
-        <span class="lbl">Lens 3</span>
-        <h3>AI 產測效益</h3>
-        <p><code class="inline">generate_test</code> 寫出的測試有沒有進到下次 run？<code class="inline">analyze_url</code> 偵測到的 module 有沒有對應 test 檔？追蹤採用率 vs 覆蓋缺口。</p>
-      </div>
-    </div>
-  </div>
+<section id="coach">
+  <h2>the coach (optimizer)</h2>
+  <p>
+    每次 run 結束、optimizer 讀 <code>history/</code> + telemetry log、寫一份排序好的行動清單。
+    三個視角：
+  </p>
+  <ul>
+    <li>
+      <strong class="kw">suite quality</strong> — 每條 test 的 outcomes 字串
+      （<code>PFPFP</code>）算 flake_score、加上 error signature 比對。
+      連 3 次失敗 + 相同 signature → 標 broken（真 bug、不是 flake）。
+    </li>
+    <li>
+      <strong class="kw">mcp usability</strong> — Tool 呼叫 telemetry 找
+      top tool、錯誤率、重複 args、常見鏈（A→B 連續呼叫）。提示哪裡可以包 meta-tool 或加 cache。
+    </li>
+    <li>
+      <strong class="kw">ai effectiveness</strong> — <code>generate_test</code> 寫的測試
+      有沒有出現在下次 run？<code>analyze_url</code> 偵測的模塊有沒有對應 test 檔？
+      追蹤採用率 vs 覆蓋缺口。
+    </li>
+  </ul>
+  <p>
+    你可以直接對 Claude 說「下一步該優化什麼」、它會 call <code>get_optimization_plan</code>
+    然後給你帶 priority + evidence + suggestion 的具體答案。不是憑感覺、是看資料。
+  </p>
 </section>
 
-<footer class="site">
-  <div class="container">
-    <div class="links">
-      <a href="https://github.com/kao273183/mcp-test-runner">GitHub repo</a>
-      <a href="https://github.com/kao273183/mcp-test-runner/blob/main/README.md">README (English)</a>
-      <a href="https://github.com/kao273183/mcp-test-runner/blob/main/README.zh-TW.md">README (繁中)</a>
-      <a href="sample_report.html">Sample report</a>
-      <a href="https://github.com/kao273183/mcp-test-runner/blob/main/qa-knowledge.example.md">qa-knowledge.example</a>
+<section id="links">
+  <h2>more</h2>
+  <dl class="kv">
+    <div>
+      <dt>repo</dt>
+      <dd><a href="https://github.com/kao273183/mcp-test-runner">github.com/kao273183/mcp-test-runner</a></dd>
     </div>
-    <div>MIT License · © Jack Kao · Built with MCP, Playwright, and a lot of dogfooding.</div>
+    <div>
+      <dt>readme</dt>
+      <dd>
+        <a href="https://github.com/kao273183/mcp-test-runner/blob/main/README.md">English</a> ·
+        <a href="https://github.com/kao273183/mcp-test-runner/blob/main/README.zh-TW.md">繁中</a>
+      </dd>
+    </div>
+    <div>
+      <dt>demo</dt>
+      <dd><a href="sample_report.html">sample_report.html</a> — 實際渲染的 HTML 報告</dd>
+    </div>
+    <div>
+      <dt>example</dt>
+      <dd><a href="https://github.com/kao273183/mcp-test-runner/blob/main/qa-knowledge.example.md">qa-knowledge.example.md</a> — 跨 4 種架構的領域填法</dd>
+    </div>
+    <div>
+      <dt>internals</dt>
+      <dd><a href="https://github.com/kao273183/mcp-test-runner/blob/main/framework.md">framework.md</a> — MCP 三大原語跟 QA 場景的對應設計</dd>
+    </div>
+  </dl>
+</section>
+
+</main>
+
+<footer class="bottom">
+  <div class="wrap">
+    <div>
+      <a href="https://github.com/kao273183/mcp-test-runner">github</a>
+      <a href="https://github.com/kao273183/mcp-test-runner/blob/main/README.md">readme</a>
+      <a href="sample_report.html">demo</a>
+    </div>
+    <div class="cmt">// MIT License · © Jack Kao</div>
   </div>
 </footer>
+
+</div>
 
 </body>
 </html>
