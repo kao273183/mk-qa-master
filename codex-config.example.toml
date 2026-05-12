@@ -1,0 +1,15 @@
+# Codex CLI MCP config example
+# Location: ~/.codex/config.toml
+# Docs: https://github.com/openai/codex (MCP server section)
+
+[mcp_servers.mcp-test-runner]
+command = "/absolute/path/to/.venv/bin/python"
+args = ["-m", "mcp_test_runner.server"]
+cwd = "/absolute/path/to/mcp-test-runner"
+
+[mcp_servers.mcp-test-runner.env]
+QA_RUNNER = "pytest"
+QA_PROJECT_ROOT = "/absolute/path/to/your-test-project"
+
+# Optional: point at a non-default QA knowledge file
+# QA_KNOWLEDGE_FILE = "/absolute/path/to/some/qa-knowledge.md"

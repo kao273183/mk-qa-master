@@ -78,6 +78,58 @@ pip install pytest-rerunfailures # 選用，啟用自動 retry
 
 ---
 
+## 其他 MCP client（不只 Claude）
+
+MCP 是開放協議 — 這個 server 不綁 Claude。同一個 Python process 用
+JSON-RPC stdio 跟任何 MCP client 對話。各家差別在 (1) config 檔格式跟
+(2) 底層 model 自動串接 tool 的可靠度。
+
+| Client | Config 位置 | 格式 | Model | Tool 串接品質 |
+|---|---|---|---|---|
+| Claude Desktop / Cursor | `~/Library/Application Support/Claude/...json` · `~/.cursor/mcp.json` | JSON | Claude Opus / Sonnet | 主要測試對象 |
+| **Codex CLI** | `~/.codex/config.toml` | **TOML** | GPT-5 系列 | 強（GPT-5 chain-of-tools 訓練深） |
+| **Gemini CLI** | `~/.gemini/settings.json` | JSON | Gemini 2.5 Pro / Flash | 可用、但偏 reactive，prompt 越明示越好 |
+| Cline / Continue / Zed | 各自的 MCP config slot | 不一 | 依設定的 model | 依底層 model |
+
+Repo 內附三份範例：
+[`codex-config.example.toml`](codex-config.example.toml) ·
+[`gemini-config.example.json`](gemini-config.example.json) ·
+[`claude_desktop_config.example.json`](claude_desktop_config.example.json)。
+
+**Codex（TOML）**：
+```toml
+[mcp_servers.mcp-test-runner]
+command = "/path/to/.venv/bin/python"
+args = ["-m", "mcp_test_runner.server"]
+cwd = "/path/to/mcp-test-runner"
+[mcp_servers.mcp-test-runner.env]
+QA_RUNNER = "pytest"
+QA_PROJECT_ROOT = "/path/to/your-test-project"
+```
+
+**Gemini（JSON，跟 Claude Desktop 結構幾乎一樣）**：
+```json
+{
+  "mcpServers": {
+    "mcp-test-runner": {
+      "command": "/path/to/.venv/bin/python",
+      "args": ["-m", "mcp_test_runner.server"],
+      "cwd": "/path/to/mcp-test-runner",
+      "env": {
+        "QA_RUNNER": "pytest",
+        "QA_PROJECT_ROOT": "/path/to/your-test-project"
+      }
+    }
+  }
+}
+```
+
+我們 tool description 已經寫了推薦串接（`analyze_url → generate_test`、
+`get_qa_context` 先於領域產測）。**tool-selection 偏弱的 client（如 Gemini）
+靠明示「先 X 再 Y」的 prompt 效果最佳**；Claude / Codex 則對隱性串接判斷力強。
+
+---
+
 ## Tool 清單
 
 所有 runner 共用同一組（部分 tool 在非 pytest runner 上會 graceful 降級）：

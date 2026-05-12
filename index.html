@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>mcp-test-runner</title>
-<meta name="description" content="MCP server that drives pytest / Jest / Cypress / Go test through Claude, with a self-improvement coach after every run.">
+<meta name="description" content="MCP server that drives pytest / Jest / Cypress / Go test through any MCP client (Claude / Codex / Gemini / Cursor / Cline / Zed), with a self-improvement coach after every run.">
 <meta property="og:title" content="mcp-test-runner">
 <meta property="og:description" content="跨框架測試執行 MCP server，每跑完一次告訴你下一步該改什麼。">
 <style>
@@ -244,8 +244,9 @@
   <h1><span class="prompt">$&nbsp;</span>mcp-test-runner --serve</h1>
 
   <p>
-    一個 Model Context Protocol server。讓 Claude / Cursor 直接驅動 pytest /
-    Jest / Cypress / Go test。每跑完一次就告訴你下一步該改什麼。
+    一個 Model Context Protocol server。讓任何 MCP client（Claude Desktop /
+    Cursor / Codex CLI / Gemini CLI / Cline / Zed ...）直接驅動 pytest / Jest /
+    Cypress / Go test。每跑完一次就告訴你下一步該改什麼。
   </p>
   <p class="muted">
     寫這個的動機很單純：我不想再重複「跑測試 → 看 log → 整理失敗 → 想下次該補哪些」
@@ -331,10 +332,13 @@ playwright install chromium
 <span class="c"># 選用：啟用 flaky test auto-retry</span>
 pip install pytest-rerunfailures</pre>
 
-  <h3>接到 Claude Desktop</h3>
+  <h3>接到 MCP client</h3>
   <p>
-    把以下加進 <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>
-    （macOS；Windows 在 <code>%APPDATA%\Claude\</code>）：
+    下面是 Claude Desktop 的範例 — 路徑：
+    <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>
+    （macOS；Windows 在 <code>%APPDATA%\Claude\</code>）。
+    其他 client 範例：<a href="https://github.com/kao273183/mcp-test-runner/blob/main/codex-config.example.toml">Codex CLI (TOML)</a> ·
+    <a href="https://github.com/kao273183/mcp-test-runner/blob/main/gemini-config.example.json">Gemini CLI</a>。
   </p>
 <pre class="code">{
   <span class="k">"mcpServers"</span>: {
@@ -351,7 +355,7 @@ pip install pytest-rerunfailures</pre>
 }</pre>
 
   <h3>第一個 prompt</h3>
-  <p>重啟 Claude Desktop、開 session、試試任一條：</p>
+  <p>重啟你的 MCP client（Claude Desktop / Codex / Gemini ...），開 session，試試任一條：</p>
 <pre class="code"><span class="c"># 一鍵：分析 URL 並產出可執行測試</span>
 測試 https://your-site/login — 對每個模塊產 1 條 test
 

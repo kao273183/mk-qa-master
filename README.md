@@ -87,6 +87,60 @@ Two environment variables drive the runtime:
 
 ---
 
+## Other MCP clients
+
+MCP is an open protocol — this server isn't Claude-only. The same Python
+process talks to any MCP client over JSON-RPC stdio. What differs across
+clients is (1) the config file format and (2) how reliably the underlying
+model auto-chains tool calls.
+
+| Client | Config | Format | Model | Tool-chain quality |
+|---|---|---|---|---|
+| Claude Desktop / Cursor | `~/Library/Application Support/Claude/...json` · `~/.cursor/mcp.json` | JSON | Claude Opus / Sonnet | Best tested |
+| **Codex CLI** | `~/.codex/config.toml` | **TOML** | GPT-5 family | Strong (well-trained on tool chaining) |
+| **Gemini CLI** | `~/.gemini/settings.json` | JSON | Gemini 2.5 Pro / Flash | Works; prefers explicit prompts ("first analyze, then write") |
+| Cline / Continue / Zed | each has its own MCP config slot | varies | varies | depends on configured model |
+
+Example configs ship in the repo:
+[`codex-config.example.toml`](codex-config.example.toml) ·
+[`gemini-config.example.json`](gemini-config.example.json) ·
+[`claude_desktop_config.example.json`](claude_desktop_config.example.json).
+
+Codex (TOML):
+```toml
+[mcp_servers.mcp-test-runner]
+command = "/path/to/.venv/bin/python"
+args = ["-m", "mcp_test_runner.server"]
+cwd = "/path/to/mcp-test-runner"
+[mcp_servers.mcp-test-runner.env]
+QA_RUNNER = "pytest"
+QA_PROJECT_ROOT = "/path/to/your-test-project"
+```
+
+Gemini (JSON, same shape as Claude Desktop):
+```json
+{
+  "mcpServers": {
+    "mcp-test-runner": {
+      "command": "/path/to/.venv/bin/python",
+      "args": ["-m", "mcp_test_runner.server"],
+      "cwd": "/path/to/mcp-test-runner",
+      "env": {
+        "QA_RUNNER": "pytest",
+        "QA_PROJECT_ROOT": "/path/to/your-test-project"
+      }
+    }
+  }
+}
+```
+
+Tool descriptions already nudge the recommended chains
+(`analyze_url → generate_test`, `get_qa_context` before generating
+domain tests). Clients with weaker tool-selection benefit most from
+explicit prompts that name the steps.
+
+---
+
 ## Tool surface
 
 Shared across all runners (some tools degrade gracefully on non-pytest runners):
