@@ -1,155 +1,180 @@
-# TestBridge Runner
+# MCP Test Runner
 
-> Universal MCP server for running tests across pytest / Jest / Cypress / Go.
-> Official local execution engine for [TestBridge](https://github.com/kao273183/testbridge).
+> Universal MCP server for running tests across pytest / Jest / Cypress / Go,
+> with built-in DOM analyzer, run history, and a self-improvement coach.
 
-基於 **MCP（Model Context Protocol）** 的通用測試自動化伺服器。透過 plugin 架構支援多種測試框架，靠環境變數切換 runner。
+A **Model Context Protocol** server that lets Claude Desktop / Cursor / any
+MCP client drive your test suite end-to-end: run tests, inspect failures
+(screenshot + video + trace), analyze a live URL to draft test cases, and —
+after each run — produce a prioritized action plan telling you exactly what
+to fix or write next.
 
-| `QA_RUNNER` | 框架 | 語言 |
+| `QA_RUNNER` | Framework | Language |
 |---|---|---|
 | `pytest` / `pytest-playwright` / `playwright` | pytest + Playwright | Python |
 | `jest` | Jest | JavaScript |
 | `cypress` | Cypress | JavaScript |
 | `go` / `go-test` | `go test` | Go |
 
-完整設計請見 [`framework.md`](framework.md)。
+Full design notes: [`framework.md`](framework.md).
 
 ---
 
-## 為什麼有這個專案？
+## What's in the box
 
-**TestBridge** 是雲端 QA SaaS（管 test case / runs / bugs / 媒合），但雲端摸不到你本機的測試專案。
-**TestBridge Runner** 補上「在你電腦本機執行測試」的最後一哩路：
-
-```
-TestBridge (web SaaS)  ──→  管理 / 視覺化 / 報表
-TestBridge Runner (本機 MCP)  ──→  跑 pytest / jest / cypress / go test
-        ↑
-        Claude Desktop / Cursor 直接呼叫
-```
-
-兩端透過 HTTP API 同步測試結果（roadmap 中）。
+- **Run tests** across multiple frameworks via a single MCP surface
+- **Failure artifacts**: screenshot (base64-inlined), video, Playwright trace.zip
+- **Run history**: every run snapshotted; HTML report shows a sparkline trend
+- **DOM analyzer** (`analyze_url`): opens a page → extracts forms / nav /
+  dialogs / CTAs + the API endpoints it hits → emits candidate TC lists
+- **Smart test generation** (`generate_test`): hand it an analyzer module and
+  it writes a runnable Playwright skeleton with concrete selectors, not stubs
+- **Auto-retry flakes** when `pytest-rerunfailures` is installed; flaky tests
+  are surfaced separately from real failures
+- **Self-improvement coach** (`get_optimization_plan`): post-run analysis
+  across three lenses — suite quality, MCP usability, AI generation effectiveness
+- **JUnit XML output** for CI integrations (GitHub Actions / Jenkins / GitLab)
 
 ---
 
-## 安裝
+## Install
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
-playwright install   # 只有用 pytest-playwright 時需要
+playwright install               # only if you use pytest-playwright
+pip install pytest-rerunfailures # optional, enables auto-retry
 ```
 
-## 接到 Claude Desktop
+## Wire into Claude Desktop
 
-複製 `claude_desktop_config.example.json` 到：
+Copy `claude_desktop_config.example.json` to:
 
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
-兩個關鍵環境變數：
+Two environment variables drive the runtime:
 
-| 變數 | 範例 | 說明 |
+| Variable | Example | What it does |
 |---|---|---|
-| `QA_RUNNER` | `pytest` / `jest` / `cypress` / `go` | 選擇測試框架 |
-| `QA_PROJECT_ROOT` | `/path/to/your/project` | 受測專案根目錄 |
+| `QA_RUNNER` | `pytest` / `jest` / `cypress` / `go` | Selects which test framework |
+| `QA_PROJECT_ROOT` | `/path/to/your/project` | Points at the project under test |
 
-### 切換 runner 範例
+### Per-runner snippet
 
 **pytest-playwright**:
 ```json
-"env": {
-  "QA_RUNNER": "pytest",
-  "QA_PROJECT_ROOT": "/path/to/python-project"
-}
+"env": { "QA_RUNNER": "pytest", "QA_PROJECT_ROOT": "/path/to/python-project" }
 ```
 
 **Jest**:
 ```json
-"env": {
-  "QA_RUNNER": "jest",
-  "QA_PROJECT_ROOT": "/path/to/node-project"
-}
+"env": { "QA_RUNNER": "jest", "QA_PROJECT_ROOT": "/path/to/node-project" }
 ```
 
 **Cypress**:
 ```json
-"env": {
-  "QA_RUNNER": "cypress",
-  "QA_PROJECT_ROOT": "/path/to/cypress-project"
-}
+"env": { "QA_RUNNER": "cypress", "QA_PROJECT_ROOT": "/path/to/cypress-project" }
 ```
 
 **Go test**:
 ```json
-"env": {
-  "QA_RUNNER": "go",
-  "QA_PROJECT_ROOT": "/path/to/go-project"
-}
+"env": { "QA_RUNNER": "go", "QA_PROJECT_ROOT": "/path/to/go-project" }
 ```
 
 ---
 
-## Tool 清單（所有 runner 共用同一組）
+## Tool surface
 
-| Tool | 用途 |
+Shared across all runners (some tools degrade gracefully on non-pytest runners):
+
+| Tool | Purpose |
 |---|---|
-| `get_runner_info` | 看目前用哪個 runner、有哪些可用 |
-| `list_tests` | 列出所有測試 |
-| `run_tests` | 執行測試（filter、headed、browser；後兩者只 pytest-playwright 用） |
-| `run_failed` | 重跑上次失敗 |
-| `get_test_report` | 報告摘要 |
-| `get_failure_details` | 失敗詳情 |
-| `generate_test` | 從描述產生對應框架的測試骨架 |
-| `codegen` | 啟動 Playwright codegen（其他 runner 不支援） |
+| `get_runner_info` | Which runner is active + all available ones |
+| `list_tests` | Enumerate tests in the project |
+| `run_tests` | Run tests (filter / headed / browser; last two pytest-playwright only) |
+| `run_failed` | Re-run last failures (`pytest --lf`) |
+| `get_test_report` | Summary (pass / fail / skipped / duration / flaky-in-run) |
+| `get_failure_details` | Per-failure message + screenshot / trace / video paths |
+| `generate_test` | Test skeleton; if `module` (from `analyze_url`) is provided, a *runnable* one |
+| `codegen` | Launch Playwright codegen (pytest-playwright only) |
+| `generate_html_report` | Render the latest run as self-contained HTML |
+| `get_test_history` | Last N archived run summaries (for trend / flake debugging) |
+| `analyze_url` | DOM probe → modules + selectors + candidate TCs + API endpoints |
+| `get_optimization_plan` | Three-layer self-improvement coach (suite / MCP / AI strategy) |
+
+### Resources
+
+| URI | What |
+|---|---|
+| `report://html` | Live-rendered HTML report (dark mode, self-contained) |
+| `report://json` | Raw pytest-json-report JSON |
+| `report://optimization` | Latest `optimization-plan.md` |
 
 ---
 
-## 專案結構
+## Self-improvement loop
+
+After every run, `_archive_report()` snapshots `report.json` into
+`test-results/history/` and writes a fresh `optimization-plan.md` covering:
+
+1. **Suite quality** — outcomes string per test (`PFPFP`); transitions → flake
+   score; 3+ identical-signature fails → broken; rerun-passed → flaky-in-run
+2. **MCP usability** — top tools, error rates, repeat-arg patterns, common
+   A→B chains (from telemetry JSONL logs)
+3. **AI strategy** — adoption rate of `generate_test` outputs, coverage gaps
+   from `analyze_url` modules with no matching test files
+
+The plan emits prioritized actions (`high` / `medium` / `low`) each with
+target + evidence + suggestion + optional `auto_action_hint` the MCP client
+can chain into the next tool call.
+
+---
+
+## Project layout
 
 ```
-testbridge-runner/
+mcp-test-runner/
 ├── pyproject.toml
-├── src/testbridge_runner/
-│   ├── server.py            # MCP 入口（tool 路由）
-│   ├── config.py            # 環境變數
-│   ├── runners/             # 各框架實作（plugin）
-│   │   ├── base.py          # TestRunner 抽象介面
+├── src/mcp_test_runner/
+│   ├── server.py            # MCP entry (tool routing + telemetry wrap)
+│   ├── config.py            # Paths + env vars
+│   ├── runners/             # Per-framework plugins
+│   │   ├── base.py          # TestRunner abstract interface
 │   │   ├── pytest_playwright.py
 │   │   ├── jest.py
 │   │   ├── cypress.py
 │   │   └── go_test.py
-│   ├── tools/               # server.py → runner 的薄層 delegate
-│   └── resources/           # report:// 與 trace:// 資源
-└── tests_project/           # 受測專案範例（pytest+playwright）
+│   ├── reporters/
+│   │   └── html.py          # Self-contained HTML render
+│   └── tools/               # Thin shims + analyzer + optimizer + telemetry
+└── tests_project/           # Example project under test
 ```
 
 ---
 
-## 新增一個 runner
+## Adding a runner
 
-1. 在 `src/testbridge_runner/runners/` 新增 `your_runner.py`，繼承 `TestRunner`，實作 6 個 abstract method
-2. 在 `runners/__init__.py` 的 `REGISTRY` 註冊名稱
-3. 完成 ✅
-
----
-
-## 使用範例
-
-對 Claude 說：
-
-> 「現在用哪個 runner？」→ `get_runner_info`
-> 「跑一下所有測試」→ `run_tests`
-> 「剛剛哪幾個失敗了？」→ `get_failure_details`
-> 「幫我寫一個登入測試」→ `generate_test`（自動產生對應語言的骨架）
+1. Create `src/mcp_test_runner/runners/your_runner.py`, subclass `TestRunner`,
+   implement the abstract methods
+2. Register the name in `runners/__init__.py`'s `REGISTRY`
+3. Done
 
 ---
 
-## Related Projects
+## Usage flavor
 
-- **[TestBridge](https://github.com/kao273183/testbridge)** — 主產品，雲端 QA 協作 SaaS（Next.js + Firebase + Claude API）
+Drop these into a Claude session:
+
+> "Which runner is active?" → `get_runner_info`
+> "Run everything." → `run_tests`
+> "What broke?" → `get_failure_details`
+> "Analyze https://my-site/login and draft test cases for it." → `analyze_url` then `generate_test`
+> "What should I fix next?" → `get_optimization_plan`
+
+---
 
 ## License
 
-MIT © 2026 Chenjun Digital · Jack Kao
+MIT © Jack Kao

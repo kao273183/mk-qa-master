@@ -11,7 +11,7 @@ from .runners import get_runner, REGISTRY
 from .reporters import html as html_reporter
 from .config import REPORT_PATH, OPTIMIZATION_PATH
 
-app = Server("testbridge-runner")
+app = Server("mcp-test-runner")
 
 
 @app.list_tools()
@@ -182,7 +182,7 @@ async def list_resources() -> list[Resource]:
         Resource(
             uri=AnyUrl("report://html"),
             name="Latest Test Report (HTML)",
-            description="最近一次測試報告，即時渲染為 TestBridge 風格 HTML",
+            description="最近一次測試報告，即時渲染為自包含 HTML",
             mimeType="text/html",
         ),
         Resource(

@@ -410,7 +410,7 @@
     <div class="ascii">
 <span class="dim">┌─────────────┐    ┌─────────────────┐    ┌──────────────┐    ┌──────────┐</span>
 <span class="dim">│</span>  AI 編輯器  <span class="dim">│ →</span>  QA MCP Server  <span class="dim">│ →</span>    Runner    <span class="dim">│ →</span>  測試框架 <span class="dim">│</span>
-<span class="dim">│</span>   Claude    <span class="dim">│  </span>     (testbridge-runner)    <span class="dim">│  </span>   (plugin)   <span class="dim">│  </span>  pytest  <span class="dim">│</span>
+<span class="dim">│</span>   Claude    <span class="dim">│  </span>     (mcp-test-runner)    <span class="dim">│  </span>   (plugin)   <span class="dim">│  </span>  pytest  <span class="dim">│</span>
 <span class="dim">│</span>   Cursor    <span class="dim">│  </span>                 <span class="dim">│  </span>              <span class="dim">│  </span>  jest    <span class="dim">│</span>
 <span class="dim">│</span>  Windsurf   <span class="dim">│  </span>                 <span class="dim">│  </span>              <span class="dim">│  </span>  ...     <span class="dim">│</span>
 <span class="dim">└─────────────┘    └────────┬────────┘    └──────────────┘    └──────────┘</span>
@@ -419,9 +419,9 @@
                        <span class="dim">report.json</span>  <span class="dim">→</span>  get_failure_details / get_test_report</div>
 
     <h3>目錄結構</h3>
-    <pre>testbridge-runner/
+    <pre>mcp-test-runner/
 ├── pyproject.toml
-├── src/testbridge_runner/
+├── src/mcp_test_runner/
 │   ├── server.py            <span class="c"># MCP 入口（tool 註冊與路由）</span>
 │   ├── config.py            <span class="c"># 環境變數</span>
 │   ├── runners/             <span class="c"># Plugin 架構</span>
@@ -436,7 +436,7 @@
 
     <h3>新增 Runner 的步驟</h3>
     <ul class="plus">
-      <li>在 <code class="inline">src/testbridge_runner/runners/</code> 新增模組</li>
+      <li>在 <code class="inline">src/mcp_test_runner/runners/</code> 新增模組</li>
       <li>繼承 <code class="inline">TestRunner</code>，實作 6 個 abstract method</li>
       <li>在 <code class="inline">runners/__init__.py</code> 的 <code class="inline">REGISTRY</code> 註冊一行</li>
       <li>更新 <code class="inline">QA_RUNNER</code> 環境變數即可生效</li>
@@ -452,8 +452,8 @@
 
     <h3>1. 安裝套件</h3>
 <pre><span class="c"># 取得原始碼</span>
-git clone https://github.com/your-org/testbridge-runner.git
-cd testbridge-runner
+git clone https://github.com/your-org/mcp-test-runner.git
+cd mcp-test-runner
 
 <span class="c"># 建立虛擬環境</span>
 python3 -m venv .venv
@@ -469,10 +469,10 @@ playwright install</pre>
     <p class="muted">編輯 <code class="inline">~/Library/Application Support/Claude/claude_desktop_config.json</code>：</p>
 <pre>{
   <span class="s">"mcpServers"</span>: {
-    <span class="s">"testbridge-runner"</span>: {
-      <span class="s">"command"</span>: <span class="s">"/絕對路徑/testbridge-runner/.venv/bin/python"</span>,
-      <span class="s">"args"</span>: [<span class="s">"-m"</span>, <span class="s">"testbridge_runner.server"</span>],
-      <span class="s">"cwd"</span>: <span class="s">"/絕對路徑/testbridge-runner"</span>,
+    <span class="s">"mcp-test-runner"</span>: {
+      <span class="s">"command"</span>: <span class="s">"/絕對路徑/mcp-test-runner/.venv/bin/python"</span>,
+      <span class="s">"args"</span>: [<span class="s">"-m"</span>, <span class="s">"mcp_test_runner.server"</span>],
+      <span class="s">"cwd"</span>: <span class="s">"/絕對路徑/mcp-test-runner"</span>,
       <span class="s">"env"</span>: {
         <span class="s">"QA_RUNNER"</span>: <span class="s">"pytest"</span>,
         <span class="s">"QA_PROJECT_ROOT"</span>: <span class="s">"/絕對路徑/受測專案"</span>
@@ -488,7 +488,7 @@ playwright install</pre>
     </div>
 
     <h3>3. 重啟並開始對話</h3>
-    <p>重啟 Claude Desktop 後，左下角工具圖示應顯示 <code class="inline">testbridge-runner</code> 與 8 個可用工具。</p>
+    <p>重啟 Claude Desktop 後，左下角工具圖示應顯示 <code class="inline">mcp-test-runner</code> 與 8 個可用工具。</p>
 <pre><span class="c"># 範例對話</span>
 你：現在用哪個 runner？
 你：列出所有測試

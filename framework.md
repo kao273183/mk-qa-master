@@ -55,12 +55,12 @@ MCP 三大原語在 QA 場景的對應：
 ## 專案結構
 
 ```
-testbridge-runner/
+mcp-test-runner/
 ├── pyproject.toml
 ├── README.md
 ├── claude_desktop_config.example.json
 ├── src/
-│   └── testbridge_runner/
+│   └── mcp_test_runner/
 │       ├── __init__.py
 │       ├── server.py            # MCP 入口
 │       ├── config.py            # 設定（受測專案路徑等）
@@ -85,7 +85,7 @@ testbridge-runner/
 
 ```toml
 [project]
-name = "testbridge-runner"
+name = "mcp-test-runner"
 version = "0.1.0"
 description = "QA Test Automation MCP Server"
 requires-python = ">=3.10"
@@ -98,7 +98,7 @@ dependencies = [
 ]
 
 [project.scripts]
-testbridge-runner = "testbridge_runner.server:run"
+mcp-test-runner = "mcp_test_runner.server:run"
 
 [build-system]
 requires = ["hatchling"]
@@ -107,7 +107,7 @@ build-backend = "hatchling.build"
 
 ---
 
-### `src/testbridge_runner/config.py`
+### `src/mcp_test_runner/config.py`
 
 ```python
 from pathlib import Path
@@ -123,7 +123,7 @@ ARTIFACTS_DIR = PROJECT_ROOT / "test-results"
 
 ---
 
-### `src/testbridge_runner/tools/runner.py`
+### `src/mcp_test_runner/tools/runner.py`
 
 ```python
 import subprocess
@@ -180,7 +180,7 @@ def run_failed() -> dict:
 
 ---
 
-### `src/testbridge_runner/tools/reporter.py`
+### `src/mcp_test_runner/tools/reporter.py`
 
 ```python
 import json
@@ -222,7 +222,7 @@ def get_failure_details(test_id: str | None = None) -> list[dict]:
 
 ---
 
-### `src/testbridge_runner/tools/generator.py`
+### `src/mcp_test_runner/tools/generator.py`
 
 ```python
 from pathlib import Path
@@ -270,7 +270,7 @@ def codegen(url: str, output: str = "recorded_test.py") -> str:
 
 ---
 
-### `src/testbridge_runner/server.py`
+### `src/mcp_test_runner/server.py`
 
 ```python
 import asyncio
@@ -281,7 +281,7 @@ from mcp.types import Tool, TextContent
 
 from .tools import runner, reporter, generator
 
-app = Server("testbridge-runner")
+app = Server("mcp-test-runner")
 
 
 @app.list_tools()
@@ -455,7 +455,7 @@ def test_link_visible(page: Page):
 
 ```bash
 # 建立專案
-mkdir testbridge-runner && cd testbridge-runner
+mkdir mcp-test-runner && cd mcp-test-runner
 
 # 建立虛擬環境
 python -m venv .venv
@@ -476,19 +476,19 @@ playwright install
 ```json
 {
   "mcpServers": {
-    "testbridge-runner": {
+    "mcp-test-runner": {
       "command": "python",
-      "args": ["-m", "testbridge_runner.server"],
-      "cwd": "/absolute/path/to/testbridge-runner",
+      "args": ["-m", "mcp_test_runner.server"],
+      "cwd": "/absolute/path/to/mcp-test-runner",
       "env": {
-        "QA_PROJECT_ROOT": "/absolute/path/to/testbridge-runner/tests_project"
+        "QA_PROJECT_ROOT": "/absolute/path/to/mcp-test-runner/tests_project"
       }
     }
   }
 }
 ```
 
-重啟 Claude Desktop，左下角應該看到 `testbridge-runner` 的工具圖示。
+重啟 Claude Desktop，左下角應該看到 `mcp-test-runner` 的工具圖示。
 
 ---
 

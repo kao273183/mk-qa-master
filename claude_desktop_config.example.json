@@ -1,12 +1,12 @@
 {
   "mcpServers": {
-    "testbridge-runner": {
+    "mcp-test-runner": {
       "command": "python",
-      "args": ["-m", "testbridge_runner.server"],
-      "cwd": "/absolute/path/to/testbridge-runner",
+      "args": ["-m", "mcp_test_runner.server"],
+      "cwd": "/absolute/path/to/mcp-test-runner",
       "env": {
         "QA_RUNNER": "pytest",
-        "QA_PROJECT_ROOT": "/absolute/path/to/testbridge-runner/tests_project"
+        "QA_PROJECT_ROOT": "/absolute/path/to/mcp-test-runner/tests_project"
       }
     }
   }
