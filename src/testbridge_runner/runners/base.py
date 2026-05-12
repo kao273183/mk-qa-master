@@ -26,3 +26,10 @@ class TestRunner(ABC):
 
     def codegen(self, url: str, output: str = "recorded_test.py") -> str:
         return f"{self.name} runner 不支援 codegen"
+
+    def get_history(self, limit: int = 10) -> list[dict]:
+        """Return chronologically-ordered (oldest first) past run summaries.
+
+        Default: empty — runners override to expose trends.
+        """
+        return []
