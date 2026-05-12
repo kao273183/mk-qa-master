@@ -70,33 +70,40 @@ _BUILTIN_DEFAULTS = """# (No project qa-knowledge.md — universal QA patterns a
 _STARTER_TEMPLATE = """# QA Knowledge — {project_name}
 
 > 給 mcp-test-runner 讀的領域知識。get_qa_context() 會把這份內容暴露給 AI，
-> 用於決定要測什麼 + 把規則印進產出 test 的 # Business context: 區段。
-> 規則：H2 (##) 區段為單位，client 可指定 section 拉取單一段。
+> 用於決定要測什麼 + 把規則印進產出 test 的 `# Business context:` 區段。
+> 規則：以 H2 (##) 區段為單位，client 可指定 section 拉取單一段。
+>
+> 下列項目皆為提示骨架，請依你的領域逐項替換。
+> 也可參考 mcp-test-runner repo 內的 qa-knowledge.example.md。
 
 ## 業務規則
-- TODO: 寫下你的業務邏輯，例如：
-  - OPEN POINT：1 點折抵 1 元，最高折抵訂單金額 50%
-  - VIP 等級：累積消費 ≥ NT$5000 升級、享 9 折
-  - 同一 coupon 一個帳號限領一次
+- TODO: 列出你產品的核心業務邏輯，例如：
+  - 計費 / 折扣 / 點數換算規則
+  - 會員等級條件與權益
+  - 限制（限購、限領、限時、限地區）
+  - 訂單 / 退款 / 取消政策
 
 ## 歷史 Bug / 回歸點
-- TODO: 列出已修的 bug ticket 跟期望行為，例如：
-  - FLAG-056（已修）：coupon 連點兩次拿兩張 → race condition 已用 idempotency key 修
+- TODO: 已修的關鍵 bug（會持續觀察的回歸點），格式建議：
+  - BUG-XXX（已修）：簡述問題 → 觸發條件 → 期望行為 → fix reference
 
 ## 標準斷言文字
-- TODO: 列出 UI 標準文案精確字元，例如：
-  - 錯誤密碼 → 「帳號或密碼錯誤」（非「密碼錯誤」）
-  - Coupon 已領 → 「您已領取過此優惠券」
+- TODO: UI 上需要逐字驗證的文案（避免「同義不同字」誤判），例如：
+  - 錯誤訊息：「（精確字串）」
+  - 成功提示：「（精確字串）」
+  - CTA 標籤：「（精確字串）」
 
 ## User Journeys
-- TODO: 描述多步驟業務流程，例如：
-  - happy-path-checkout：登入 → 加入購物車 → 套用 coupon → 結帳 → 訂單頁
+- TODO: 描述跨多步驟的業務流程，例如：
+  - happy-path：登入 → 主要操作 → 完成 → 驗證結果
+  - failure-path：登入 → 操作失敗 → 驗證錯誤訊息與系統狀態
 
 ## 技術約束
-- TODO: 寫下測試需要知道的 infra 細節，例如：
-  - Test env URL: https://uat.example.com
-  - Test user: qa@example.com / TestPass123
-  - Backend idempotency header: X-Idempotency-Key
+- TODO: 測試需要知道的 infra 細節，例如：
+  - Test env URL（UAT / staging / local）
+  - Test user 帳密
+  - Backend 特殊 header / cookie / query param
+  - 固定隨機種子的方法（讓測試 deterministic）
 """
 
 
