@@ -1,3 +1,3 @@
-from . import runner, reporter, generator
+from . import runner, reporter, generator, analyzer, telemetry, optimizer
 
-__all__ = ["runner", "reporter", "generator"]
+__all__ = ["runner", "reporter", "generator", "analyzer", "telemetry", "optimizer"]
