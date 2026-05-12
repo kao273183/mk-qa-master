@@ -91,6 +91,18 @@
     letter-spacing: -0.01em;
   }
   .brand .dot { color: var(--accent); }
+  .brand-group { display: flex; align-items: center; gap: 14px; }
+  .parent-link {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    text-decoration: none;
+    padding-right: 14px;
+    border-right: 1px solid var(--border);
+    transition: color 0.15s;
+  }
+  .parent-link:hover { color: var(--accent); text-decoration: none; }
   .nav-links { display: flex; gap: 28px; }
   .nav-links a {
     color: var(--muted);
@@ -526,7 +538,10 @@
 
 <nav class="top">
   <div class="container">
-    <a href="#" class="brand">mcp-test-runner<span class="dot">.</span></a>
+    <div class="brand-group">
+      <a href="https://chenjundigital.com" class="parent-link">← 宸鈞數位</a>
+      <a href="#" class="brand">mcp-test-runner<span class="dot">.</span></a>
+    </div>
     <div class="nav-links">
       <a href="#features" data-i18n="nav.features"></a>
       <a href="#pipeline" data-i18n="nav.pipeline"></a>
