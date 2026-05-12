@@ -6,5 +6,8 @@ __pycache__/
 venv/
 .pytest_cache/
 tests_project/report.json
+tests_project/report.html
+tests_project/optimization-plan.md
+tests_project/junit.xml
 tests_project/test-results/
 .DS_Store
