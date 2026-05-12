@@ -186,6 +186,25 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="init_qa_knowledge",
+            description=(
+                "在受測專案根 (PROJECT_ROOT) 建立 qa-knowledge.md 起手範本，"
+                "含業務規則 / 歷史 Bug / 標準斷言文字 / User Journeys / 技術約束 5 個 H2 區段，"
+                "每段都有 TODO 提示。Idempotent：檔已存在不會覆蓋（除非 overwrite=true）。"
+                "新用戶建議第一次跑 MCP 就先 call 一次。"
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "overwrite": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "強制覆蓋既存檔案（會丟失你已填的內容、請先備份）",
+                    },
+                },
+            },
+        ),
+        Tool(
             name="get_qa_context",
             description=(
                 "讀取受測專案的 qa-knowledge.md（業務規則 / 歷史 Bug / 標準斷言文字 / "
@@ -347,6 +366,10 @@ async def _dispatch(name: str, args: dict) -> list[TextContent]:
 
     if name == "get_qa_context":
         result = qa_context.load_context(args.get("section"))
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    if name == "init_qa_knowledge":
+        result = qa_context.init_qa_knowledge(overwrite=args.get("overwrite", False))
         return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
 
     if name == "codegen":
