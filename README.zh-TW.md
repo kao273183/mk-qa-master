@@ -1,0 +1,166 @@
+# MCP Test Runner
+
+[English](README.md) · **繁體中文**
+
+> 跨 pytest / Jest / Cypress / Go 的通用測試執行 MCP server，內建 DOM 分析器、執行歷史紀錄、與自我強化教練。
+
+一個基於 **Model Context Protocol** 的伺服器，讓 Claude Desktop / Cursor / 任何 MCP client 端到端驅動你的測試流程：執行測試、檢視失敗（截圖 + 影片 + Playwright trace）、分析一個 URL 自動產生候選測試案例，並在每次跑完後吐出一份**下一輪該優化什麼**的優先級行動清單。
+
+| `QA_RUNNER` | 框架 | 語言 |
+|---|---|---|
+| `pytest` / `pytest-playwright` / `playwright` | pytest + Playwright | Python |
+| `jest` | Jest | JavaScript |
+| `cypress` | Cypress | JavaScript |
+| `go` / `go-test` | `go test` | Go |
+
+完整設計文件：[`framework.md`](framework.md)。
+
+---
+
+## 功能總覽
+
+- **跨框架執行測試**，單一 MCP 介面對接所有 runner
+- **失敗產物完整**：截圖（base64 內嵌）、影片、Playwright trace.zip
+- **執行歷史**：每次 run 自動快照；HTML 報告含 sparkline 趨勢線
+- **DOM 分析器**（`analyze_url`）：開啟頁面 → 抽出 form / nav / dialog / CTA + 該頁載入時打的 API endpoints → 輸出候選 TC 清單
+- **智慧測試生成**（`generate_test`）：餵 analyzer 拆出來的 module，產出**可直接執行**的 Playwright 骨架（不再是 `# TODO` 占位）
+- **自動 retry flaky tests**（裝了 `pytest-rerunfailures` 時啟用）；retry 才 pass 的測試會單獨列為 flaky，不混入真實失敗
+- **自我強化教練**（`get_optimization_plan`）：每次 run 結束後三層分析 — 測試套件品質、MCP 使用模式、AI 生成效益
+- **JUnit XML 輸出**，CI 直接吃（GitHub Actions / Jenkins / GitLab）
+
+---
+
+## 安裝
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+playwright install               # 用 pytest-playwright 才需要
+pip install pytest-rerunfailures # 選用，啟用自動 retry
+```
+
+## 接到 Claude Desktop
+
+複製 `claude_desktop_config.example.json` 內容到：
+
+- **macOS**：`~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**：`%APPDATA%\Claude\claude_desktop_config.json`
+
+兩個關鍵環境變數：
+
+| 變數 | 範例 | 作用 |
+|---|---|---|
+| `QA_RUNNER` | `pytest` / `jest` / `cypress` / `go` | 選擇測試框架 |
+| `QA_PROJECT_ROOT` | `/path/to/your/project` | 指向受測專案根目錄 |
+
+### 各 runner 設定範例
+
+**pytest-playwright**：
+```json
+"env": { "QA_RUNNER": "pytest", "QA_PROJECT_ROOT": "/path/to/python-project" }
+```
+
+**Jest**：
+```json
+"env": { "QA_RUNNER": "jest", "QA_PROJECT_ROOT": "/path/to/node-project" }
+```
+
+**Cypress**：
+```json
+"env": { "QA_RUNNER": "cypress", "QA_PROJECT_ROOT": "/path/to/cypress-project" }
+```
+
+**Go test**：
+```json
+"env": { "QA_RUNNER": "go", "QA_PROJECT_ROOT": "/path/to/go-project" }
+```
+
+---
+
+## Tool 清單
+
+所有 runner 共用同一組（部分 tool 在非 pytest runner 上會 graceful 降級）：
+
+| Tool | 用途 |
+|---|---|
+| `get_runner_info` | 看目前用哪個 runner、有哪些可用 |
+| `list_tests` | 列出受測專案內所有測試 |
+| `run_tests` | 執行測試（filter / headed / browser；後兩者只 pytest-playwright 用） |
+| `run_failed` | 重跑上次失敗（`pytest --lf`） |
+| `get_test_report` | 摘要（pass / fail / skipped / duration / flaky-in-run） |
+| `get_failure_details` | 失敗詳情 + 對應的 screenshot / trace / video 路徑 |
+| `generate_test` | 產生測試骨架；若提供 `module`（來自 `analyze_url`）則生成「可直接跑」的版本 |
+| `codegen` | 啟動 Playwright codegen（只 pytest-playwright 支援） |
+| `generate_html_report` | 把最近一次測試結果渲染成自包含 HTML |
+| `get_test_history` | 最近 N 次 run 摘要（看 flake 與趨勢） |
+| `analyze_url` | DOM 探測 → modules + selectors + candidate TCs + API endpoints |
+| `get_optimization_plan` | 三層自我強化教練（測試品質 / MCP 使用 / AI 策略） |
+
+### Resources
+
+| URI | 內容 |
+|---|---|
+| `report://html` | 即時渲染的 HTML 報告（深色模式、自包含） |
+| `report://json` | 原始 pytest-json-report JSON |
+| `report://optimization` | 最新的 `optimization-plan.md`（自我強化行動清單） |
+
+---
+
+## 自我強化迴圈
+
+每次 run 結束後，`_archive_report()` 會把 `report.json` 快照進 `test-results/history/`，並寫一份新的 `optimization-plan.md`，涵蓋三個視角：
+
+1. **測試套件品質** — 每條 test 的歷史 outcome 字串（`PFPFP`）→ transition density 算 flake score；連 3 次失敗且 error signature 相同 → broken；retry 才 pass → flaky-in-run
+2. **MCP 使用模式** — 從 telemetry JSONL 算出高頻 tool、錯誤率、重複 args 模式、常見鏈（A→B 連續呼叫）
+3. **AI 產測策略** — `generate_test` 寫出的測試有沒有真的進到下次 run（採用率）；`analyze_url` 偵測到的 module 有沒有對應的測試檔（覆蓋缺口）
+
+行動清單會排優先級（`high` / `medium` / `low`），每條附 target + evidence + suggestion，可選帶 `auto_action_hint` 給 MCP client 直接串到下一個 tool call。
+
+---
+
+## 專案結構
+
+```
+mcp-test-runner/
+├── pyproject.toml
+├── src/mcp_test_runner/
+│   ├── server.py            # MCP 入口（tool 路由 + telemetry 包裝）
+│   ├── config.py            # 路徑與環境變數
+│   ├── runners/             # 各框架的 plugin
+│   │   ├── base.py          # TestRunner 抽象介面
+│   │   ├── pytest_playwright.py
+│   │   ├── jest.py
+│   │   ├── cypress.py
+│   │   └── go_test.py
+│   ├── reporters/
+│   │   └── html.py          # 自包含 HTML 渲染
+│   └── tools/               # 薄層 shim + analyzer + optimizer + telemetry
+└── tests_project/           # 受測專案範例（pytest+playwright）
+```
+
+---
+
+## 新增一個 runner
+
+1. 在 `src/mcp_test_runner/runners/` 新增 `your_runner.py`，繼承 `TestRunner`，實作必要的 abstract method
+2. 在 `runners/__init__.py` 的 `REGISTRY` 註冊名稱
+3. 完成 ✅
+
+---
+
+## 使用範例
+
+在 Claude session 裡這樣對它說：
+
+> 「現在用哪個 runner？」→ `get_runner_info`
+> 「跑一下所有測試。」→ `run_tests`
+> 「哪幾個失敗了？」→ `get_failure_details`
+> 「幫我分析 https://my-site/login 然後寫對應的 TC。」→ `analyze_url` 接 `generate_test`
+> 「下一輪該優化什麼？」→ `get_optimization_plan`
+
+---
+
+## License
+
+MIT © Jack Kao

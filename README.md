@@ -1,5 +1,7 @@
 # MCP Test Runner
 
+**English** · [繁體中文](README.zh-TW.md)
+
 > Universal MCP server for running tests across pytest / Jest / Cypress / Go,
 > with built-in DOM analyzer, run history, and a self-improvement coach.
 
