@@ -418,4 +418,9 @@ screenshots + step lists, and the collapsed Passed section.
 
 ## License
 
-MIT © Jack Kao
+MIT © 2026 Jack Kao — see [`LICENSE`](LICENSE).
+
+In plain English: you can use this for anything (personal projects, commercial
+work, modifications, redistribution). The only ask is that you keep the
+copyright + license notice in any copy you ship. There's no warranty — use
+at your own risk.
