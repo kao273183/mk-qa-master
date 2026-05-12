@@ -41,13 +41,11 @@ _STEP_KEEP_PATTERN = re.compile(r"^(Frame|Page|Locator|ElementHandle|BrowserCont
 _HAS_RERUNFAILURES = importlib.util.find_spec("pytest_rerunfailures") is not None
 
 
-TEST_TEMPLATE = '''"""
-{description}
-"""
-from playwright.sync_api import Page, expect
+TEST_TEMPLATE = '''from playwright.sync_api import Page, expect
 
 
 def test_{slug}(page: Page):
+    """{description}"""
     # TODO: 由 Claude 補完實作
     page.goto("https://example.com")
     expect(page).to_have_title("Example Domain")
@@ -412,13 +410,14 @@ class PytestPlaywrightRunner(TestRunner):
         tcs = module.get("candidate_tcs") or []
         tc_block = "\n".join(f"    # TC: {tc}" for tc in tcs[:3])
         goto_url = url or "https://example.com"
+        # description goes on the *function* docstring so the HTML reporter
+        # picks it up as the case name. Module docstring keeps just the
+        # auto-gen trace for grep-ability.
         return (
-            '"""\n'
-            f"{description}\n\n"
-            f'Auto-generated from analyze_url module: {module.get("name", "(unnamed)")} (kind=form)\n'
-            '"""\n'
+            f'"""Auto-generated from analyze_url module: {module.get("name", "(unnamed)")} (kind=form)"""\n'
             "from playwright.sync_api import Page, expect\n\n\n"
             f"def test_{slug}(page: Page):\n"
+            f"    {description!r}\n"
             f"    page.goto({goto_url!r})\n"
             f"{fills_body}\n"
             f"{submit_body}\n"
@@ -436,12 +435,10 @@ class PytestPlaywrightRunner(TestRunner):
         tc_block = "\n".join(f"    # TC: {tc}" for tc in tcs[:3])
         goto_url = url or "https://example.com"
         return (
-            '"""\n'
-            f"{description}\n\n"
-            f'Auto-generated from analyze_url module: {module.get("name", "(unnamed)")} (kind={kind})\n'
-            '"""\n'
+            f'"""Auto-generated from analyze_url module: {module.get("name", "(unnamed)")} (kind={kind})"""\n'
             "from playwright.sync_api import Page, expect\n\n\n"
             f"def test_{slug}(page: Page):\n"
+            f"    {description!r}\n"
             f"    page.goto({goto_url!r})\n"
             f"    target = page.locator({target_sel!r})\n"
             "    expect(target).to_be_visible()\n"
