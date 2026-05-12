@@ -463,18 +463,21 @@ TEMPLATE = """<!DOCTYPE html>
     color: var(--text);
     white-space: pre-wrap; word-break: break-word;
   }
-  .failure .screenshot {
+  /* Screenshot — shared by failure and pass cards.
+     Why not .failure-scoped: pass cards were rendering with no img max-width
+     constraint, so native ~1280px screenshots burst the 960px wrap. */
+  .screenshot {
     padding: 14px 20px 18px;
     background: var(--bg);
     border-top: 1px solid var(--border);
   }
-  .failure .screenshot-label {
+  .screenshot-label {
     color: var(--text-muted); font-family: var(--mono);
     font-size: 11px; font-weight: 600;
     text-transform: uppercase; letter-spacing: 0.08em;
     margin-bottom: 10px;
   }
-  .failure .screenshot img {
+  .screenshot img {
     display: block; max-width: 100%; height: auto;
     border-radius: 6px; border: 1px solid var(--border);
     background: #000;
