@@ -117,6 +117,25 @@ def _render_trend(history: list[dict], current_failed: int) -> str:
     )
 
 
+def _render_test_meta(title: str | None, nodeid: str) -> str:
+    """Two-line summary cell: docstring as the visible case name + nodeid as
+    a small mono subtitle. Falls back to nodeid-only when no docstring."""
+    nodeid_esc = escape(str(nodeid))
+    if title and str(title).strip():
+        title_esc = escape(str(title).strip())
+        return (
+            '<div class="test-meta">'
+            f'<div class="test-title">{title_esc}</div>'
+            f'<div class="test-nodeid">{nodeid_esc}</div>'
+            '</div>'
+        )
+    return (
+        '<div class="test-meta">'
+        f'<div class="test-title test-title-fallback">{nodeid_esc}</div>'
+        '</div>'
+    )
+
+
 def _render_steps_html(steps: list[dict]) -> str:
     """Render the Playwright action list as an ordered list.
 
@@ -147,7 +166,7 @@ def _render_pass_section(passes: list[dict]) -> str:
         return ""
     cards: list[str] = []
     for t in passes:
-        nodeid = escape(str(t.get("nodeid", "unknown")))
+        meta_html = _render_test_meta(t.get("title"), t.get("nodeid", "unknown"))
         dur = t.get("duration")
         dur_str = f"{dur:.3f}s" if isinstance(dur, (int, float)) else ""
         steps_html = _render_steps_html(t.get("steps") or [])
@@ -156,7 +175,7 @@ def _render_pass_section(passes: list[dict]) -> str:
             f'<details class="pass">'
             f'<summary>'
             f'<span class="pass-badge">PASS</span>'
-            f'<span class="fail-name">{nodeid}</span>'
+            f'{meta_html}'
             f'<span class="fail-dur">{dur_str}</span>'
             f'</summary>'
             f'{steps_html}'
@@ -217,11 +236,15 @@ def render_report() -> str:
             shot_html = _embed_screenshot(f.get("screenshot") if isinstance(f, dict) else None)
             links_html = _artifact_links(f if isinstance(f, dict) else {})
             steps_html = _render_steps_html(f.get("steps") or []) if isinstance(f, dict) else ""
+            meta_html = _render_test_meta(
+                f.get("title") if isinstance(f, dict) else None,
+                f.get("nodeid", "unknown") if isinstance(f, dict) else "unknown",
+            )
             cards.append(
                 f'<details class="failure" {open_attr}>'
                 f'<summary>'
                 f'<span class="fail-badge">FAIL</span>'
-                f'<span class="fail-name">{nodeid}</span>'
+                f'{meta_html}'
                 f'<span class="fail-dur">{dur_str}</span>'
                 f'</summary>'
                 f'<pre>{message}</pre>'
@@ -449,6 +472,23 @@ TEMPLATE = """<!DOCTYPE html>
   .fail-name {
     font-family: var(--mono); font-size: 13px; flex: 1;
     color: var(--text); word-break: break-all;
+  }
+  /* Two-line test header: docstring as title + nodeid as subtitle. */
+  .test-meta { flex: 1; min-width: 0; }
+  .test-title {
+    color: var(--text); font-size: 13px;
+    font-weight: 500; line-height: 1.4;
+    word-break: break-word;
+  }
+  .test-title-fallback {
+    font-family: var(--mono); font-size: 12px;
+    color: var(--text); word-break: break-all;
+  }
+  .test-nodeid {
+    margin-top: 3px;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--text-muted);
+    word-break: break-all;
   }
   .fail-dur {
     color: var(--text-muted); font-family: var(--mono);

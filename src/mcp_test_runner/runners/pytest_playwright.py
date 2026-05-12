@@ -1,3 +1,4 @@
+import ast
 import importlib.util
 import json
 import re
@@ -8,6 +9,24 @@ from datetime import datetime
 from pathlib import Path
 from .base import TestRunner
 from ..config import PROJECT_ROOT, REPORT_PATH, JUNIT_PATH, ARTIFACTS_DIR, HISTORY_DIR
+
+
+def _parse_docstrings(file_path: Path) -> dict[str, str]:
+    """Read a test .py file and return {func_name: docstring} for every
+    function whose docstring is present (parsed via ast — no import / side
+    effects). Returns {} on missing file or syntax error.
+    """
+    try:
+        tree = ast.parse(file_path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, ValueError):
+        return {}
+    out: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            doc = ast.get_docstring(node)
+            if doc:
+                out[node.name] = doc.strip()
+    return out
 
 
 # Trace events whose class.method we want to surface as user-visible "steps".
@@ -206,7 +225,11 @@ class PytestPlaywrightRunner(TestRunner):
             pass
 
     def get_all_test_details(self) -> list[dict]:
-        """Per-test details (outcome / duration / artifacts / steps).
+        """Per-test details (outcome / duration / artifacts / steps / title).
+
+        `title` comes from the test function's docstring — that's the most
+        readable "case name" we have. Falls back to None when no docstring is
+        present, and the reporter then shows the nodeid alone.
 
         The reporter uses this to render pass + fail sections in one pass.
         `rerun` records are skipped — pytest-rerunfailures emits them as a
@@ -219,6 +242,9 @@ class PytestPlaywrightRunner(TestRunner):
             data = json.loads(REPORT_PATH.read_text())
         except (OSError, json.JSONDecodeError):
             return []
+        # Cache docstring extraction per file: typical suite has many tests in
+        # the same .py, so re-parsing each time would scale poorly.
+        docstring_cache: dict[Path, dict[str, str]] = {}
         results: list[dict] = []
         for t in data.get("tests", []) or []:
             nodeid = t.get("nodeid")
@@ -228,6 +254,7 @@ class PytestPlaywrightRunner(TestRunner):
             artifacts = self._find_artifacts(nodeid)
             results.append({
                 "nodeid": nodeid,
+                "title": self._docstring_for(nodeid, docstring_cache),
                 "outcome": outcome,
                 "duration": (t.get("call") or {}).get("duration"),
                 "message": (t.get("call") or {}).get("longrepr", "") if outcome == "failed" else "",
@@ -235,6 +262,27 @@ class PytestPlaywrightRunner(TestRunner):
                 **artifacts,
             })
         return results
+
+    def _docstring_for(self, nodeid: str, cache: dict[Path, dict[str, str]]) -> str | None:
+        """Look up the test function's docstring as the human-readable case name.
+
+        nodeid forms handled:
+          - tests/x.py::test_y
+          - tests/x.py::TestSuite::test_y       (class-based)
+          - tests/x.py::test_y[param-id]        (parametrize)
+        We walk all FunctionDef/AsyncFunctionDef in the file (cheap, cached)
+        and key by bare function name. Parametrize IDs and class scoping
+        share the same source function, so collapsing both to the function
+        name is the right move.
+        """
+        file_part, _, suffix = nodeid.partition("::")
+        if not file_part or not suffix:
+            return None
+        func_name = suffix.split("::")[-1].split("[")[0]
+        file_path = PROJECT_ROOT / file_part
+        if file_path not in cache:
+            cache[file_path] = _parse_docstrings(file_path)
+        return cache[file_path].get(func_name)
 
     def _extract_steps(self, trace_zip_path: str | None) -> list[dict]:
         """Parse trace.zip → list of {api, title} user-facing actions.
