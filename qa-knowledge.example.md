@@ -1,16 +1,22 @@
-# QA Knowledge — Example
+# QA Knowledge — Domain Example
 
-> 這是 `mcp-test-runner` 讀的領域知識範本。
-> 真實使用時請複製為 `qa-knowledge.md` 放到**受測專案根**（不是這個 MCP repo），
-> 或執行 `init_qa_knowledge` MCP tool 自動 scaffold。
+> 這份是 `qa-knowledge.md`「**你的 XXX**」5 個領域區段的**填滿範本**，
+> 用泛例電商情境呈現「填好後長什麼樣」。
 >
-> `get_qa_context()` 會把這份內容暴露給 AI client，用於：
-> 1. 決定要測什麼（業務知識驅動）
-> 2. 把規則印進產出 test 的 `# Business context:` 區段
+> ## 跟其他元件的分工
 >
-> **規則**：以 H2 (`##`) 區段為單位、client 可指定 section 拉取單一段（partial match）。
+> | 元件 | 提供什麼 | 哪裡 |
+> |---|---|---|
+> | **內建方法論**（ISTQB / 邊界值 / 測試金字塔 / 回歸 / Mobile / Metrics） | 「**怎麼測**」的業界標準觀念 | mcp-test-runner 內建、`get_qa_context` 自動含 |
+> | **領域知識**（業務規則 / 歷史 Bug / 標準斷言文字 / Journeys / 技術約束） | 「**測什麼**」的專案專屬知識 | 你的 `qa-knowledge.md`（本檔示範填法） |
 >
-> 下列範例以泛例電商情境呈現，**請依你的領域全部替換掉**。
+> ## 怎麼用這份範例
+>
+> 1. 在受測專案執行 `init_qa_knowledge` MCP tool → 產生含方法論 + 空 TODO 的起手檔
+> 2. 參考下面 5 個區段的填法 → 把你的領域內容寫進你的 `qa-knowledge.md`
+> 3. 之後 `get_qa_context` 會讀你的版本（方法論 + 你的領域），不再 fallback
+>
+> **注意**：本檔只放領域區段（不含方法論），避免和內建重複。
 
 ## 業務規則
 - 折抵點數：1 點折抵 1 元；單筆訂單最高折抵金額不超過 50%
