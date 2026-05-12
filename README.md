@@ -418,7 +418,9 @@ screenshots + step lists, and the collapsed Passed section.
 
 ## License
 
-MIT © 2026 Jack Kao — see [`LICENSE`](LICENSE).
+MIT © 2026 Jack Kao — see [`LICENSE`](LICENSE)
+(中文翻譯參考: [`LICENSE.zh-TW.md`](LICENSE.zh-TW.md); the English version is
+authoritative).
 
 In plain English: you can use this for anything (personal projects, commercial
 work, modifications, redistribution). The only ask is that you keep the
