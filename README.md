@@ -211,6 +211,58 @@ effectiveness) make every "下一步" answer data-driven, not gut feel.
 
 ---
 
+## Prompting cookbook
+
+Each row shows a phrase you can paste into a Claude / Cursor session and
+the underlying MCP tool call it should trigger. Use as a reference for
+"how do I get the AI to do X without naming the tool myself."
+
+### One-time setup
+| You say | Claude calls |
+|---|---|
+| "Initialize the QA knowledge file." | `init_qa_knowledge` → writes `qa-knowledge.md` to your project root |
+| "Show me the current QA knowledge." | `get_qa_context` → methodology + your domain sections |
+| "Open the ISTQB principles section." | `get_qa_context(section="ISTQB")` |
+
+### Day-to-day testing
+| You say | Claude calls |
+|---|---|
+| "Run all tests." | `run_tests` |
+| "Run only login-related tests." | `run_tests(filter="login")` |
+| "Re-run just the failures." | `run_failed` |
+| "Show me the summary." | `get_test_report` |
+| "Which ones failed? Give me screenshots and trace." | `get_failure_details` |
+| "Generate the HTML report." | `generate_html_report` |
+
+### Building tests from a URL
+| You say | Claude calls |
+|---|---|
+| "Auto-generate tests for `https://shop.example/`." | `auto_generate_tests(url=...)` — one-shot |
+| "Analyze `https://shop.example/coupon` first, then write one test per module." | `analyze_url` → `generate_test` × N |
+| "Analyze coupon page and write a regression test for our past idempotency bug." | `get_qa_context(section="Bug")` → `analyze_url` → `generate_test(business_context=...)` |
+| "Just record a checkout flow as a baseline." | `codegen(url=...)` |
+
+### Continuous improvement
+| You say | Claude calls |
+|---|---|
+| "What should I fix next?" | `get_optimization_plan` |
+| "Has `test_login_invalid` been flaky lately?" | `get_test_history` + plan lookup |
+| "Why did it fail? Show me the trace." | `get_failure_details` (returns screenshot/trace/video paths) |
+
+### Tips — getting Claude to pick the right tool
+
+- **Mention QA knowledge explicitly** — "**reference qa knowledge** when testing coupon" pushes Claude to call `get_qa_context` first; saying just "test coupon" may skip it.
+- **State the order** — "**analyze first**, then write" forces `analyze_url` before `generate_test`; "just write a test for X" skips analysis.
+- **Batch vs precise** — "auto-generate the whole page" → `auto_generate_tests`; "write one test per candidate_tc" → manual chain.
+- **Failure debugging** — Asking "why did it fail / show me the screenshot" reliably triggers `get_failure_details` (which now returns screenshot + trace + video paths).
+
+### Anti-patterns
+- ❌ "Run it 5 times to see if it's flaky" — the runner has auto-retry + history; just ask "is it flaky" and let `get_optimization_plan` answer.
+- ❌ "Generate 100 tests" — noise > signal. Use `get_optimization_plan` first to find what's missing.
+- ❌ "Test all edge cases" — too vague. Phrase as "test every `candidate_tc` for this form" — concrete, bounded, traceable.
+
+---
+
 ## Sample outputs
 
 ### `analyze_url` (excerpt)

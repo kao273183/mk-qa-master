@@ -188,6 +188,58 @@ optimizer 三層（測試品質 / MCP 使用 / AI 產測效益）讓「下一步
 
 ---
 
+## 怎麼對 Claude 下指令（Prompting cookbook）
+
+每列：你可以直接貼進 Claude / Cursor session 的中文 prompt → 對應的 MCP tool 呼叫。
+不需要你自己 call tool 名稱，用自然語言觸發即可。
+
+### 一次性設定
+| 你說 | Claude 做 |
+|---|---|
+| 「初始化 QA 知識檔」 | `init_qa_knowledge` → 在受測專案根建立 `qa-knowledge.md` |
+| 「看一下目前的 QA 知識」 | `get_qa_context` → 方法論 + 你的領域內容 |
+| 「載入 ISTQB 原則那段」 | `get_qa_context(section="ISTQB")` |
+
+### 日常跑測試
+| 你說 | Claude 做 |
+|---|---|
+| 「跑所有測試」 | `run_tests` |
+| 「只跑 login 相關」 | `run_tests(filter="login")` |
+| 「重跑剛剛失敗的」 | `run_failed` |
+| 「看一下結果摘要」 | `get_test_report` |
+| 「哪幾個失敗了、給我截圖跟 trace」 | `get_failure_details` |
+| 「產一份 HTML 報告」 | `generate_html_report` |
+
+### 從零測一個 URL（最有戲的玩法）
+| 你說 | Claude 做 |
+|---|---|
+| 「測試 `https://shop.example/` 的所有模塊」 | `auto_generate_tests` 一鍵交付 |
+| 「先分析 `https://shop.example/coupon`、再對每個模塊各寫 1 條測試」 | `analyze_url` → 對每個 module 一次 `generate_test` |
+| 「分析 coupon 頁、**參考歷史 bug** 寫回歸測試」 | `get_qa_context(section="歷史 Bug")` → `analyze_url` → `generate_test(business_context=...)` |
+| 「幫我錄結帳流程當 baseline」 | `codegen(url=...)` 開瀏覽器讓你錄 |
+
+### 持續優化（self-improvement loop）
+| 你說 | Claude 做 |
+|---|---|
+| 「下一步該優化什麼？」 | `get_optimization_plan` → 排序行動清單 |
+| 「最近 5 次 `test_login` 怎樣？」 | `get_test_history` + plan lookup |
+| 「`test_invalid_pwd` 為什麼 flaky？」 | `get_failure_details` + 看評分 |
+
+### Tips：怎麼讓 Claude 選對工具
+
+- **明示用 QA 知識** — 「**參考 qa 知識**測 coupon」會引導 Claude call `get_qa_context`；不提就會跳過、直接 generate。
+- **明示分析步驟** — 「**先分析**再寫」走 `analyze_url`；「直接寫一個」跳過分析。
+- **批次 vs 精挑** — 「一鍵」對應 `auto_generate_tests`；「對每個模塊一條」對應分步 `generate_test`。
+- **失敗除錯** — 直接問「為什麼失敗 / 給我截圖」會走 `get_failure_details`，回傳 screenshot/trace/video 路徑。
+
+### Anti-patterns（不該這樣下指令）
+
+- ❌ 「跑 5 次來判斷 flaky」— runner 已有 `--reruns 1` auto-retry + history 紀錄，直接問「有沒有 flaky」用 `get_optimization_plan` 就回得出來。
+- ❌ 「一次產 100 條 test」— noise > signal。先用 `get_optimization_plan` 找最該補的，再針對性產測。
+- ❌ 「測試所有邊界」太空泛 — 改成「測這個 form 的所有 candidate_tcs」更具體可追蹤。
+
+---
+
 ## 範本輸出
 
 ### `analyze_url` 結果（節錄）
