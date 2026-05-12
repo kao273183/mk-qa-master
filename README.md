@@ -165,15 +165,145 @@ mcp-test-runner/
 
 ---
 
-## Usage flavor
+## End-to-end workflow
 
-Drop these into a Claude session:
+The intended pipeline — from a URL to "what should I improve next time":
 
-> "Which runner is active?" → `get_runner_info`
-> "Run everything." → `run_tests`
-> "What broke?" → `get_failure_details`
-> "Analyze https://my-site/login and draft test cases for it." → `analyze_url` then `generate_test`
-> "What should I fix next?" → `get_optimization_plan`
+```mermaid
+flowchart LR
+    URL[URL] -->|analyze_url| MOD[modules<br/>+ candidate TCs<br/>+ API endpoints]
+    MOD -->|generate_test<br/>module=...| TEST[tests/test_*.py<br/>runnable skeleton]
+    TEST -->|run_tests| RES[report.json<br/>+ screenshots<br/>+ trace.zip<br/>+ junit.xml]
+    RES -->|auto archive| HIST[history/ snapshot]
+    RES -->|generate_html_report| HTML[HTML report<br/>self-contained]
+    HIST -->|auto write| PLAN[optimization-plan.md]
+    PLAN -.->|next session reads| URL
+```
+
+The loop is the point: every run feeds the optimizer, the optimizer
+points at the weakest link, the next run hits that link first.
+
+### Walkthrough — testing a login page
+
+In a Claude / Cursor session:
+
+> **You**: 分析 `https://shop.example/login`，幫我寫對應測試
+>
+> **Claude**: [`analyze_url`] Found 1 form (`email_password_form_0`) + 3 API
+> endpoints. 5 candidate TCs.
+> [`generate_test` with the form module] Wrote `tests/test_login.py` —
+> runnable with concrete selectors, no `# TODO` stubs.
+
+> **You**: 跑
+>
+> **Claude**: [`run_tests`] 23 passed, 0 failed in 31s. Screenshots + step
+> traces captured for every test.
+
+> **You**: 下一步該做什麼？
+>
+> **Claude**: [opens `report://optimization`]
+> Top: `tests/test_login.py::test_invalid_credentials` is flaky
+> (flake_score=0.4, outcomes=PFPFP). Suggestion: add
+> `wait_for_response('/api/login')` before asserting the error message.
+
+The three optimizer lenses (suite quality / MCP usability / AI generation
+effectiveness) make every "下一步" answer data-driven, not gut feel.
+
+---
+
+## Sample outputs
+
+### `analyze_url` (excerpt)
+
+```json
+{
+  "url": "https://shop.example/login",
+  "page_title": "Login",
+  "module_count": 3,
+  "modules": [
+    {
+      "kind": "form",
+      "name": "email_password_form_0",
+      "selectors": {
+        "container": "#login",
+        "fields": [
+          {"label": "Email", "selector": "#email", "type": "email", "required": true},
+          {"label": "Password", "selector": "#password", "type": "password", "required": true}
+        ],
+        "submit": "button[type='submit']"
+      },
+      "candidate_tcs": [
+        "所有必填欄位為空時送出，應顯示必填錯誤",
+        "Email 欄位填入格式錯誤的字串（無 @），應顯示格式錯誤",
+        "Password 欄位輸入後應預設遮蔽（type=password）",
+        "全部填入合法值後送出，應觸發成功流程"
+      ]
+    }
+  ],
+  "api_endpoints": [
+    {
+      "method": "POST",
+      "path": "/api/login",
+      "status": 401,
+      "candidate_tcs": [
+        "POST /api/login payload 缺必填欄位應回 400 + 欄位錯誤訊息",
+        "POST /api/login 合法 payload 應回 2xx",
+        "POST /api/login 缺少 auth header 應回 401/403"
+      ]
+    }
+  ]
+}
+```
+
+### `generate_test` output (smart, with module)
+
+```python
+"""
+Login happy path
+
+Auto-generated from analyze_url module: email_password_form_0 (kind=form)
+"""
+from playwright.sync_api import Page, expect
+
+
+def test_login(page: Page):
+    page.goto('https://shop.example/login')
+    page.locator('#email').fill('test@example.com')
+    page.locator('#password').fill('TestPass123!')
+    page.locator("button[type='submit']").click()
+    # TC: Email 欄位填入格式錯誤的字串（無 @），應顯示格式錯誤
+    # TC: Password 欄位輸入後應預設遮蔽
+    # TC: 正確 Email + 正確密碼 → 導向 dashboard
+    # TODO: 補上實際斷言，例如：
+    # expect(page).to_have_url(...)
+    # expect(page.get_by_text("成功")).to_be_visible()
+```
+
+### `optimization-plan.md` (excerpt)
+
+```markdown
+# Optimization Plan — 2026-05-12T14:03:40
+
+_Based on 6 archived runs._
+
+## Prioritized Actions
+
+### 1. 🔴 HIGH — flaky
+- **Target**: `tests/test_login.py::test_invalid_credentials`
+- **Evidence**: flake_score=0.4, outcomes=PFPFP, rerun_count=1
+- **Suggestion**: 加 explicit wait（wait_for_response / locator wait）
+
+### 2. 🟡 MEDIUM — coverage_gap
+- **Target**: `register_form`
+- **Evidence**: 由 analyze_url 偵測但 repo 內找不到對應 test_*.py
+- **Suggestion**: `call generate_test(description="...", filename="test_register_form.py")`
+```
+
+### HTML report
+
+See [`sample_report.html`](sample_report.html) — a real rendered output
+showing the stats grid, trend sparkline, failure cards with embedded
+screenshots + step lists, and the collapsed Passed section.
 
 ---
 

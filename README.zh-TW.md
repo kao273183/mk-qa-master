@@ -149,15 +149,136 @@ mcp-test-runner/
 
 ---
 
-## 使用範例
+## 端到端流程
 
-在 Claude session 裡這樣對它說：
+從一個 URL 一路接到「下一輪該優化什麼」的完整 pipeline：
 
-> 「現在用哪個 runner？」→ `get_runner_info`
-> 「跑一下所有測試。」→ `run_tests`
-> 「哪幾個失敗了？」→ `get_failure_details`
-> 「幫我分析 https://my-site/login 然後寫對應的 TC。」→ `analyze_url` 接 `generate_test`
-> 「下一輪該優化什麼？」→ `get_optimization_plan`
+```mermaid
+flowchart LR
+    URL[URL] -->|analyze_url| MOD[modules<br/>+ candidate TCs<br/>+ API endpoints]
+    MOD -->|generate_test<br/>module=...| TEST[tests/test_*.py<br/>可直接執行]
+    TEST -->|run_tests| RES[report.json<br/>+ 截圖<br/>+ trace.zip<br/>+ junit.xml]
+    RES -->|自動歸檔| HIST[history/ 快照]
+    RES -->|generate_html_report| HTML[自包含 HTML 報告]
+    HIST -->|自動寫出| PLAN[optimization-plan.md]
+    PLAN -.->|下次 session 讀| URL
+```
+
+這個迴圈是設計重點：每次 run 餵 optimizer、optimizer 指出最弱的環節、下一次 run 優先攻那一環。
+
+### Walkthrough — 從零測試一個登入頁
+
+在 Claude / Cursor session 裡：
+
+> **你**：分析 `https://shop.example/login`，幫我寫對應測試
+>
+> **Claude**：[`analyze_url`] 找到 1 個 form (`email_password_form_0`) + 3 個 API endpoints，候選 TC 5 條。
+> [`generate_test` 帶該 form module] 寫了 `tests/test_login.py`，含真實 selectors、不再是 `# TODO` 占位。
+
+> **你**：跑
+>
+> **Claude**：[`run_tests`] 23 passed、0 failed、31 秒。每條 test 的截圖 + step trace 都有。
+
+> **你**：下一步該做什麼？
+>
+> **Claude**：[讀 `report://optimization`]
+> 最高優先：`tests/test_login.py::test_invalid_credentials` flaky（flake_score=0.4, outcomes=PFPFP）。建議在斷言錯誤訊息前加 `wait_for_response('/api/login')`。
+
+optimizer 三層（測試品質 / MCP 使用 / AI 產測效益）讓「下一步」永遠有資料佐證，不是憑感覺。
+
+---
+
+## 範本輸出
+
+### `analyze_url` 結果（節錄）
+
+```json
+{
+  "url": "https://shop.example/login",
+  "page_title": "Login",
+  "module_count": 3,
+  "modules": [
+    {
+      "kind": "form",
+      "name": "email_password_form_0",
+      "selectors": {
+        "container": "#login",
+        "fields": [
+          {"label": "Email", "selector": "#email", "type": "email", "required": true},
+          {"label": "Password", "selector": "#password", "type": "password", "required": true}
+        ],
+        "submit": "button[type='submit']"
+      },
+      "candidate_tcs": [
+        "所有必填欄位為空時送出，應顯示必填錯誤",
+        "Email 欄位填入格式錯誤的字串（無 @），應顯示格式錯誤",
+        "Password 欄位輸入後應預設遮蔽（type=password）",
+        "全部填入合法值後送出，應觸發成功流程"
+      ]
+    }
+  ],
+  "api_endpoints": [
+    {
+      "method": "POST",
+      "path": "/api/login",
+      "status": 401,
+      "candidate_tcs": [
+        "POST /api/login payload 缺必填欄位應回 400 + 欄位錯誤訊息",
+        "POST /api/login 合法 payload 應回 2xx",
+        "POST /api/login 缺少 auth header 應回 401/403"
+      ]
+    }
+  ]
+}
+```
+
+### `generate_test` 輸出（智慧模式、帶 module）
+
+```python
+"""
+Login happy path
+
+Auto-generated from analyze_url module: email_password_form_0 (kind=form)
+"""
+from playwright.sync_api import Page, expect
+
+
+def test_login(page: Page):
+    page.goto('https://shop.example/login')
+    page.locator('#email').fill('test@example.com')
+    page.locator('#password').fill('TestPass123!')
+    page.locator("button[type='submit']").click()
+    # TC: Email 欄位填入格式錯誤的字串（無 @），應顯示格式錯誤
+    # TC: Password 欄位輸入後應預設遮蔽
+    # TC: 正確 Email + 正確密碼 → 導向 dashboard
+    # TODO: 補上實際斷言，例如：
+    # expect(page).to_have_url(...)
+    # expect(page.get_by_text("成功")).to_be_visible()
+```
+
+### `optimization-plan.md`（節錄）
+
+```markdown
+# Optimization Plan — 2026-05-12T14:03:40
+
+_Based on 6 archived runs._
+
+## Prioritized Actions
+
+### 1. 🔴 HIGH — flaky
+- **Target**: `tests/test_login.py::test_invalid_credentials`
+- **Evidence**: flake_score=0.4, outcomes=PFPFP, rerun_count=1
+- **Suggestion**: 加 explicit wait（wait_for_response / locator wait）
+
+### 2. 🟡 MEDIUM — coverage_gap
+- **Target**: `register_form`
+- **Evidence**: 由 analyze_url 偵測但 repo 內找不到對應 test_*.py
+- **Suggestion**: `call generate_test(description="...", filename="test_register_form.py")`
+```
+
+### HTML 報告
+
+看 [`sample_report.html`](sample_report.html) — 實際渲染輸出，含統計卡、Trend sparkline、失敗卡片（嵌入截圖 + step list）、折疊的 Passed 區塊。
 
 ---
 
