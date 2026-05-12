@@ -98,7 +98,7 @@ model auto-chains tool calls.
 |---|---|---|---|---|
 | Claude Desktop / Cursor | `~/Library/Application Support/Claude/...json` · `~/.cursor/mcp.json` | JSON | Claude Opus / Sonnet | Best tested |
 | **Codex CLI** | `~/.codex/config.toml` | **TOML** | GPT-5 family | Strong (well-trained on tool chaining) |
-| **Gemini CLI** | `~/.gemini/settings.json` | JSON | Gemini 2.5 Pro / Flash | Works; prefers explicit prompts ("first analyze, then write") |
+| **Gemini CLI** | `~/.gemini/settings.json` | JSON | Gemini 3.1 Pro / Flash | Works; prefers explicit prompts ("first analyze, then write") |
 | Cline / Continue / Zed | each has its own MCP config slot | varies | varies | depends on configured model |
 
 Example configs ship in the repo:
