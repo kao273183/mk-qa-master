@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>OG Image — mcp-test-runner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@700;900&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #050810; }
+
+  .card {
+    width: 1200px;
+    height: 630px;
+    position: relative;
+    overflow: hidden;
+    background: #0B1628;
+    color: #F0EDE6;
+    font-family: 'DM Sans', sans-serif;
+    padding: 72px 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 70% 60% at 15% 25%, rgba(212, 168, 67, 0.18), transparent 65%),
+      radial-gradient(ellipse 55% 50% at 95% 85%, rgba(212, 168, 67, 0.10), transparent 65%);
+    pointer-events: none;
+  }
+
+  .card > * { position: relative; z-index: 1; }
+
+  .top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 20px;
+    color: #D4A843;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .eyebrow::before {
+    content: '';
+    width: 32px;
+    height: 1px;
+    background: #D4A843;
+  }
+
+  .brand-mark {
+    font-family: 'DM Mono', monospace;
+    font-size: 22px;
+    color: rgba(240, 237, 230, 0.55);
+    letter-spacing: 0.06em;
+  }
+  .brand-mark .dot { color: #D4A843; }
+
+  h1 {
+    font-family: 'Noto Serif TC', serif;
+    font-size: 132px;
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    color: #F0EDE6;
+  }
+  h1 .accent { color: #D4A843; }
+
+  .bottom-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 40px;
+  }
+
+  .sub {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 26px;
+    color: rgba(240, 237, 230, 0.65);
+    line-height: 1.45;
+    max-width: 760px;
+    font-weight: 400;
+  }
+
+  .url {
+    font-family: 'DM Mono', monospace;
+    font-size: 20px;
+    color: #D4A843;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="top-row">
+    <div class="eyebrow">Open Source · MCP Server</div>
+    <div class="brand-mark">mcp-test-runner<span class="dot">.</span></div>
+  </div>
+
+  <h1>讓我們把<br><span class="accent">QA/QE</span> 簡單化。</h1>
+
+  <div class="bottom-row">
+    <div class="sub">讓 AI 幫你跑測試、從 URL 寫測試、並當你的優化顧問——一個 MCP server，相容 Claude / Cursor / Codex / Gemini。</div>
+    <div class="url">mcp.chenjundigital.com</div>
+  </div>
+</div>
+</body>
+</html>
