@@ -74,6 +74,7 @@ async def analyze_url(
 
     modules = _build_modules(structure or {})
     endpoints = _dedupe_endpoints(api_calls)
+    layout_warnings = (structure or {}).get("layout_warnings", []) or []
     return {
         "url": url,
         "page_title": page_title,
@@ -82,6 +83,11 @@ async def analyze_url(
         "modules": modules,
         "api_endpoint_count": len(endpoints),
         "api_endpoints": endpoints,
+        # Visible elements whose content escapes their container at the
+        # current viewport — typical "跑版" signal (text overflow, hard-px
+        # widths, etc.). Bounded to 20 entries in the probe.
+        "layout_warning_count": len(layout_warnings),
+        "layout_warnings": layout_warnings,
     }
 
 
@@ -232,7 +238,37 @@ _DOM_PROBE_JS = r"""
     .filter(b => b.text && ctaPatterns.some(p => b.text.includes(p)))
     .slice(0, 20);
 
-  return { forms, navs, dialogs, sections, ctas };
+  // Layout warnings: visible elements whose content overflows their container.
+  // Threshold of 2px filters sub-pixel rounding noise. Skips invisible
+  // elements + the html/body root (which legitimately scrolls).
+  const layout_warnings = [...document.querySelectorAll('body *')]
+    .filter(el => {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return false;
+      const cs = getComputedStyle(el);
+      if (cs.visibility === 'hidden' || cs.display === 'none' || parseFloat(cs.opacity) === 0) return false;
+      const dx = el.scrollWidth - el.clientWidth;
+      const dy = el.scrollHeight - el.clientHeight;
+      if (dx <= 2 && dy <= 2) return false;
+      // Intentional scrollers (overflow: auto / scroll) are not bugs.
+      if (cs.overflowX === 'auto' || cs.overflowX === 'scroll') return false;
+      if (cs.overflowY === 'auto' || cs.overflowY === 'scroll') return false;
+      return true;
+    })
+    .slice(0, 20)
+    .map(el => {
+      const r = el.getBoundingClientRect();
+      return {
+        selector: sel(el),
+        tag: el.tagName.toLowerCase(),
+        text_sample: txt(el).slice(0, 40),
+        overflow_x: el.scrollWidth - el.clientWidth,
+        overflow_y: el.scrollHeight - el.clientHeight,
+        bbox: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+      };
+    });
+
+  return { forms, navs, dialogs, sections, ctas, layout_warnings };
 }
 """
 
