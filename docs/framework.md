@@ -58,7 +58,8 @@ MCP 三大原語在 QA 場景的對應：
 mcp-test-runner/
 ├── pyproject.toml
 ├── README.md
-├── claude_desktop_config.example.json
+├── docs/                              # framework.md, qa-knowledge.example.md
+├── examples/configs/                  # client config examples
 ├── src/
 │   └── mcp_test_runner/
 │       ├── __init__.py

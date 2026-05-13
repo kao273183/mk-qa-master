@@ -19,7 +19,7 @@ to fix or write next.
 | `go` / `go-test` | `go test` | Go | Backend |
 | `maestro` / `mobile` | Maestro | YAML | iOS + Android |
 
-Full design notes: [`framework.md`](framework.md).
+Full design notes: [`docs/framework.md`](docs/framework.md).
 
 ---
 
@@ -58,7 +58,7 @@ pip install pytest-rerunfailures # optional, enables auto-retry
 
 ## Wire into Claude Desktop
 
-Copy `claude_desktop_config.example.json` to:
+Copy `examples/configs/claude_desktop_config.example.json` to:
 
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
@@ -109,9 +109,9 @@ model auto-chains tool calls.
 | Cline / Continue / Zed | each has its own MCP config slot | varies | varies | depends on configured model |
 
 Example configs ship in the repo:
-[`codex-config.example.toml`](codex-config.example.toml) ·
-[`gemini-config.example.json`](gemini-config.example.json) ·
-[`claude_desktop_config.example.json`](claude_desktop_config.example.json).
+[`codex-config.example.toml`](examples/configs/codex-config.example.toml) ·
+[`gemini-config.example.json`](examples/configs/gemini-config.example.json) ·
+[`claude_desktop_config.example.json`](examples/configs/claude_desktop_config.example.json).
 
 Codex (TOML):
 ```toml
