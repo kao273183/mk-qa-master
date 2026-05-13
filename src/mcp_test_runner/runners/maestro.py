@@ -191,19 +191,219 @@ class MaestroRunner(TestRunner):
         module: dict | None = None,
         business_context: str | None = None,
     ) -> str:
-        # In mobile context, `url` repurposed as `appId` (the package/bundle ID).
+        """Produce a Maestro flow YAML.
+
+        When `module` is supplied (from analyze_screen), we render a
+        kind-specific skeleton that's ready to run — tapOn / inputText /
+        takeScreenshot chains derived from the module's selectors —
+        instead of a generic `# TODO` stub.
+
+        `url` is reused as `appId` in mobile context (bundle id /
+        package name).
+        """
         if not filename.endswith(".yaml"):
             filename += ".yaml"
         app_id = url or "com.example.app"
-        body = FLOW_TEMPLATE.format(description=description, app_id=app_id)
-        if business_context and str(business_context).strip():
-            bc_lines = ["# Business context:"]
-            for raw in str(business_context).strip().splitlines():
-                bc_lines.append(f"# {raw.rstrip()}" if raw.strip() else "#")
-            body = "\n".join(bc_lines) + "\n" + body
+
+        if isinstance(module, dict):
+            kind = module.get("kind")
+            if kind == "cta":
+                body = self._render_cta_flow(description, app_id, module, business_context)
+            elif kind == "form":
+                body = self._render_form_flow(description, app_id, module, business_context)
+            elif kind == "tab_bar":
+                body = self._render_tab_bar_flow(description, app_id, module, business_context)
+            else:
+                body = self._render_generic_module_flow(description, app_id, module, business_context)
+        else:
+            body = self._render_basic_flow(description, app_id, business_context)
+
         target = PROJECT_ROOT / filename
         target.write_text(body, encoding="utf-8")
         return f"已產生 {target}，內容：\n\n{body}"
+
+    def _flow_header(
+        self,
+        description: str,
+        app_id: str,
+        business_context: str | None,
+        source_info: str = "",
+    ) -> str:
+        """Common YAML header: comment block + appId + `---` separator.
+
+        Description comment becomes the case name via the existing
+        _flow_title parser; business_context goes as a leading `#` block
+        below it so reviewers see the rationale inline.
+        """
+        lines = [f"# {description}"]
+        if source_info:
+            lines.append(f"# {source_info}")
+        if business_context and str(business_context).strip():
+            lines.append("# Business context:")
+            for raw in str(business_context).strip().splitlines():
+                lines.append(f"# {raw.rstrip()}" if raw.strip() else "#")
+        lines.append(f"appId: {app_id}")
+        lines.append("---")
+        return "\n".join(lines)
+
+    def _tap_block(self, label: str, resource_id: str | None) -> str:
+        """Prefer `id:` (resource-id / accessibilityIdentifier) over `text`.
+
+        Maestro matches both; id is stabler against copy / localization
+        changes. Falls back to text when no id is exposed.
+        """
+        if resource_id:
+            return f"- tapOn:\n    id: {resource_id!r}"
+        return f"- tapOn: {label!r}"
+
+    def _sample_input_value(self, label: str) -> str:
+        """Pick a reasonable test value from a field label.
+
+        Maestro's `inputText` accepts any string; we bias toward
+        domain-typical placeholders so the generated flow doesn't need
+        manual editing for happy-path runs.
+        """
+        lower = (label or "").lower()
+        if any(k in lower for k in ("email", "信箱", "電子郵件")):
+            return "test@example.com"
+        if any(k in lower for k in ("password", "密碼")):
+            return "TestPass123!"
+        if any(k in lower for k in ("phone", "電話", "手機", "tel")):
+            return "0912345678"
+        if any(k in lower for k in ("name", "姓名", "暱稱")):
+            return "QA Tester"
+        if any(k in lower for k in ("search", "搜尋")):
+            return "test query"
+        if any(k in lower for k in ("number", "數字", "數量", "amount")):
+            return "1"
+        return "test"
+
+    def _render_cta_flow(
+        self, description: str, app_id: str, module: dict, business_context: str | None,
+    ) -> str:
+        sel = module.get("selectors") or {}
+        label = sel.get("text") or module.get("name") or "(unlabeled)"
+        rid = sel.get("resource_id")
+        tcs = (module.get("candidate_tcs") or [])[:3]
+        name = module.get("name") or "cta"
+        safe = re.sub(r"[^\w]+", "_", name.lower()).strip("_") or "cta"
+        header = self._flow_header(
+            description, app_id, business_context,
+            f"Auto-generated from analyze_screen module: {name} (kind=cta)",
+        )
+        tc_block = "\n".join(f"# TC: {tc}" for tc in tcs)
+        return (
+            f"{header}\n"
+            "- launchApp:\n"
+            "    clearState: false\n"
+            "- waitForAnimationToEnd:\n"
+            "    timeout: 5000\n"
+            f"{self._tap_block(label, rid)}\n"
+            "- waitForAnimationToEnd:\n"
+            "    timeout: 3000\n"
+            f"- takeScreenshot: after_{safe}\n"
+            + (f"{tc_block}\n" if tc_block else "")
+            + "# TODO: 補上 assertVisible 或其他預期結果（成功 / 導頁 / modal 等）\n"
+        )
+
+    def _render_form_flow(
+        self, description: str, app_id: str, module: dict, business_context: str | None,
+    ) -> str:
+        sel = module.get("selectors") or {}
+        fields = sel.get("fields") or []
+        tcs = (module.get("candidate_tcs") or [])[:3]
+        name = module.get("name") or "form"
+        safe = re.sub(r"[^\w]+", "_", name.lower()).strip("_") or "form"
+        header = self._flow_header(
+            description, app_id, business_context,
+            f"Auto-generated from analyze_screen module: {name} (kind=form)",
+        )
+        fill_lines: list[str] = []
+        for f in fields[:8]:
+            field_label = (f.get("label") or f.get("hint") or "field").strip()
+            rid = f.get("resource_id")
+            value = self._sample_input_value(field_label)
+            fill_lines.append(self._tap_block(field_label, rid))
+            fill_lines.append(f"- inputText: {value!r}")
+        fills = "\n".join(fill_lines) if fill_lines else "# No fillable fields detected"
+        tc_block = "\n".join(f"# TC: {tc}" for tc in tcs)
+        return (
+            f"{header}\n"
+            "- launchApp:\n"
+            "    clearState: false\n"
+            "- waitForAnimationToEnd:\n"
+            "    timeout: 5000\n"
+            f"{fills}\n"
+            f"- takeScreenshot: filled_{safe}\n"
+            + (f"{tc_block}\n" if tc_block else "")
+            + "# TODO: 補上送出按鈕（tapOn: \"送出\" 之類）+ 預期成功 / 錯誤訊息驗證\n"
+        )
+
+    def _render_tab_bar_flow(
+        self, description: str, app_id: str, module: dict, business_context: str | None,
+    ) -> str:
+        tabs = module.get("tabs") or []
+        tcs = (module.get("candidate_tcs") or [])[:3]
+        name = module.get("name") or "tabs"
+        header = self._flow_header(
+            description, app_id, business_context,
+            f"Auto-generated from analyze_screen module: {name} (kind=tab_bar)",
+        )
+        tap_lines: list[str] = []
+        for t in tabs[:5]:
+            label = (t.get("label") or "").strip()
+            if not label:
+                continue
+            safe = re.sub(r"[^\w]+", "_", label.lower()).strip("_") or "tab"
+            tap_lines.append(f"- tapOn: {label!r}")
+            tap_lines.append("- waitForAnimationToEnd:\n    timeout: 3000")
+            tap_lines.append(f"- takeScreenshot: tab_{safe}")
+        taps = "\n".join(tap_lines) if tap_lines else "# No tabs detected"
+        tc_block = "\n".join(f"# TC: {tc}" for tc in tcs)
+        return (
+            f"{header}\n"
+            "- launchApp:\n"
+            "    clearState: false\n"
+            "- waitForAnimationToEnd:\n"
+            "    timeout: 5000\n"
+            f"{taps}\n"
+            + (f"{tc_block}\n" if tc_block else "")
+            + "# TODO: 切換每個 tab 後 assertVisible 對應頁面的代表元素\n"
+        )
+
+    def _render_generic_module_flow(
+        self, description: str, app_id: str, module: dict, business_context: str | None,
+    ) -> str:
+        name = module.get("name") or "screen"
+        kind = module.get("kind") or "unknown"
+        tcs = (module.get("candidate_tcs") or [])[:3]
+        safe = re.sub(r"[^\w]+", "_", name.lower()).strip("_") or "screen"
+        header = self._flow_header(
+            description, app_id, business_context,
+            f"Auto-generated from analyze_screen module: {name} (kind={kind})",
+        )
+        tc_block = "\n".join(f"# TC: {tc}" for tc in tcs)
+        return (
+            f"{header}\n"
+            "- launchApp:\n"
+            "    clearState: false\n"
+            "- waitForAnimationToEnd:\n"
+            "    timeout: 5000\n"
+            f"- takeScreenshot: {safe}\n"
+            + (f"{tc_block}\n" if tc_block else "")
+            + "# TODO: 補上實際互動與斷言\n"
+        )
+
+    def _render_basic_flow(
+        self, description: str, app_id: str, business_context: str | None,
+    ) -> str:
+        header = self._flow_header(description, app_id, business_context)
+        return (
+            f"{header}\n"
+            "- launchApp\n"
+            "# TODO: 由 Claude 補完實作\n"
+            '- assertVisible: "Welcome"\n'
+        )
 
     def codegen(self, url: str, output: str = "recorded_flow.yaml") -> str:
         """Maestro Studio records a flow interactively; this is a hint, not a wrapper."""
