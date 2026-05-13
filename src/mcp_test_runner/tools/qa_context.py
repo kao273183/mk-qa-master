@@ -214,6 +214,40 @@ _UNIVERSAL_METHODOLOGY = """## ISTQB 七大測試原則
 - [ ] 連線中斷後資料恢復
 - [ ] 解除安裝後無殘留檔案
 
+## RWD 響應式測試（Web）
+### 標準 breakpoints（常用、依專案 design system 調整）
+| 區段 | 寬度 (px) | 代表裝置 |
+|------|----------|---------|
+| Mobile XS | 320–374 | iPhone SE 1st gen / 早期 Android |
+| Mobile | 375–413 | iPhone SE 3rd / iPhone 13–16 mini |
+| Mobile L | 414–767 | iPhone Pro Max / Plus 系列 |
+| Tablet | 768–1023 | iPad 直向 |
+| Tablet L | 1024–1279 | iPad 橫向 / iPad Pro |
+| Desktop | 1280–1919 | 標準 laptop / 外接螢幕 |
+| Desktop XL | ≥ 1920 | 大型外接螢幕 / 4K |
+
+### 必測軸
+- **排版不破**：text 不溢出 / 不截斷 / layout 不重疊
+- **互動切換**：mobile 用 hamburger + tap；desktop 用 hover + mouse；過渡區（tablet）兩者皆要可用
+- **觸控目標**：mobile 點擊區 ≥ 44×44pt（WCAG 2.5.5 / Apple HIG）
+- **媒體切換**：`<picture srcset>` / `image-set()` 在不同 DPR 載對解析度
+- **字體可讀**：base font-size ≥ 14px；行高 1.4–1.6；尺寸用 rem/em（隨用戶縮放）
+- **鍵盤導航**：tab order 不因 RWD 重排而錯亂
+
+### 常見 RWD bug 模式（每條都該寫 TC）
+- **px 寫死**：用戶字體放大或縮放時 layout 爆掉
+- **Hover only 互動**：mobile 無 hover、卡在 hover 後狀態不會觸發
+- **隱藏不卸載**：`display:none` 但 DOM 還在 → selector 抓到不可見元素誤判
+- **viewport meta 缺失**：手機看像縮小桌面版、不會 reflow
+- **過渡區未測試**：768–1023 排版錯位（mobile / desktop 都正常、tablet 破）
+- **Image 不 lazy / srcset 缺失**：mobile 下載桌面大圖、流量爆 + 載入慢
+
+### 測試策略
+- **E2E**：核心流程選 3 個代表 viewport（mobile 375 / tablet 768 / desktop 1280）各跑一次
+- **視覺回歸**：用 visual diff 工具（Percy / Chromatic）跨 viewport 比對
+- **邊界值思維**：breakpoint ± 1px（如 767 vs 768）應一致或明確切換，不能曖昧
+- **真機優先**：CSS emulator ≠ 真實 mobile（iOS Safari bottom bar / 安卓 IME 高度 / 動態島）
+
 ## 測試類型總覽
 | 類型 | 定義 | 自動化 | 頻率 |
 |------|------|--------|------|
