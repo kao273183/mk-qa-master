@@ -495,7 +495,7 @@ def analyze_screen(
 # iOS/Android hierarchies surface asset names (bg_*, ic_*, *_filled) and
 # placeholder text (--, single ASCII chars) as accessibility labels. These
 # rarely correspond to user-intended interactions and just dilute the
-# candidate list. Patterns below were tuned against the union-ios home
+# candidate list. Patterns below were tuned against a real mobile home
 # screen where the raw output mixed real buttons with asset identifiers.
 _NOISE_PREFIX_RE = re.compile(r"^(bg_|ic_|icon_|img_|image_)")
 _NOISE_SUFFIX_RE = re.compile(r"(_filled|_outline|_image|_logo|_brand_logo|_active|_inactive)$")

@@ -198,7 +198,7 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "app_id": {
                         "type": "string",
-                        "description": "選填，bundle id / package name（如 com.unipcsc.uniopen）",
+                        "description": "選填，bundle id / package name（如 com.example.app）",
                     },
                     "launch_app": {
                         "type": "boolean",
