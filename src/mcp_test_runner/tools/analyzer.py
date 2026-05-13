@@ -491,6 +491,40 @@ def analyze_screen(
     }
 
 
+# Heuristics for filtering noise from analyze_screen output. Real-world
+# iOS/Android hierarchies surface asset names (bg_*, ic_*, *_filled) and
+# placeholder text (--, single ASCII chars) as accessibility labels. These
+# rarely correspond to user-intended interactions and just dilute the
+# candidate list. Patterns below were tuned against the union-ios home
+# screen where the raw output mixed real buttons with asset identifiers.
+_NOISE_PREFIX_RE = re.compile(r"^(bg_|ic_|icon_|img_|image_)")
+_NOISE_SUFFIX_RE = re.compile(r"(_filled|_outline|_image|_logo|_brand_logo|_active|_inactive)$")
+_NOISE_PUNCT_RE = re.compile(r"^[-_.,\s　]+$")
+_NOISE_NUM_ONLY_RE = re.compile(r"^[\d.,\-\+%元$]+$")
+
+
+def _is_noise_text(text: str) -> bool:
+    """Return True for labels that look like asset names / placeholders
+    rather than user-facing CTA copy."""
+    t = (text or "").strip()
+    if not t:
+        return True
+    # Single ASCII character (e.g. "x", "+") is almost never a real button
+    # in a CJK app; single Chinese characters can be (e.g. 「我」) so we
+    # only filter single-char when ASCII.
+    if len(t) == 1 and t.isascii():
+        return True
+    if _NOISE_PUNCT_RE.match(t):
+        return True
+    if _NOISE_NUM_ONLY_RE.match(t):
+        return True
+    if _NOISE_PREFIX_RE.search(t):
+        return True
+    if _NOISE_SUFFIX_RE.search(t):
+        return True
+    return False
+
+
 def _walk_screen(node: dict, out: list, depth: int) -> None:
     """Flatten the Maestro hierarchy tree into a list of attribute dicts.
 
@@ -573,8 +607,10 @@ def _build_screen_modules(nodes: list[dict]) -> tuple[list[dict], dict]:
         # to CTA candidates — SwiftUI / RN buttons often appear with enabled=false
         # at the leaf level even though they're tappable. Threshold of 24x24 px
         # filters decorative micro-labels but keeps real buttons.
+        # Noise filter drops asset-name labels (bg_*, *_filled) and placeholder
+        # text ("--", single ASCII chars, pure digits/currency).
         label = n["text"] or n["accessibility_text"]
-        if label:
+        if label and not _is_noise_text(label):
             if n["enabled"]:
                 ctas.append({**n, "_bounds": bounds})
                 continue
