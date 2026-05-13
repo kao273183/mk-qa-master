@@ -186,6 +186,30 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="analyze_screen",
+            description=(
+                "Mobile 版的 analyze_url：dump 當前 iOS Simulator / Android Emulator / 真機"
+                "前景 app 的 screen hierarchy（透過 `maestro hierarchy`）並轉成可測 modules"
+                "（inputs / CTAs / tab bar）+ candidate TCs。需 Maestro CLI 已裝、且裝置 booted、app 在前景。"
+                "若提供 app_id + launch_app=true 會先啟動該 app。"
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "app_id": {
+                        "type": "string",
+                        "description": "選填，bundle id / package name（如 com.unipcsc.uniopen）",
+                    },
+                    "launch_app": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "搭配 app_id 使用：true 時 dump 前先 launchApp",
+                    },
+                    "timeout_ms": {"type": "integer", "default": 30000},
+                },
+            },
+        ),
+        Tool(
             name="init_qa_knowledge",
             description=(
                 "在受測專案根 (PROJECT_ROOT) 建立 qa-knowledge.md 起手範本，"
@@ -400,6 +424,23 @@ async def _dispatch(name: str, args: dict) -> list[TextContent]:
         )
         if isinstance(result, dict) and "error" not in result:
             telemetry.log_discovered_modules(args["url"], result.get("modules", []))
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    if name == "analyze_screen":
+        # Sync subprocess call — wrapped in to_thread so it doesn't block the
+        # MCP server's asyncio loop while maestro CLI runs.
+        result = await asyncio.to_thread(
+            analyzer.analyze_screen,
+            args.get("app_id"),
+            args.get("launch_app", False),
+            args.get("timeout_ms", 30000),
+        )
+        # Telemetry: log discovered modules with the app_id as the "url"
+        # so the optimizer's coverage-gap analysis covers mobile screens too.
+        if isinstance(result, dict) and "error" not in result:
+            telemetry.log_discovered_modules(
+                args.get("app_id") or "screen", result.get("modules", []),
+            )
         return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
 
     if name == "auto_generate_tests":

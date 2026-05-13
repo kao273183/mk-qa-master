@@ -1,11 +1,17 @@
 """URL → testable modules + candidate TCs.
 
-Heuristic analyzer: opens a URL with Playwright, probes the DOM for forms,
-nav, dialogs, labeled sections, and CTA buttons, and emits a structured JSON
-that the MCP client (AI editor) consumes to synthesize actual tests via
-`generate_test`. Runner-agnostic and side-effect-free on the target site.
+Heuristic analyzer with two entry points:
+  - analyze_url(): opens a URL with Playwright, probes the DOM (web)
+  - analyze_screen(): dumps current screen via `maestro hierarchy` (mobile)
+
+Both emit the same shape — modules + candidate TCs — so the MCP client
+(AI editor) consumes them uniformly to drive `generate_test`. Runner-
+agnostic and side-effect-free on the target.
 """
+import json as _json
 import re
+import shutil
+import subprocess
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
@@ -378,3 +384,301 @@ def _build_modules(structure: dict) -> list[dict]:
         })
 
     return modules
+
+
+# ---- analyze_screen (mobile) ----------------------------------------------
+
+def analyze_screen(
+    app_id: str | None = None,
+    launch_app: bool = False,
+    timeout_ms: int = 30000,
+) -> dict[str, Any]:
+    """Mobile equivalent of analyze_url. Captures current screen via
+    `maestro hierarchy` and surfaces interactive elements as modules.
+
+    Requires:
+      - Maestro CLI installed (https://maestro.mobile.dev)
+      - A simulator / emulator / device booted with the target app foregrounded
+
+    Args:
+      app_id: Optional. When `launch_app=True`, launches this bundle id first.
+      launch_app: When True + app_id given, runs `launchApp` before hierarchy.
+      timeout_ms: Subprocess timeout for the hierarchy dump.
+
+    Returns same shape as analyze_url (`modules` + `candidate_tcs` per module),
+    plus a `screen_summary` describing what was found.
+    """
+    if not shutil.which("maestro"):
+        return {
+            "error": "maestro CLI 找不到。安裝：curl -fsSL https://get.maestro.mobile.dev | bash",
+        }
+
+    # Optional: launch the app first so hierarchy reflects its starting screen.
+    # We write the launch flow to a temp file because `maestro test -` (stdin)
+    # behaved inconsistently across versions; temp-file is the well-trodden
+    # path.
+    if app_id and launch_app:
+        import os as _os
+        import tempfile
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, encoding="utf-8",
+        )
+        try:
+            tmp.write(
+                f"appId: {app_id}\n"
+                "---\n"
+                "- launchApp:\n"
+                "    clearState: false\n"
+                "- waitForAnimationToEnd:\n"
+                "    timeout: 5000\n"
+            )
+            tmp.close()
+            subprocess.run(
+                ["maestro", "test", tmp.name],
+                capture_output=True,
+                text=True,
+                timeout=timeout_ms / 1000 + 10,
+            )
+        except subprocess.TimeoutExpired:
+            return {"error": "launch app 逾時"}
+        except OSError as e:
+            return {"error": f"無法啟動 app：{type(e).__name__}: {e}"}
+        finally:
+            try:
+                _os.unlink(tmp.name)
+            except OSError:
+                pass
+
+    # Pull current screen hierarchy.
+    try:
+        result = subprocess.run(
+            ["maestro", "hierarchy"],
+            capture_output=True,
+            text=True,
+            timeout=timeout_ms / 1000,
+        )
+    except subprocess.TimeoutExpired:
+        return {"error": "maestro hierarchy 逾時 — simulator 沒回應或無 booted device"}
+    except OSError as e:
+        return {"error": f"執行 maestro 失敗：{type(e).__name__}: {e}"}
+
+    if result.returncode != 0:
+        return {
+            "error": "maestro hierarchy 失敗",
+            "stderr_tail": (result.stderr or "")[-500:],
+        }
+
+    # Strip preamble lines ("None:" / device label) — JSON starts at the first `{`.
+    raw = result.stdout
+    brace = raw.find("{")
+    if brace < 0:
+        return {"error": "hierarchy 輸出無 JSON 主體", "stdout_tail": raw[-500:]}
+    try:
+        tree = _json.loads(raw[brace:])
+    except _json.JSONDecodeError as e:
+        return {"error": f"JSON 解析失敗：{e}", "stdout_tail": raw[brace:brace + 500]}
+
+    nodes = []
+    _walk_screen(tree, nodes, depth=0)
+    modules, summary = _build_screen_modules(nodes)
+
+    return {
+        "app_id": app_id,
+        "scanned_at": datetime.now().isoformat(timespec="seconds"),
+        "module_count": len(modules),
+        "modules": modules,
+        "screen_summary": summary,
+    }
+
+
+def _walk_screen(node: dict, out: list, depth: int) -> None:
+    """Flatten the Maestro hierarchy tree into a list of attribute dicts.
+
+    Maestro nests view containers heavily — we keep every node with any
+    interactive signal (text / accessibilityText / hintText / resource-id)
+    plus its bounds for downstream classification.
+    """
+    if not isinstance(node, dict) or depth > 60:
+        return
+    attrs = node.get("attributes") or {}
+    if isinstance(attrs, dict):
+        flat = {
+            "text": (attrs.get("text") or "").strip(),
+            "accessibility_text": (attrs.get("accessibilityText") or "").strip(),
+            "hint_text": (attrs.get("hintText") or "").strip(),
+            "title": (attrs.get("title") or "").strip(),
+            "value": (attrs.get("value") or "").strip(),
+            "resource_id": (attrs.get("resource-id") or "").strip(),
+            "bounds": attrs.get("bounds") or "",
+            "enabled": (attrs.get("enabled") or "false").lower() == "true",
+            "focused": (attrs.get("focused") or "false").lower() == "true",
+            "selected": (attrs.get("selected") or "false").lower() == "true",
+            "checked": (attrs.get("checked") or "false").lower() == "true",
+            "depth": depth,
+        }
+        # Keep nodes with at least one identifying signal, plus an enabled flag.
+        if any([flat["text"], flat["accessibility_text"], flat["hint_text"],
+                flat["title"], flat["resource_id"]]):
+            out.append(flat)
+    for child in node.get("children") or []:
+        _walk_screen(child, out, depth + 1)
+
+
+def _parse_bounds(b: str) -> tuple[int, int, int, int] | None:
+    """`[x1,y1][x2,y2]` → (x, y, w, h) in screen pixels. None if unparseable."""
+    m = re.match(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]", b or "")
+    if not m:
+        return None
+    x1, y1, x2, y2 = map(int, m.groups())
+    return x1, y1, max(0, x2 - x1), max(0, y2 - y1)
+
+
+def _node_label(n: dict) -> str:
+    """Human-readable label — first non-empty among text / a11yText / title / hint."""
+    for k in ("text", "accessibility_text", "title", "hint_text"):
+        if n.get(k):
+            return n[k]
+    return ""
+
+
+def _build_screen_modules(nodes: list[dict]) -> tuple[list[dict], dict]:
+    """Classify flattened nodes into modules + a screen-level summary.
+
+    iOS Maestro hierarchy doesn't expose XCUIElement classes; we lean on
+    field semantics: hintText → input, text+enabled → CTA candidate,
+    selected toggling at low y → likely tab/segmented control. Bounded
+    output (top N) to keep payload tractable.
+    """
+    inputs: list[dict] = []
+    ctas: list[dict] = []
+    selected_nodes: list[dict] = []
+    label_only: list[dict] = []
+
+    for n in nodes:
+        bounds = _parse_bounds(n["bounds"])
+        # Skip invisible / zero-area + iOS status bar (y < 50 covers signal /
+        # battery / time / wifi indicators that aren't part of the app's UI).
+        if bounds and (bounds[2] == 0 or bounds[3] == 0):
+            continue
+        if bounds and bounds[1] < 50:
+            continue
+
+        # Inputs: hint text reliably means a TextField/EditText.
+        if n["hint_text"] or (n["focused"] and not n["text"]):
+            inputs.append({**n, "_bounds": bounds})
+            continue
+
+        # CTAs: text + enabled is the obvious case (UIControl-style).
+        # ALSO promote leaf-ish nodes with meaningful text + reasonable bounds
+        # to CTA candidates — SwiftUI / RN buttons often appear with enabled=false
+        # at the leaf level even though they're tappable. Threshold of 24x24 px
+        # filters decorative micro-labels but keeps real buttons.
+        label = n["text"] or n["accessibility_text"]
+        if label:
+            if n["enabled"]:
+                ctas.append({**n, "_bounds": bounds})
+                continue
+            if bounds and bounds[2] >= 24 and bounds[3] >= 24:
+                ctas.append({**n, "_bounds": bounds, "_inferred": True})
+                continue
+
+        if n["selected"] and label:
+            selected_nodes.append({**n, "_bounds": bounds})
+        elif label:
+            label_only.append({**n, "_bounds": bounds})
+
+    # Dedup CTAs by label (keep first; iOS often nests duplicates per layer).
+    seen = set()
+    unique_ctas = []
+    for c in ctas:
+        key = _node_label(c)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_ctas.append(c)
+
+    modules: list[dict] = []
+
+    if inputs:
+        fields = [
+            {
+                "label": _node_label(f) or f.get("hint_text") or "(unnamed input)",
+                "hint": f.get("hint_text"),
+                "resource_id": f.get("resource_id") or None,
+            }
+            for f in inputs[:10]
+        ]
+        modules.append({
+            "kind": "form",
+            "name": "screen_inputs",
+            "selectors": {"fields": fields},
+            "candidate_tcs": [
+                "所有必填欄位為空時送出，應顯示必填錯誤",
+                "輸入超長字串應安全處理（截斷或拒絕）",
+                "Email / 數字等格式欄位輸入錯誤格式應提示",
+                "鍵盤遮蔽輸入框時應 scroll 至可見",
+            ],
+        })
+
+    for cta in unique_ctas[:15]:
+        label = _node_label(cta)
+        modules.append({
+            "kind": "cta",
+            "name": _slug(label, "cta"),
+            "selectors": {
+                "text": label,
+                "resource_id": cta.get("resource_id") or None,
+            },
+            "metadata": {
+                "label_text": label,
+                "enabled": cta.get("enabled"),
+                "bounds": cta.get("_bounds"),
+            },
+            "candidate_tcs": [
+                f"點擊「{label}」應觸發對應動作（導頁／open modal／API call）",
+                f"「{label}」在 loading 狀態下應禁用以避免重複觸發",
+            ],
+        })
+
+    # Tab bar / segmented control inference: ≥ 2 selected-capable items at
+    # similar y position near top or bottom of screen.
+    if len(selected_nodes) >= 2:
+        ys = sorted({n["_bounds"][1] for n in selected_nodes if n["_bounds"]})
+        if ys:
+            # cluster: nodes within 30px of each other → same row
+            groups: list[list[dict]] = []
+            for n in selected_nodes:
+                placed = False
+                if not n["_bounds"]:
+                    continue
+                for g in groups:
+                    if any(abs(n["_bounds"][1] - m["_bounds"][1]) <= 30 for m in g):
+                        g.append(n)
+                        placed = True
+                        break
+                if not placed:
+                    groups.append([n])
+            for g in groups:
+                if len(g) >= 2:
+                    labels = [_node_label(m) for m in g if _node_label(m)]
+                    if not labels:
+                        continue
+                    modules.append({
+                        "kind": "tab_bar",
+                        "name": "tab_bar",
+                        "tabs": [{"label": l} for l in labels],
+                        "candidate_tcs": [
+                            f"切換每個 tab（共 {len(labels)} 個）應顯示對應內容",
+                            "tab 選中狀態視覺應正確（高亮 / icon 變色）",
+                            "切換 tab 後再切回原 tab 狀態應保留（如 scroll 位置）",
+                        ],
+                    })
+
+    summary = {
+        "input_count": len(inputs),
+        "interactive_count": len(unique_ctas),
+        "selected_count": len(selected_nodes),
+        "label_only_count": len(label_only),
+        "total_meaningful_nodes": len(inputs) + len(unique_ctas) + len(selected_nodes) + len(label_only),
+    }
+    return modules, summary
