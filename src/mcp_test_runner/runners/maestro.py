@@ -28,6 +28,7 @@ What's intentionally out of scope for v0:
     structured step lists
 """
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -74,10 +75,20 @@ class MaestroRunner(TestRunner):
         cmd = self._base_cmd() + [str(f) for f in flows]
         result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
         self._junit_to_report_json()
+        retried = self._retry_failures_if_any()
         self._archive_report()
+        # Adjust exit_code: maestro returned 1 because some flows failed on
+        # the first attempt; after retry they may have passed. Source of
+        # truth is the patched report.json.
+        post_summary = self.get_report_summary()
+        post_failed = (post_summary.get("failed") or 0) if isinstance(post_summary, dict) else 0
+        adjusted_exit = 0 if post_failed == 0 else 1
         return {
-            "exit_code": result.returncode,
+            "exit_code": adjusted_exit,
+            "raw_exit_code": result.returncode,
             "flows_run": len(flows),
+            "retry_enabled": self._retry_enabled(),
+            "flaky_in_run": retried,
             "stdout_tail": result.stdout[-2000:],
             "stderr_tail": result.stderr[-1000:],
         }
@@ -107,10 +118,17 @@ class MaestroRunner(TestRunner):
         cmd = self._base_cmd() + [str(p) for p in failed_files]
         result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
         self._junit_to_report_json()
+        retried = self._retry_failures_if_any()
         self._archive_report()
+        post_summary = self.get_report_summary()
+        post_failed = (post_summary.get("failed") or 0) if isinstance(post_summary, dict) else 0
+        adjusted_exit = 0 if post_failed == 0 else 1
         return {
-            "exit_code": result.returncode,
+            "exit_code": adjusted_exit,
+            "raw_exit_code": result.returncode,
             "flows_rerun": len(failed_files),
+            "retry_enabled": self._retry_enabled(),
+            "flaky_in_run": retried,
             "stdout_tail": result.stdout[-2000:],
         }
 
@@ -127,6 +145,11 @@ class MaestroRunner(TestRunner):
             "passed": s.get("passed", 0),
             "failed": s.get("failed", 0),
             "skipped": s.get("skipped", 0),
+            # Auto-retry: number of flows that initially failed but passed
+            # on the second attempt (Maestro has no native --reruns; we add
+            # this via _retry_failures_if_any). HTML reporter shows a FLAKY
+            # badge when > 0.
+            "flaky_in_run": s.get("flaky_in_run", 0) or 0,
             "duration": data.get("duration"),
         }
 
@@ -522,6 +545,114 @@ class MaestroRunner(TestRunner):
             "tests": tests,
         }
         REPORT_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def _retry_enabled(self) -> bool:
+        """Auto-retry is on by default; opt out via MAESTRO_RETRY=false.
+
+        Mirrors pytest_playwright's behavior (which auto-enables when
+        pytest-rerunfailures is installed) but applies to all Maestro
+        runs since Maestro itself has no rerun flag.
+        """
+        return os.getenv("MAESTRO_RETRY", "true").lower() not in ("false", "0", "no")
+
+    def _retry_failures_if_any(self) -> int:
+        """Re-run any flow that failed on the first attempt; patch report.json.
+
+        Maestro lacks `--reruns`. We translate JUnit → report.json on the
+        first pass, then if any tests failed AND retry is enabled, we
+        re-invoke `maestro test` on just those flow files, parse the
+        retry JUnit, and patch report.json so pass-on-retry entries flip
+        outcome from failed → passed and increment summary.flaky_in_run.
+
+        Returns the number of flows that flipped (== flaky-in-run count).
+        Bails out silently on any error so a retry mishap can't block
+        the main run from reporting.
+        """
+        if not self._retry_enabled():
+            return 0
+        if not REPORT_PATH.exists():
+            return 0
+        try:
+            data = json.loads(REPORT_PATH.read_text())
+        except (OSError, json.JSONDecodeError):
+            return 0
+        failed = [t for t in (data.get("tests") or []) if t.get("outcome") == "failed"]
+        if not failed:
+            return 0
+
+        retry_flows: list[Path] = []
+        for t in failed:
+            nodeid = t.get("nodeid") or ""
+            p = self._flow_path_for(nodeid)
+            if p and p not in retry_flows:
+                retry_flows.append(p)
+        if not retry_flows:
+            return 0
+
+        # Write retry JUnit to a separate path so we don't trash the original.
+        retry_junit = ARTIFACTS_DIR / "junit-retry.xml"
+        try:
+            ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return 0
+        cmd = [
+            "maestro", "test",
+            "--format", "junit",
+            "--output", str(retry_junit),
+            "--debug-output", str(ARTIFACTS_DIR),
+        ] + [str(p) for p in retry_flows]
+        try:
+            subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
+        except OSError:
+            return 0
+        if not retry_junit.is_file():
+            return 0
+
+        try:
+            root = ET.parse(retry_junit).getroot()
+        except (OSError, ET.ParseError):
+            return 0
+
+        # Build {nodeid: outcome} for the retry attempt.
+        retry_outcomes: dict[str, str] = {}
+        for tc in root.iter("testcase"):
+            name = tc.get("name") or ""
+            classname = tc.get("classname") or ""
+            nid = f"{classname}::{name}" if classname else name
+            if tc.find("failure") is not None or tc.find("error") is not None:
+                retry_outcomes[nid] = "failed"
+            else:
+                retry_outcomes[nid] = "passed"
+
+        # Patch the main report.json in place.
+        flipped = 0
+        for t in (data.get("tests") or []):
+            if t.get("outcome") != "failed":
+                continue
+            nid = t.get("nodeid")
+            if not nid or retry_outcomes.get(nid) != "passed":
+                continue
+            t["outcome"] = "passed"
+            t["was_flaky_in_run"] = True
+            # Clear the failure message so the HTML reporter doesn't keep
+            # showing it as a failed-card; keep it on a debug field.
+            t["original_failure_message"] = t.get("message", "")
+            t["message"] = ""
+            (t.setdefault("call", {}))["longrepr"] = ""
+            flipped += 1
+
+        if flipped:
+            s = data.setdefault("summary", {})
+            s["failed"] = sum(1 for t in (data.get("tests") or []) if t.get("outcome") == "failed")
+            s["passed"] = sum(1 for t in (data.get("tests") or []) if t.get("outcome") == "passed")
+            s["flaky_in_run"] = (s.get("flaky_in_run") or 0) + flipped
+            try:
+                REPORT_PATH.write_text(
+                    json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8",
+                )
+            except OSError:
+                return 0
+        return flipped
 
     def _archive_report(self) -> None:
         """Snapshot report.json + ask optimizer to refresh the plan.
