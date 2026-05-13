@@ -247,9 +247,9 @@ optimizer 三層（測試品質 / MCP 使用 / AI 產測效益）讓「下一步
 
 同一個 shape、換 runner。前提：Maestro CLI 已裝、simulator/emulator booted、App 已開（或傳 `launch_app=true` + `app_id` 自動啟動）：
 
-> **你**：分析 union-ios 首頁的條碼按鈕、寫對應測試
+> **你**：分析 你的 App 首頁的條碼按鈕、寫對應測試
 >
-> **Claude**：[`analyze_screen`(app_id="com.unipcsc.uniopen", launch_app=true)]
+> **Claude**：[`analyze_screen`(app_id="com.example.app", launch_app=true)]
 > 找到 15 個可互動元素，其中 `barcode_button`（text="條碼"、resource_id="barcodeButton"）+ 候選 TC。
 > [`generate_test` 帶該 cta module] 寫了 `maestro-flows/test_barcode.yaml`：
 > `tapOn: { id: barcodeButton }` + waitForAnimationToEnd + takeScreenshot，可直接 `maestro test`。
@@ -304,7 +304,7 @@ optimizer 三層（測試品質 / MCP 使用 / AI 產測效益）讓「下一步
 
 | 你說 | Claude 做 |
 |---|---|
-| 「分析 union-ios 現在的畫面、寫條碼按鈕的測試」 | `analyze_screen(app_id="com.unipcsc.uniopen", launch_app=true)` → `generate_test(module=<cta>)` |
+| 「分析 你的 App 現在的畫面、寫條碼按鈕的測試」 | `analyze_screen(app_id="com.example.app", launch_app=true)` → `generate_test(module=<cta>)` |
 | 「測這個 app 的登入表單」 | `analyze_screen(launch_app=true)` → 挑 `form` module → `generate_test` |
 | 「Tab bar 全測一遍、每個 tab 一條 flow」 | `analyze_screen` → 拿 `tab_bar` module → `generate_test` |
 | 「用 Maestro Studio 錄一個 flow」 | `codegen(url=...)` 會回提示叫你開 `maestro studio` 互動錄製、另存 |

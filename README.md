@@ -279,9 +279,9 @@ Same shape, different runner. Requires Maestro CLI installed +
 simulator/emulator booted + your app launched (or pass `launch_app=true`
 with `app_id`):
 
-> **You**: 分析 union-ios 首頁的條碼按鈕、寫對應測試
+> **You**: 分析 your mobile app 首頁的條碼按鈕、寫對應測試
 >
-> **Claude**: [`analyze_screen`(app_id="com.unipcsc.uniopen", launch_app=true)]
+> **Claude**: [`analyze_screen`(app_id="com.example.app", launch_app=true)]
 > Found 15 interactive elements; matched `barcode_button`
 > (text="條碼", resource_id="barcodeButton") + candidate TCs.
 > [`generate_test` with the cta module] Wrote `maestro-flows/test_barcode.yaml` —
@@ -345,7 +345,7 @@ Requires `QA_RUNNER=maestro`, Maestro CLI, and a booted simulator/emulator/devic
 
 | You say | Claude calls |
 |---|---|
-| "Analyze the current union-ios screen and write a test for the barcode button." | `analyze_screen(app_id="com.unipcsc.uniopen", launch_app=true)` → `generate_test(module=<cta>)` |
+| "Analyze the current your mobile app screen and write a test for the barcode button." | `analyze_screen(app_id="com.example.app", launch_app=true)` → `generate_test(module=<cta>)` |
 | "Test the login form on this app." | `analyze_screen(launch_app=true)` → pick `form` module → `generate_test` |
 | "Cover the tab bar — write one flow per tab." | `analyze_screen` → take the `tab_bar` module → `generate_test` |
 | "Use Maestro Studio to record a flow." | `codegen(url=...)` returns a hint pointing at `maestro studio` (record + save manually) |
