@@ -239,8 +239,11 @@ _DOM_PROBE_JS = r"""
     .slice(0, 20);
 
   // Layout warnings: visible elements whose content overflows their container.
-  // Threshold of 2px filters sub-pixel rounding noise. Skips invisible
-  // elements + the html/body root (which legitimately scrolls).
+  // Threshold tuning: horizontal >2px is almost always a real break (text
+  // 跑版, hard-px width, etc.). Vertical <=10px is usually line-height /
+  // emoji baseline noise (emoji glyphs sit a few px above CJK x-height) so
+  // we only flag vertical overflow once it exceeds that band. Skips
+  // invisible elements + intentional scrollers (overflow: auto/scroll).
   const layout_warnings = [...document.querySelectorAll('body *')]
     .filter(el => {
       const r = el.getBoundingClientRect();
@@ -249,7 +252,7 @@ _DOM_PROBE_JS = r"""
       if (cs.visibility === 'hidden' || cs.display === 'none' || parseFloat(cs.opacity) === 0) return false;
       const dx = el.scrollWidth - el.clientWidth;
       const dy = el.scrollHeight - el.clientHeight;
-      if (dx <= 2 && dy <= 2) return false;
+      if (dx <= 2 && dy <= 10) return false;
       // Intentional scrollers (overflow: auto / scroll) are not bugs.
       if (cs.overflowX === 'auto' || cs.overflowX === 'scroll') return false;
       if (cs.overflowY === 'auto' || cs.overflowY === 'scroll') return false;
