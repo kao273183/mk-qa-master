@@ -41,6 +41,22 @@ _STEP_KEEP_PATTERN = re.compile(r"^(Frame|Page|Locator|ElementHandle|BrowserCont
 _HAS_RERUNFAILURES = importlib.util.find_spec("pytest_rerunfailures") is not None
 
 
+# Optional layout-integrity check — appended to generated tests as a
+# commented hint. Catches 跑版（text overflow / hard-px width / container
+# escape）at the current viewport. Commented because sites with
+# intentional horizontal scrollers would always fail it; user opts in.
+_OVERFLOW_HINT = (
+    "    # Optional layout sanity (uncomment to catch 跑版: text/element 溢出 container):\n"
+    "    # overflow = page.evaluate(\"\"\"() => [...document.querySelectorAll('body *')]\n"
+    "    #   .filter(e => {\n"
+    "    #     const cs = getComputedStyle(e);\n"
+    "    #     if (['auto','scroll'].includes(cs.overflowX) || ['auto','scroll'].includes(cs.overflowY)) return false;\n"
+    "    #     return e.scrollWidth > e.clientWidth + 2 || e.scrollHeight > e.clientHeight + 2;\n"
+    "    #   }).length\"\"\")\n"
+    "    # expect(overflow).to_equal(0)\n"
+)
+
+
 TEST_TEMPLATE = '''from playwright.sync_api import Page, expect
 
 
@@ -412,6 +428,7 @@ class PytestPlaywrightRunner(TestRunner):
             "    # TODO: 由 Claude 補完實作\n"
             '    page.goto("https://example.com")\n'
             '    expect(page).to_have_title("Example Domain")\n'
+            f"{_OVERFLOW_HINT}"
         )
 
     def _render_form_test(self, description: str, slug: str, url: str | None, module: dict, business_context: str | None = None) -> str:
@@ -456,6 +473,7 @@ class PytestPlaywrightRunner(TestRunner):
             + "    # TODO: 補上實際斷言，例如：\n"
               "    # expect(page).to_have_url(...)\n"
               '    # expect(page.get_by_text("成功")).to_be_visible()\n'
+            + _OVERFLOW_HINT
         )
 
     def _render_generic_module_test(self, description: str, slug: str, url: str | None, module: dict, business_context: str | None = None) -> str:
@@ -477,6 +495,7 @@ class PytestPlaywrightRunner(TestRunner):
             "    expect(target).to_be_visible()\n"
             + (f"{tc_block}\n" if tc_block else "")
             + "    # TODO: 補上實際互動與斷言\n"
+            + _OVERFLOW_HINT
         )
 
     def codegen(self, url: str, output: str = "recorded_test.py") -> str:
