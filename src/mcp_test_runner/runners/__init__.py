@@ -3,6 +3,7 @@ from .pytest_playwright import PytestPlaywrightRunner
 from .jest import JestRunner
 from .cypress import CypressRunner
 from .go_test import GoTestRunner
+from .maestro import MaestroRunner
 from ..config import RUNNER_NAME
 
 REGISTRY: dict[str, type[TestRunner]] = {
@@ -13,6 +14,8 @@ REGISTRY: dict[str, type[TestRunner]] = {
     "cypress": CypressRunner,
     "go": GoTestRunner,
     "go-test": GoTestRunner,
+    "maestro": MaestroRunner,
+    "mobile": MaestroRunner,
 }
 
 

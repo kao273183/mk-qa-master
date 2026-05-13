@@ -11,12 +11,13 @@ MCP client drive your test suite end-to-end: run tests, inspect failures
 after each run — produce a prioritized action plan telling you exactly what
 to fix or write next.
 
-| `QA_RUNNER` | Framework | Language |
-|---|---|---|
-| `pytest` / `pytest-playwright` / `playwright` | pytest + Playwright | Python |
-| `jest` | Jest | JavaScript |
-| `cypress` | Cypress | JavaScript |
-| `go` / `go-test` | `go test` | Go |
+| `QA_RUNNER` | Framework | Language | Target |
+|---|---|---|---|
+| `pytest` / `pytest-playwright` / `playwright` | pytest + Playwright | Python | Web |
+| `jest` | Jest | JavaScript | Web |
+| `cypress` | Cypress | JavaScript | Web |
+| `go` / `go-test` | `go test` | Go | Backend |
+| `maestro` / `mobile` | Maestro | YAML | iOS + Android |
 
 Full design notes: [`framework.md`](framework.md).
 
