@@ -25,15 +25,21 @@ Full design notes: [`framework.md`](framework.md).
 
 ## What's in the box
 
-- **Run tests** across multiple frameworks via a single MCP surface
-- **Failure artifacts**: screenshot (base64-inlined), video, Playwright trace.zip
+- **Run tests** across multiple frameworks (web + mobile) via a single MCP surface
+- **Mobile via Maestro** (since v0.3.0): same MCP tools, iOS Simulator /
+  Android Emulator / real device; YAML flows; cross-platform without rewrites
+- **Failure artifacts**: screenshot (base64-inlined), video, Playwright
+  trace.zip / Maestro recordings
 - **Run history**: every run snapshotted; HTML report shows a sparkline trend
-- **DOM analyzer** (`analyze_url`): opens a page → extracts forms / nav /
-  dialogs / CTAs + the API endpoints it hits → emits candidate TC lists
-- **Smart test generation** (`generate_test`): hand it an analyzer module and
-  it writes a runnable Playwright skeleton with concrete selectors, not stubs
-- **Auto-retry flakes** when `pytest-rerunfailures` is installed; flaky tests
-  are surfaced separately from real failures
+- **DOM / Screen analyzer** — `analyze_url` for web (forms / nav / dialogs /
+  CTAs + the API endpoints the page hits) and `analyze_screen` for mobile
+  (`maestro hierarchy` → form / cta / tab_bar modules)
+- **Smart test generation** (`generate_test`): hand it an analyzer module
+  and it writes a runnable Playwright `.py` or Maestro `.yaml` with concrete
+  selectors, not `# TODO` stubs
+- **Auto-retry flakes** — pytest side via `pytest-rerunfailures`; Maestro
+  side via custom retry wrapper (no native `--reruns`); flaky tests
+  surfaced separately from real failures
 - **Self-improvement coach** (`get_optimization_plan`): post-run analysis
   across three lenses — suite quality, MCP usability, AI generation effectiveness
 - **JUnit XML output** for CI integrations (GitHub Actions / Jenkins / GitLab)
@@ -154,11 +160,14 @@ Shared across all runners (some tools degrade gracefully on non-pytest runners):
 | `run_failed` | Re-run last failures (`pytest --lf`) |
 | `get_test_report` | Summary (pass / fail / skipped / duration / flaky-in-run) |
 | `get_failure_details` | Per-failure message + screenshot / trace / video paths |
-| `generate_test` | Test skeleton; if `module` (from `analyze_url`) is provided, a *runnable* one |
-| `codegen` | Launch Playwright codegen (pytest-playwright only) |
+| `generate_test` | Test skeleton; with `module` from `analyze_url`/`analyze_screen`, a *runnable* one (Playwright `.py` or Maestro `.yaml`) |
+| `auto_generate_tests` | One-shot: analyze URL → generate one test per discovered module |
+| `codegen` | Launch Playwright codegen (web) / hint to `maestro studio` (mobile) |
 | `generate_html_report` | Render the latest run as self-contained HTML |
 | `get_test_history` | Last N archived run summaries (for trend / flake debugging) |
-| `analyze_url` | DOM probe → modules + selectors + candidate TCs + API endpoints |
+| `analyze_url` | **Web**: DOM probe → modules + selectors + candidate TCs + API endpoints + layout overflow warnings |
+| `analyze_screen` | **Mobile**: `maestro hierarchy` → form / cta / tab_bar modules + candidate TCs (noise-filtered) |
+| `init_qa_knowledge` / `get_qa_context` | Scaffold + read the project's QA knowledge layer (methodology + domain) |
 | `get_optimization_plan` | Three-layer self-improvement coach (suite / MCP / AI strategy) |
 
 ### Resources
@@ -264,6 +273,40 @@ In a Claude / Cursor session:
 The three optimizer lenses (suite quality / MCP usability / AI generation
 effectiveness) make every "下一步" answer data-driven, not gut feel.
 
+### Walkthrough — testing a mobile app (Maestro)
+
+Same shape, different runner. Requires Maestro CLI installed +
+simulator/emulator booted + your app launched (or pass `launch_app=true`
+with `app_id`):
+
+> **You**: 分析 union-ios 首頁的條碼按鈕、寫對應測試
+>
+> **Claude**: [`analyze_screen`(app_id="com.unipcsc.uniopen", launch_app=true)]
+> Found 15 interactive elements; matched `barcode_button`
+> (text="條碼", resource_id="barcodeButton") + candidate TCs.
+> [`generate_test` with the cta module] Wrote `maestro-flows/test_barcode.yaml` —
+> `tapOn: { id: barcodeButton }` + waitForAnimationToEnd + takeScreenshot,
+> ready to `maestro test`.
+
+> **You**: 跑
+>
+> **Claude**: [`run_tests`] 5 flows pass, retry didn't fire. Screenshots
+> embedded in HTML report.
+
+> **You**: 上面這個按鈕有時候會 fail、為什麼？
+>
+> **Claude**: [`get_optimization_plan`] `barcode_button::barcode_button` flagged
+> flaky (flake_score=0.4, outcomes=PFPFP, rerun_count=1). Suggestion: 加
+> `waitForAnimationToEnd` 或 `extendedWaitUntil` 等動畫穩定後再 tap。
+
+Mobile-specific notes:
+- The same `qa-knowledge.md` (built-in methodology + your domain) feeds
+  both web and mobile runs — write your business rules once.
+- `analyze_screen` filters out iOS status bar (signal / wifi / battery)
+  and asset-name labels (`bg_*`, `*_filled`); the result is signal-heavy.
+- Maestro's `takeScreenshot: <name>` directive controls which screens
+  show up as inline images in the HTML report.
+
 ---
 
 ## Prompting cookbook
@@ -289,13 +332,23 @@ the underlying MCP tool call it should trigger. Use as a reference for
 | "Which ones failed? Give me screenshots and trace." | `get_failure_details` |
 | "Generate the HTML report." | `generate_html_report` |
 
-### Building tests from a URL
+### Building tests from a URL (web)
 | You say | Claude calls |
 |---|---|
 | "Auto-generate tests for `https://shop.example/`." | `auto_generate_tests(url=...)` — one-shot |
 | "Analyze `https://shop.example/coupon` first, then write one test per module." | `analyze_url` → `generate_test` × N |
 | "Analyze coupon page and write a regression test for our past idempotency bug." | `get_qa_context(section="Bug")` → `analyze_url` → `generate_test(business_context=...)` |
 | "Just record a checkout flow as a baseline." | `codegen(url=...)` |
+
+### Building tests from a mobile screen (Maestro)
+Requires `QA_RUNNER=maestro`, Maestro CLI, and a booted simulator/emulator/device.
+
+| You say | Claude calls |
+|---|---|
+| "Analyze the current union-ios screen and write a test for the barcode button." | `analyze_screen(app_id="com.unipcsc.uniopen", launch_app=true)` → `generate_test(module=<cta>)` |
+| "Test the login form on this app." | `analyze_screen(launch_app=true)` → pick `form` module → `generate_test` |
+| "Cover the tab bar — write one flow per tab." | `analyze_screen` → take the `tab_bar` module → `generate_test` |
+| "Use Maestro Studio to record a flow." | `codegen(url=...)` returns a hint pointing at `maestro studio` (record + save manually) |
 
 ### Continuous improvement
 | You say | Claude calls |

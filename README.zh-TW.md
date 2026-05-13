@@ -20,12 +20,13 @@
 
 ## 功能總覽
 
-- **跨框架執行測試**，單一 MCP 介面對接所有 runner
-- **失敗產物完整**：截圖（base64 內嵌）、影片、Playwright trace.zip
+- **跨框架執行測試**（web + mobile），單一 MCP 介面對接所有 runner
+- **行動端透過 Maestro**（v0.3.0 起）：同樣 MCP tool 集、iOS Simulator / Android Emulator / 真機都通；YAML flow 跨平台共用
+- **失敗產物完整**：截圖（base64 內嵌）、影片、Playwright trace.zip / Maestro recording
 - **執行歷史**：每次 run 自動快照；HTML 報告含 sparkline 趨勢線
-- **DOM 分析器**（`analyze_url`）：開啟頁面 → 抽出 form / nav / dialog / CTA + 該頁載入時打的 API endpoints → 輸出候選 TC 清單
-- **智慧測試生成**（`generate_test`）：餵 analyzer 拆出來的 module，產出**可直接執行**的 Playwright 骨架（不再是 `# TODO` 占位）
-- **自動 retry flaky tests**（裝了 `pytest-rerunfailures` 時啟用）；retry 才 pass 的測試會單獨列為 flaky，不混入真實失敗
+- **DOM / Screen 分析器** — `analyze_url`（web，抓 form / nav / dialog / CTA + 該頁打的 API + 跑版偵測）跟 `analyze_screen`（mobile，透過 `maestro hierarchy` 抓 form / cta / tab_bar）
+- **智慧測試生成**（`generate_test`）：餵 analyzer 拆出來的 module，產出**可直接執行**的 Playwright `.py` 或 Maestro `.yaml`（不再是 `# TODO` 占位）
+- **自動 retry flaky tests** — pytest 端透過 `pytest-rerunfailures`、Maestro 端透過自寫 retry wrapper（Maestro 沒原生 `--reruns`）；retry 才 pass 的測試會單獨列為 flaky
 - **自我強化教練**（`get_optimization_plan`）：每次 run 結束後三層分析 — 測試套件品質、MCP 使用模式、AI 生成效益
 - **JUnit XML 輸出**，CI 直接吃（GitHub Actions / Jenkins / GitLab）
 
@@ -143,11 +144,14 @@ QA_PROJECT_ROOT = "/path/to/your-test-project"
 | `run_failed` | 重跑上次失敗（`pytest --lf`） |
 | `get_test_report` | 摘要（pass / fail / skipped / duration / flaky-in-run） |
 | `get_failure_details` | 失敗詳情 + 對應的 screenshot / trace / video 路徑 |
-| `generate_test` | 產生測試骨架；若提供 `module`（來自 `analyze_url`）則生成「可直接跑」的版本 |
-| `codegen` | 啟動 Playwright codegen（只 pytest-playwright 支援） |
+| `generate_test` | 產生測試骨架；若提供 `module`（來自 `analyze_url`/`analyze_screen`）會產出「可直接跑」的 Playwright `.py` 或 Maestro `.yaml` |
+| `auto_generate_tests` | 一鍵：analyze URL → 對每個 module 各產一條 test |
+| `codegen` | 啟動 Playwright codegen（web）/ 指引 `maestro studio`（mobile） |
 | `generate_html_report` | 把最近一次測試結果渲染成自包含 HTML |
 | `get_test_history` | 最近 N 次 run 摘要（看 flake 與趨勢） |
-| `analyze_url` | DOM 探測 → modules + selectors + candidate TCs + API endpoints |
+| `analyze_url` | **Web**: DOM 探測 → modules + selectors + candidate TCs + API endpoints + 跑版偵測 |
+| `analyze_screen` | **Mobile**: `maestro hierarchy` → form / cta / tab_bar modules + candidate TCs（噪音過濾過） |
+| `init_qa_knowledge` / `get_qa_context` | 建立 + 讀取專案 QA 知識（內建方法論 + 你的領域） |
 | `get_optimization_plan` | 三層自我強化教練（測試品質 / MCP 使用 / AI 策略） |
 
 ### Resources
@@ -239,6 +243,30 @@ flowchart LR
 
 optimizer 三層（測試品質 / MCP 使用 / AI 產測效益）讓「下一步」永遠有資料佐證，不是憑感覺。
 
+### Walkthrough — 測試手機 App（Maestro）
+
+同一個 shape、換 runner。前提：Maestro CLI 已裝、simulator/emulator booted、App 已開（或傳 `launch_app=true` + `app_id` 自動啟動）：
+
+> **你**：分析 union-ios 首頁的條碼按鈕、寫對應測試
+>
+> **Claude**：[`analyze_screen`(app_id="com.unipcsc.uniopen", launch_app=true)]
+> 找到 15 個可互動元素，其中 `barcode_button`（text="條碼"、resource_id="barcodeButton"）+ 候選 TC。
+> [`generate_test` 帶該 cta module] 寫了 `maestro-flows/test_barcode.yaml`：
+> `tapOn: { id: barcodeButton }` + waitForAnimationToEnd + takeScreenshot，可直接 `maestro test`。
+
+> **你**：跑
+>
+> **Claude**：[`run_tests`] 5 個 flow 全 pass、retry 沒觸發。HTML 報告已含截圖。
+
+> **你**：剛剛這個按鈕有時候會 fail、為什麼？
+>
+> **Claude**：[`get_optimization_plan`] `barcode_button::barcode_button` 標 flaky（flake_score=0.4、outcomes=PFPFP、rerun_count=1）。建議加 `waitForAnimationToEnd` 或 `extendedWaitUntil` 等動畫穩定後再 tap。
+
+行動端特別注意：
+- 同一份 `qa-knowledge.md`（內建方法論 + 你的領域）web / mobile 共用 — 業務規則只寫一次
+- `analyze_screen` 自動過濾 iOS 狀態列（訊號 / Wi-Fi / 電池）跟 asset 名稱（`bg_*`、`*_filled`）
+- Maestro 的 `takeScreenshot: <name>` 指令控制哪些畫面會嵌進 HTML 報告
+
 ---
 
 ## 怎麼對 Claude 下指令（Prompting cookbook）
@@ -263,13 +291,23 @@ optimizer 三層（測試品質 / MCP 使用 / AI 產測效益）讓「下一步
 | 「哪幾個失敗了、給我截圖跟 trace」 | `get_failure_details` |
 | 「產一份 HTML 報告」 | `generate_html_report` |
 
-### 從零測一個 URL（最有戲的玩法）
+### 從零測一個 URL（web）
 | 你說 | Claude 做 |
 |---|---|
 | 「測試 `https://shop.example/` 的所有模塊」 | `auto_generate_tests` 一鍵交付 |
 | 「先分析 `https://shop.example/coupon`、再對每個模塊各寫 1 條測試」 | `analyze_url` → 對每個 module 一次 `generate_test` |
 | 「分析 coupon 頁、**參考歷史 bug** 寫回歸測試」 | `get_qa_context(section="歷史 Bug")` → `analyze_url` → `generate_test(business_context=...)` |
 | 「幫我錄結帳流程當 baseline」 | `codegen(url=...)` 開瀏覽器讓你錄 |
+
+### 從手機 App 畫面寫測試（Maestro）
+需要 `QA_RUNNER=maestro`、Maestro CLI、且 simulator/emulator/真機 booted。
+
+| 你說 | Claude 做 |
+|---|---|
+| 「分析 union-ios 現在的畫面、寫條碼按鈕的測試」 | `analyze_screen(app_id="com.unipcsc.uniopen", launch_app=true)` → `generate_test(module=<cta>)` |
+| 「測這個 app 的登入表單」 | `analyze_screen(launch_app=true)` → 挑 `form` module → `generate_test` |
+| 「Tab bar 全測一遍、每個 tab 一條 flow」 | `analyze_screen` → 拿 `tab_bar` module → `generate_test` |
+| 「用 Maestro Studio 錄一個 flow」 | `codegen(url=...)` 會回提示叫你開 `maestro studio` 互動錄製、另存 |
 
 ### 持續優化（self-improvement loop）
 | 你說 | Claude 做 |
