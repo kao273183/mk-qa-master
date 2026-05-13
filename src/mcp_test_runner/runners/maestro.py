@@ -43,6 +43,8 @@ from ..config import (
     JUNIT_PATH,
     ARTIFACTS_DIR,
     HISTORY_DIR,
+    ANDROID_HOST,
+    connect_android_host,
 )
 
 
@@ -72,6 +74,7 @@ class MaestroRunner(TestRunner):
         flows = self._discover_flows(filter)
         if not flows:
             return {"error": f"no Maestro flows match filter={filter!r}"}
+        android_ok, android_msg = connect_android_host()
         cmd = self._base_cmd() + [str(f) for f in flows]
         result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
         self._junit_to_report_json()
@@ -83,7 +86,7 @@ class MaestroRunner(TestRunner):
         post_summary = self.get_report_summary()
         post_failed = (post_summary.get("failed") or 0) if isinstance(post_summary, dict) else 0
         adjusted_exit = 0 if post_failed == 0 else 1
-        return {
+        out: dict = {
             "exit_code": adjusted_exit,
             "raw_exit_code": result.returncode,
             "flows_run": len(flows),
@@ -92,6 +95,12 @@ class MaestroRunner(TestRunner):
             "stdout_tail": result.stdout[-2000:],
             "stderr_tail": result.stderr[-1000:],
         }
+        if ANDROID_HOST:
+            out["android_host"] = ANDROID_HOST
+            out["android_host_connected"] = android_ok
+            if android_msg:
+                out["android_host_message"] = android_msg
+        return out
 
     def run_failed(self) -> dict:
         if not REPORT_PATH.exists():
@@ -115,6 +124,7 @@ class MaestroRunner(TestRunner):
                     failed_files.append(p)
         if not failed_files:
             return {"info": "no previous failures to re-run"}
+        connect_android_host()
         cmd = self._base_cmd() + [str(p) for p in failed_files]
         result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
         self._junit_to_report_json()
@@ -601,6 +611,9 @@ class MaestroRunner(TestRunner):
             "--output", str(retry_junit),
             "--debug-output", str(ARTIFACTS_DIR),
         ] + [str(p) for p in retry_flows]
+        # Remote-ADB endpoint may have idle-dropped between the initial run
+        # and the retry; reconnect is idempotent so this is cheap.
+        connect_android_host()
         try:
             subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
         except OSError:

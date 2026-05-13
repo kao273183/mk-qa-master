@@ -67,8 +67,9 @@ Two environment variables drive the runtime:
 
 | Variable | Example | What it does |
 |---|---|---|
-| `QA_RUNNER` | `pytest` / `jest` / `cypress` / `go` | Selects which test framework |
+| `QA_RUNNER` | `pytest` / `jest` / `cypress` / `go` / `maestro` | Selects which test framework |
 | `QA_PROJECT_ROOT` | `/path/to/your/project` | Points at the project under test |
+| `QA_ANDROID_HOST` *(optional)* | `127.0.0.1:5555` | Remote-ADB endpoint for **BlueStacks** / Genymotion / Nox / cloud Android. When set, the Maestro runner auto-runs `adb connect <host>` before each test / `analyze_screen` call. Requires `adb` on PATH. |
 
 ### Per-runner snippet
 
@@ -349,6 +350,13 @@ Requires `QA_RUNNER=maestro`, Maestro CLI, and a booted simulator/emulator/devic
 | "Test the login form on this app." | `analyze_screen(launch_app=true)` → pick `form` module → `generate_test` |
 | "Cover the tab bar — write one flow per tab." | `analyze_screen` → take the `tab_bar` module → `generate_test` |
 | "Use Maestro Studio to record a flow." | `codegen(url=...)` returns a hint pointing at `maestro studio` (record + save manually) |
+
+**BlueStacks / remote Android instances**: set `QA_ANDROID_HOST=127.0.0.1:5555`
+(or whatever host:port BlueStacks exposes — see *Settings → Advanced → Android
+Debug Bridge*). The Maestro runner will `adb connect` before each test and
+`analyze_screen`, and bumps the `hierarchy` timeout to 60s to absorb the
+slower TCP-ADB path. Genymotion / Nox / LDPlayer / WSA work the same way;
+any `host:port` that responds to `adb connect` is fine.
 
 ### Continuous improvement
 | You say | Claude calls |
