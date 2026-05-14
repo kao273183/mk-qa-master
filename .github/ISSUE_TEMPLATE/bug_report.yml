@@ -1,0 +1,53 @@
+name: Bug report
+description: Something broken or behaving unexpectedly in mcp-test-runner.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug! / 感謝回報問題！
+        This repo is maintained solo — external PRs are auto-closed. Please describe the issue here and I'll handle the fix.
+
+  - type: input
+    id: runner
+    attributes:
+      label: QA_RUNNER
+      description: Which runner are you using? (pytest / jest / cypress / go / maestro)
+      placeholder: maestro
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS / Python version / Maestro version (if mobile) / client (Claude Desktop, Cursor, Codex CLI, Gemini CLI...)
+      placeholder: "macOS 14.5, Python 3.11, Maestro 1.36, Claude Desktop"
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps. If it involves a specific prompt, paste the exact prompt.
+      placeholder: |
+        1. Set QA_RUNNER=maestro and QA_ANDROID_HOST=127.0.0.1:5555
+        2. Ask Claude to "analyze the home screen"
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / error output
+      render: shell

@@ -478,6 +478,16 @@ screenshots + step lists, and the collapsed Passed section.
 
 ---
 
+## Contributing
+
+This repo is **maintained solo**. Ideas and bug reports are very welcome — please open an [Issue](https://github.com/kao273183/mcp-test-runner/issues/new/choose) or start a [Discussion](https://github.com/kao273183/mcp-test-runner/discussions). I read every one and will implement what fits the project's direction.
+
+**External pull requests are auto-closed.** Not because contributions aren't appreciated, but because keeping the codebase coherent under a single voice matters more here than the throughput a multi-contributor model would bring. If you really want a specific change, an Issue describing the problem gets you further than a PR.
+
+本 repo 由我一人維護。歡迎透過 Issue / Discussion 提想法或回報問題，我會親自評估並實作。**外部 PR 會自動關閉**——不是不歡迎貢獻，而是想保持程式碼風格與走向一致。
+
+---
+
 ## License
 
 MIT © 2026 Jack Kao — see [`LICENSE`](LICENSE)
