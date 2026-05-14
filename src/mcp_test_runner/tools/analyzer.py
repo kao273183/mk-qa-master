@@ -413,6 +413,17 @@ def analyze_screen(
             "error": "maestro CLI 找不到。安裝：curl -fsSL https://get.maestro.mobile.dev | bash",
         }
 
+    # Remote-ADB endpoint (BlueStacks / Genymotion / cloud farm). Best-effort:
+    # surface failure as a hint but still let Maestro try — a local emulator
+    # may also be booted alongside the configured host.
+    from ..config import ANDROID_HOST, connect_android_host
+    android_host_ok, android_host_msg = connect_android_host()
+    # BlueStacks `hierarchy` over TCP-ADB is typically 2–3× slower than a
+    # local emulator. Quietly raise the floor when a remote host is in play
+    # so the default 30s ceiling doesn't false-positive a timeout.
+    if ANDROID_HOST and timeout_ms < 60000:
+        timeout_ms = 60000
+
     # Optional: launch the app first so hierarchy reflects its starting screen.
     # We write the launch flow to a temp file because `maestro test -` (stdin)
     # behaved inconsistently across versions; temp-file is the well-trodden
@@ -458,7 +469,16 @@ def analyze_screen(
             timeout=timeout_ms / 1000,
         )
     except subprocess.TimeoutExpired:
-        return {"error": "maestro hierarchy 逾時 — simulator 沒回應或無 booted device"}
+        hint = ""
+        if ANDROID_HOST:
+            hint = (
+                f" QA_ANDROID_HOST={ANDROID_HOST}（BlueStacks / 遠端 ADB）— "
+                f"adb 連線狀態：{'OK' if android_host_ok else android_host_msg or 'failed'}。"
+                "建議：1) 確認 BlueStacks 已開機且 Android Debug Bridge 已啟用 "
+                "(Settings → Advanced → Android Debug Bridge: ON)；"
+                "2) `adb devices` 應列出該 host；3) 重啟 BlueStacks 後重跑。"
+            )
+        return {"error": f"maestro hierarchy 逾時 — simulator 沒回應或無 booted device。{hint}"}
     except OSError as e:
         return {"error": f"執行 maestro 失敗：{type(e).__name__}: {e}"}
 
@@ -482,13 +502,19 @@ def analyze_screen(
     _walk_screen(tree, nodes, depth=0)
     modules, summary = _build_screen_modules(nodes)
 
-    return {
+    out: dict[str, Any] = {
         "app_id": app_id,
         "scanned_at": datetime.now().isoformat(timespec="seconds"),
         "module_count": len(modules),
         "modules": modules,
         "screen_summary": summary,
     }
+    if ANDROID_HOST:
+        out["android_host"] = ANDROID_HOST
+        out["android_host_connected"] = android_host_ok
+        if android_host_msg:
+            out["android_host_message"] = android_host_msg
+    return out
 
 
 # Heuristics for filtering noise from analyze_screen output. Real-world
