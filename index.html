@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>mcp-test-runner — Let's make QA simple</title>
-<meta name="description" content="An open-source MCP server that lets your AI client run pytest / Jest / Cypress / Go test, write tests from a URL, and coach you on what to fix next.">
+<meta name="description" content="An open-source MCP server that lets your AI client run web (pytest / Jest / Cypress / Go) and mobile (Maestro on iOS + Android, incl. BlueStacks) tests, write the next round from a URL or a live screen, and coach you on what to fix next.">
 <meta name="theme-color" content="#0A0E14">
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="mcp-test-runner">
 <meta property="og:title" content="mcp-test-runner — Let's make QA simple">
-<meta property="og:description" content="An open-source MCP server that lets your AI client run tests, write tests from a URL, and coach you on what to fix next.">
+<meta property="og:description" content="An open-source MCP server that drives web + mobile tests (pytest / Jest / Cypress / Go / Maestro), writes new tests from a URL or live screen, and coaches you on what to fix next.">
 <meta property="og:url" content="https://mcp.chenjundigital.com/">
 <meta property="og:image" content="https://mcp.chenjundigital.com/og-image.png">
 <meta property="og:image:width" content="1200">
@@ -21,7 +21,7 @@
 
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="mcp-test-runner — Let's make QA simple">
-<meta name="twitter:description" content="An open-source MCP server that drives your test suite — and coaches you on what to fix next.">
+<meta name="twitter:description" content="Web + mobile (Maestro iOS/Android) test runner over MCP — and a coach that tells you what to fix next.">
 <meta name="twitter:image" content="https://mcp.chenjundigital.com/og-image.png">
 <meta name="twitter:image:alt" content="讓我們把 QA 簡單化 — mcp-test-runner">
 
@@ -295,6 +295,24 @@
     font-family: var(--mono);
     font-size: 13px;
     color: var(--text);
+  }
+  .badge.new {
+    background: linear-gradient(135deg, rgba(212,168,67,0.18), rgba(212,168,67,0.06));
+    border-color: var(--border-gold);
+    color: var(--accent-2);
+  }
+  .badge.new::before {
+    content: "NEW";
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    background: var(--accent);
+    color: #0B1628;
+    padding: 2px 5px;
+    border-radius: 3px;
+    margin-right: 7px;
+    vertical-align: 1px;
   }
 
   /* Sections */
@@ -570,7 +588,7 @@
   <div class="container">
     <span class="eyebrow" data-i18n="hero.eyebrow"></span>
     <h1 class="hero-title" data-i18n-html="hero.title"></h1>
-    <p class="hero-sub" data-i18n="hero.sub"></p>
+    <p class="hero-sub" data-i18n-html="hero.sub"></p>
     <div class="cta-row">
       <a class="btn btn-primary" href="#install" data-i18n="hero.cta1"></a>
       <a class="btn btn-ghost" href="https://github.com/kao273183/mcp-test-runner" data-i18n="hero.cta2"></a>
@@ -601,6 +619,17 @@
         <span class="badge">Gemini CLI</span>
         <span class="badge">Cline</span>
         <span class="badge">Zed</span>
+      </div>
+    </div>
+
+    <div class="compat" style="margin-top: 36px;">
+      <div class="compat-label" data-i18n="runners.label"></div>
+      <div class="compat-row">
+        <span class="badge">pytest + Playwright</span>
+        <span class="badge">Jest</span>
+        <span class="badge">Cypress</span>
+        <span class="badge">go test</span>
+        <span class="badge new">Maestro · iOS + Android</span>
       </div>
     </div>
   </div>
@@ -641,23 +670,24 @@
       <p class="section-sub" data-i18n="pipeline.sub"></p>
     </div>
     <div class="pipeline-wrap">
-<pre class="ascii">   <span class="a">[URL]</span>
-        │  analyze_url
-        ▼
-   <span class="a">modules + candidate TCs + API endpoints</span>
-        │  generate_test (module=...)
-        ▼
-   <span class="a">tests/test_*.py</span>   <span data-i18n="pipe.c1"></span>
-        │  run_tests
-        ▼
-   <span class="g">report.json + screenshots + trace.zip + junit.xml</span>
-        │
-        ├──→ generate_html_report  ──→  <span class="g" data-i18n="pipe.c2"></span>
-        ├──→ auto archive          ──→  <span class="g">history/ snapshot</span>
-        └──→ optimizer auto-write  ──→  <span class="g">optimization-plan.md</span>
-                                                 │
-                                                 ▼
-                                      <span data-i18n="pipe.c3"></span></pre>
+<pre class="ascii">   <span class="a">[URL]</span>                              <span class="a">[Mobile screen]</span>
+        │  analyze_url                         │  analyze_screen
+        ▼                                      ▼
+   <span class="a">modules + TCs + API endpoints</span>     <span class="a">modules + TCs (form / cta / tab_bar)</span>
+        │  generate_test (module=...)          │  generate_test (module=...)
+        ▼                                      ▼
+   <span class="a">tests/test_*.py</span>   <span data-i18n="pipe.c1"></span>   <span class="a">maestro-flows/*.yaml</span>
+        └────────────────────┬─────────────────┘
+                             │  run_tests
+                             ▼
+   <span class="g">report.json + screenshots + trace.zip / recordings + junit.xml</span>
+                             │
+                             ├──→ generate_html_report  ──→  <span class="g" data-i18n="pipe.c2"></span>
+                             ├──→ auto archive          ──→  <span class="g">history/ snapshot</span>
+                             └──→ optimizer auto-write  ──→  <span class="g">optimization-plan.md</span>
+                                                                  │
+                                                                  ▼
+                                                       <span data-i18n="pipe.c3"></span></pre>
     </div>
   </div>
 </section>
@@ -674,7 +704,7 @@
         <div class="step-num">1</div>
         <div>
           <h4 data-i18n="install.s1.title"></h4>
-          <p data-i18n="install.s1.body"></p>
+          <p data-i18n-html="install.s1.body"></p>
 <pre class="code">git clone https://github.com/kao273183/mcp-test-runner.git
 cd mcp-test-runner
 python -m venv .venv &amp;&amp; source .venv/bin/activate
@@ -793,7 +823,7 @@ playwright install chromium</pre>
       </div>
       <div class="tool-cat">
         <div class="label">authoring</div>
-        <div class="items"><code>analyze_url</code><code>generate_test</code><code>auto_generate_tests</code><code>codegen</code></div>
+        <div class="items"><code>analyze_url</code><code>analyze_screen</code><code>generate_test</code><code>auto_generate_tests</code><code>codegen</code></div>
       </div>
       <div class="tool-cat">
         <div class="label">reporting</div>
@@ -841,9 +871,9 @@ playwright install chromium</pre>
       'nav.install': 'Install',
       'nav.coach': 'Advisor',
 
-      'hero.eyebrow': 'Open source · Model Context Protocol server',
+      'hero.eyebrow': 'Open source · Web + Mobile · Model Context Protocol server',
       'hero.title': "Let's make <span class=\"accent\">QA</span><br>simple.",
-      'hero.sub': 'mcp-test-runner is an MCP server that lets your AI client run pytest / Jest / Cypress / Go test, write the next round of tests from a URL, and act as your data-driven QA advisor — every single run.',
+      'hero.sub': 'mcp-test-runner is an MCP server that drives <strong>web</strong> (pytest / Jest / Cypress / Go) and <strong>mobile</strong> (Maestro on iOS + Android, incl. BlueStacks) test suites — writes the next round from a URL or a live screen, and acts as your data-driven QA advisor every single run.',
       'hero.cta1': 'Quick Start →',
       'hero.cta2': 'View on GitHub',
 
@@ -854,16 +884,17 @@ playwright install chromium</pre>
       'term.line2': "What's the next thing I should fix?",
 
       'compat.label': 'Works with any MCP-compatible client',
+      'runners.label': 'Drives any of these test frameworks',
 
       'features.eyebrow': 'What it does',
-      'features.title': 'Three jobs. One server.',
+      'features.title': 'Three jobs. One server. Web + Mobile.',
       'features.sub': 'Ranked by how often you actually use them.',
-      'f1.title': 'Run tests, every framework',
-      'f1.body': 'Switch frameworks with a single <code>QA_RUNNER</code> env var. Auto-retry, tracing, JUnit XML, screenshots and Playwright <code>trace.zip</code> — out of the box.',
-      'f2.title': 'Write tests from a URL',
-      'f2.body': '<code>analyze_url</code> opens the page in headless Chromium, splits forms / nav / dialogs / CTAs into modules, then <code>generate_test</code> produces runnable pytest with real selectors — not <code>#&nbsp;TODO</code> placeholders.',
+      'f1.title': 'Run tests, web or mobile',
+      'f1.body': 'Switch runners with a single <code>QA_RUNNER</code> env var: pytest / Jest / Cypress / Go for web, <code>maestro</code> for iOS Simulator, Android Emulator, real devices, and BlueStacks. Auto-retry, JUnit XML, screenshots, Playwright <code>trace.zip</code> / Maestro recordings — out of the box.',
+      'f2.title': 'Write tests from a URL or a screen',
+      'f2.body': '<code>analyze_url</code> probes the DOM; <code>analyze_screen</code> dumps the live mobile hierarchy. Both surface form / cta / nav / tab-bar modules with real selectors, then <code>generate_test</code> emits runnable pytest <em>or</em> Maestro YAML — not <code>#&nbsp;TODO</code> placeholders.',
       'f3.title': 'Your QA optimization advisor',
-      'f3.body': 'Every run archives a snapshot and writes a new <code>optimization-plan.md</code>. Flaky vs. broken vs. slow-regression — ranked by evidence, not by gut.',
+      'f3.body': 'Every run archives a snapshot and writes a new <code>optimization-plan.md</code>. Flaky vs. broken vs. slow-regression — ranked by evidence, not by gut. Same loop works for web and mobile.',
 
       'pipeline.eyebrow': 'The pipeline',
       'pipeline.title': 'A self-correcting loop',
@@ -876,17 +907,17 @@ playwright install chromium</pre>
       'install.title': 'Up and running in 5 minutes',
       'install.sub': 'Three steps. Then talk to your AI client like you always do.',
       'install.s1.title': 'Install the server',
-      'install.s1.body': 'Clone, create a venv, install, then drop a Playwright browser.',
+      'install.s1.body': 'Clone, create a venv, install. For web add Playwright; for mobile install <a href="https://maestro.mobile.dev/">Maestro</a> instead.',
       'install.s2.title': 'Connect your MCP client',
-      'install.s2.body': 'Example: Claude Desktop config at <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>. <a href="https://github.com/kao273183/mcp-test-runner/blob/main/examples/configs/codex-config.example.toml">Codex (TOML)</a> and <a href="https://github.com/kao273183/mcp-test-runner/blob/main/examples/configs/gemini-config.example.json">Gemini CLI</a> samples live in the repo.',
+      'install.s2.body': 'Example: Claude Desktop config at <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>. Set <code>QA_RUNNER=maestro</code> for mobile, and (optional) <code>QA_ANDROID_HOST=127.0.0.1:5555</code> for BlueStacks. <a href="https://github.com/kao273183/mcp-test-runner/blob/main/examples/configs/codex-config.example.toml">Codex (TOML)</a> and <a href="https://github.com/kao273183/mcp-test-runner/blob/main/examples/configs/gemini-config.example.json">Gemini CLI</a> samples live in the repo.',
       'install.s3.title': 'Send your first prompt',
       'install.s3.body': 'Restart your MCP client, open a session, try any of these:',
-      'install.p1': '# One-shot: analyze a URL and produce runnable tests',
+      'install.p1': '# Web: analyze a URL and produce runnable tests',
       'install.q1': 'Test https://your-site/login — produce 1 case per module',
-      'install.p2': '# Ask the coach what to fix next',
-      'install.q2': "What's the next thing I should optimize?",
-      'install.p3': '# Pull in domain knowledge for a regression test',
-      'install.q3': 'From qa-knowledge → historical bugs, write a regression for double-clicking the coupon button',
+      'install.p2': '# Mobile: analyze the current screen and write a flow',
+      'install.q2': 'Analyze the current app screen and write a Maestro test for the barcode button',
+      'install.p3': '# Ask the coach what to fix next',
+      'install.q3': "What's the next thing I should optimize?",
 
       'qa.eyebrow': 'QA knowledge in three layers',
       'qa.title': "Domain context, not just DOM",
@@ -909,8 +940,8 @@ playwright install chromium</pre>
       'coach.c3.body': "Did the test <code>generate_test</code> wrote show up in the next run? Did the modules <code>analyze_url</code> detected get matching test files? Adoption rate vs. coverage gap — tracked.",
 
       'tools.eyebrow': 'Tools',
-      'tools.title': '14 tools across 5 categories',
-      'tools.sub': "You don't need to memorize names — the <a href=\"https://github.com/kao273183/mcp-test-runner/blob/main/README.md#prompting-cookbook\">prompting cookbook</a> has natural-language phrasings.",
+      'tools.title': '15 tools across 5 categories',
+      'tools.sub': "You don't need to memorize names — the <a href=\"https://github.com/kao273183/mcp-test-runner/blob/main/README.md#prompting-cookbook\">prompting cookbook</a> has natural-language phrasings for both web and mobile.",
 
       'final.title': 'Make every test run smarter.',
       'final.sub': "Run your first AI-driven test in under five minutes.",
@@ -923,9 +954,9 @@ playwright install chromium</pre>
       'nav.install': '安裝',
       'nav.coach': '優化顧問',
 
-      'hero.eyebrow': '開源 · Model Context Protocol server',
+      'hero.eyebrow': '開源 · Web + 手機 · Model Context Protocol server',
       'hero.title': '讓我們把 <span class="accent">QA</span><br>簡單化。',
-      'hero.sub': 'mcp-test-runner 是一個 MCP server，讓 AI client 幫你跑 pytest / Jest / Cypress / Go test、從 URL 寫下一輪測試、並在每次跑完後當你的「資料驅動 QA 優化顧問」——告訴你下一步該補什麼。',
+      'hero.sub': 'mcp-test-runner 是一個 MCP server，讓 AI client 幫你跑 <strong>Web</strong>（pytest / Jest / Cypress / Go）和<strong>手機</strong>（Maestro · iOS + Android · 含 BlueStacks）測試——從 URL 或當下的手機畫面寫下一輪 TC，並在每次跑完後當你的「資料驅動 QA 優化顧問」。',
       'hero.cta1': '快速開始 →',
       'hero.cta2': '到 GitHub 看原始碼',
 
@@ -936,16 +967,17 @@ playwright install chromium</pre>
       'term.line2': '下一步該優化什麼？',
 
       'compat.label': '相容所有 MCP client',
+      'runners.label': '支援以下測試框架',
 
       'features.eyebrow': '功能',
-      'features.title': '三件事。一個 server。',
+      'features.title': '三件事。一個 server。Web + 手機。',
       'features.sub': '按你會用到的頻率排。',
-      'f1.title': '跨框架跑測試',
-      'f1.body': '用 <code>QA_RUNNER</code> 環境變數切 framework。內建 auto-retry、tracing、JUnit XML、截圖、Playwright <code>trace.zip</code>。',
-      'f2.title': '從 URL 寫測試',
-      'f2.body': '<code>analyze_url</code> 用 headless Chromium 拆 form / nav / dialog / CTA 模塊，<code>generate_test</code> 產生帶真實 selector 的 pytest — 不是 <code>#&nbsp;TODO</code> 占位符。',
+      'f1.title': '跨框架跑測試 · Web 跟手機',
+      'f1.body': '用 <code>QA_RUNNER</code> 環境變數切 framework：Web 走 pytest / Jest / Cypress / Go，手機走 <code>maestro</code>（iOS Simulator、Android Emulator、實體機、BlueStacks 都吃）。內建 auto-retry、JUnit XML、截圖、Playwright <code>trace.zip</code> / Maestro recordings。',
+      'f2.title': '從 URL 或當下畫面寫測試',
+      'f2.body': '<code>analyze_url</code> 偵測 DOM、<code>analyze_screen</code> 抓手機畫面 hierarchy。兩者都拆出 form / cta / nav / tab-bar 模塊與真實 selector，再由 <code>generate_test</code> 產生可直接跑的 pytest <em>或</em> Maestro YAML — 不是 <code>#&nbsp;TODO</code> 占位符。',
       'f3.title': '你的 QA 優化顧問',
-      'f3.body': '每次 run 自動快照並寫一份新的 <code>optimization-plan.md</code>。flaky / broken / slow_regression 排序，每條都附證據——不是憑感覺。',
+      'f3.body': '每次 run 自動快照並寫一份新的 <code>optimization-plan.md</code>。flaky / broken / slow_regression 排序，每條都附證據——不是憑感覺。Web 跟手機共用同一條迴圈。',
 
       'pipeline.eyebrow': '流程',
       'pipeline.title': '一個會自我修正的迴圈',
@@ -958,17 +990,17 @@ playwright install chromium</pre>
       'install.title': '5 分鐘內跑起來',
       'install.sub': '三步。然後就用你平常跟 AI 對話的方式講就好。',
       'install.s1.title': '安裝 server',
-      'install.s1.body': 'Clone、開 venv、裝 package、裝 Playwright browser。',
+      'install.s1.body': 'Clone、開 venv、裝 package。Web 要 <code>playwright install chromium</code>，手機改裝 <a href="https://maestro.mobile.dev/">Maestro</a>。',
       'install.s2.title': '接到 MCP client',
-      'install.s2.body': '範例是 Claude Desktop：<code>~/Library/Application Support/Claude/claude_desktop_config.json</code>。其他 client：<a href="https://github.com/kao273183/mcp-test-runner/blob/main/examples/configs/codex-config.example.toml">Codex (TOML)</a>、<a href="https://github.com/kao273183/mcp-test-runner/blob/main/examples/configs/gemini-config.example.json">Gemini CLI</a>。',
+      'install.s2.body': '範例是 Claude Desktop：<code>~/Library/Application Support/Claude/claude_desktop_config.json</code>。手機端把 <code>QA_RUNNER</code> 改成 <code>maestro</code>，BlueStacks 再加一個 <code>QA_ANDROID_HOST=127.0.0.1:5555</code>。其他 client：<a href="https://github.com/kao273183/mcp-test-runner/blob/main/examples/configs/codex-config.example.toml">Codex (TOML)</a>、<a href="https://github.com/kao273183/mcp-test-runner/blob/main/examples/configs/gemini-config.example.json">Gemini CLI</a>。',
       'install.s3.title': '送出第一個 prompt',
       'install.s3.body': '重啟 MCP client、開 session、隨便挑一條：',
-      'install.p1': '# 一鍵：分析 URL 並產出可執行測試',
+      'install.p1': '# Web：分析 URL 並產出可執行測試',
       'install.q1': '測試 https://your-site/login — 對每個模塊產 1 條 test',
-      'install.p2': '# 看 optimizer 認為下一步該做什麼',
-      'install.q2': '下一步該優化什麼？',
-      'install.p3': '# 結合領域知識寫回歸測試',
-      'install.q3': '參考 qa 知識的歷史 bug 區段，幫我寫 coupon 連點兩次的回歸測試',
+      'install.p2': '# 手機：分析目前畫面、寫 Maestro flow',
+      'install.q2': '分析現在 app 的畫面、幫我寫條碼按鈕的 Maestro 測試',
+      'install.p3': '# 看 optimizer 認為下一步該做什麼',
+      'install.q3': '下一步該優化什麼？',
 
       'qa.eyebrow': '領域知識的三層架構',
       'qa.title': '不只看 DOM，更要懂業務',
@@ -991,8 +1023,8 @@ playwright install chromium</pre>
       'coach.c3.body': '<code>generate_test</code> 寫的測試有沒有出現在下次 run？<code>analyze_url</code> 偵測的模塊有沒有對應 test 檔？採用率 vs 覆蓋缺口，全部追蹤。',
 
       'tools.eyebrow': '工具',
-      'tools.title': '14 個 tool、分 5 類',
-      'tools.sub': '你不用記名稱 — README 裡的<a href="https://github.com/kao273183/mcp-test-runner/blob/main/README.md#prompting-cookbook">prompting cookbook</a>有對應的中文 prompt 寫法。',
+      'tools.title': '15 個 tool、分 5 類',
+      'tools.sub': '你不用記名稱 — README 裡的<a href="https://github.com/kao273183/mcp-test-runner/blob/main/README.md#prompting-cookbook">prompting cookbook</a>有對應的中文 prompt 寫法，Web 跟手機都有。',
 
       'final.title': '讓每次測試都更聰明。',
       'final.sub': '5 分鐘內跑出你第一條 AI 驅動的測試。',
