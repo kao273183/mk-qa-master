@@ -1,0 +1,5 @@
+# Single-maintainer repo — every change requires owner review.
+# Paired with branch protection's "Require review from Code Owners"
+# so even if the auto-close workflow ever misfires, nothing can merge
+# without @kao273183 approving.
+* @kao273183

@@ -1,0 +1,63 @@
+name: External PR policy
+
+# Closes PRs from non-OWNER / non-COLLABORATOR / non-MEMBER authors with a
+# friendly message redirecting to Issues. This repo welcomes ideas + bug
+# reports, but the codebase is maintained solo — see CONTRIBUTING in the
+# README for the rationale.
+#
+# `pull_request_target` runs in the base repo's context, so we get a
+# GITHUB_TOKEN with write perms even when the PR comes from a fork. We
+# only read PR metadata; never check out fork code here.
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.pull_request.author_association != 'OWNER' &&
+      github.event.pull_request.author_association != 'COLLABORATOR' &&
+      github.event.pull_request.author_association != 'MEMBER'
+    steps:
+      - name: Comment and close
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const body = [
+              `Hi @${pr.user.login}, thanks for taking the time to contribute! 🙏`,
+              ``,
+              `This repository is **maintained solo** and does not accept external pull requests at this time.`,
+              `If you found a bug or have an idea, please open an **Issue** instead — I read every one and will implement it myself if it fits the project's direction.`,
+              ``,
+              `→ https://github.com/${context.repo.owner}/${context.repo.repo}/issues/new/choose`,
+              ``,
+              `---`,
+              ``,
+              `Hi @${pr.user.login}，感謝你願意貢獻 🙏`,
+              ``,
+              `這個 repo **由我一人維護**，目前不收外部 PR。`,
+              `如果你發現 bug 或有想法，歡迎開 **Issue** — 我每一則都會看，覺得方向對的我會自己實作。`,
+              ``,
+              `Closing this PR for now. No offense intended.`
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body,
+            });
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              state: 'closed',
+            });

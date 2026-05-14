@@ -1,0 +1,47 @@
+name: Feature suggestion
+description: Idea for a new runner, tool, or behavior. I'll evaluate and implement if it fits.
+title: "[Idea] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! / 感謝你的點子！
+        This repo is maintained solo and **doesn't accept external PRs** — please describe the suggestion here. If it fits the project, I'll build it.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Concrete scenario where the current behavior falls short.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What should happen. Sketches / pseudocode / API shape welcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered (optional)
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Which layer?
+      multiple: true
+      options:
+        - Runner (pytest / jest / cypress / go / maestro / new framework)
+        - Analyzer (analyze_url / analyze_screen)
+        - Generator (generate_test / auto_generate_tests)
+        - Optimizer / self-improvement coach
+        - HTML reporter
+        - QA knowledge layer
+        - MCP tool surface (server.py)
+        - Docs / examples
+        - Other
