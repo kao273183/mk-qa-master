@@ -152,6 +152,17 @@
     border-color: var(--border-strong);
   }
   .btn-ghost:hover { background: var(--bg-card); border-color: var(--border-gold); }
+  .btn-bmc {
+    background: #FFDD00;
+    color: #0B1628;
+    border-color: #FFDD00;
+  }
+  .btn-bmc:hover {
+    background: #FFE933;
+    border-color: #FFE933;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(255, 221, 0, 0.25);
+  }
   .btn-sm { padding: 7px 13px; font-size: 13px; }
 
   .lang-toggle {
@@ -845,6 +856,7 @@ playwright install chromium</pre>
       <div class="cta-row">
         <a class="btn btn-primary" href="#install" data-i18n="final.cta1"></a>
         <a class="btn btn-ghost" href="https://github.com/kao273183/mcp-test-runner" data-i18n="final.cta2"></a>
+        <a class="btn btn-bmc" href="https://www.buymeacoffee.com/minikao" target="_blank" rel="noopener" data-i18n="final.cta3"></a>
       </div>
     </div>
   </div>
@@ -854,10 +866,12 @@ playwright install chromium</pre>
   <div class="container">
     <div class="links">
       <a href="https://github.com/kao273183/mcp-test-runner">GitHub</a>
+      <a href="https://pypi.org/project/mcp-test-runner/">PyPI</a>
       <a href="https://github.com/kao273183/mcp-test-runner/blob/main/README.md">README</a>
       <a href="https://github.com/kao273183/mcp-test-runner/blob/main/README.zh-TW.md">繁中</a>
       <a href="sample_report.html">Demo</a>
       <a href="https://github.com/kao273183/mcp-test-runner/blob/main/docs/framework.md">Internals</a>
+      <a href="https://www.buymeacoffee.com/minikao" target="_blank" rel="noopener" style="color: #FFDD00;">☕ Support</a>
     </div>
     <div class="meta">MIT License · Built by <a href="https://chenjundigital.com" style="color: var(--accent);">宸鈞數位</a> →</div>
   </div>
@@ -946,7 +960,8 @@ playwright install chromium</pre>
       'final.title': 'Make every test run smarter.',
       'final.sub': "Run your first AI-driven test in under five minutes.",
       'final.cta1': 'Get Started →',
-      'final.cta2': 'Star on GitHub'
+      'final.cta2': 'Star on GitHub',
+      'final.cta3': '☕ Buy me a coffee'
     },
     zh: {
       'nav.features': '功能',
@@ -1029,7 +1044,8 @@ playwright install chromium</pre>
       'final.title': '讓每次測試都更聰明。',
       'final.sub': '5 分鐘內跑出你第一條 AI 驅動的測試。',
       'final.cta1': '開始使用 →',
-      'final.cta2': 'GitHub 給個 Star'
+      'final.cta2': 'GitHub 給個 Star',
+      'final.cta3': '☕ 請我喝杯咖啡'
     }
   };
 

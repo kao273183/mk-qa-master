@@ -2,6 +2,10 @@
 
 [English](README.md) · **繁體中文**
 
+[![PyPI](https://img.shields.io/pypi/v/mcp-test-runner.svg?logo=pypi&logoColor=white&color=3775A9)](https://pypi.org/project/mcp-test-runner/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/minikao)
+
 > 跨 pytest / Jest / Cypress / Go 的通用測試執行 MCP server，內建 DOM 分析器、執行歷史紀錄、與自我強化教練。
 
 一個基於 **Model Context Protocol** 的伺服器，讓 Claude Desktop / Cursor / 任何 MCP client 端到端驅動你的測試流程：執行測試、檢視失敗（截圖 + 影片 + Playwright trace）、分析一個 URL 自動產生候選測試案例，並在每次跑完後吐出一份**下一輪該優化什麼**的優先級行動清單。
@@ -502,6 +506,18 @@ _Based on 6 archived runs._
 > 「跑 checkout suite。失敗的每條開 JIRA 到 QA project、用 RIDER 格式、附 screenshot。跑完把 HTML 報告貼到 #qa-bots。」
 
 為什麼這樣設計：`mcp-test-runner` 專注做「測試這個迴圈」（analyze → generate → run → coach）。JIRA / Slack / Sentry 各自有專業 server 維護，硬塞進這個 repo 只會稀釋焦點、重複處理 auth、強迫所有使用者繼承不需要的依賴。
+
+---
+
+## 支持這個專案 ☕
+
+`mcp-test-runner` 是我一人在下班和週末維護的。如果它幫你省了時間，或改變了你們團隊看 AI-driven QA 的方式，一杯咖啡能讓凌晨 debug Maestro 的夜晚撐下去：
+
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buy-me-a-coffee&logoColor=black&style=for-the-badge)](https://www.buymeacoffee.com/minikao)
+
+你的支持會用在：讓這個 repo 持續免費、持續更新；買更多測試裝置（真實 iPhone / Android 平板 / BlueStacks）；錄教學影片給 QA 社群；資助下一個凌晨抓 bug 的夜晚。
+
+沒有廣告、沒有業配、沒有企業版升級話術——只有真的 ship code。
 
 ---
 

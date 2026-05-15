@@ -2,6 +2,10 @@
 
 **English** · [繁體中文](README.zh-TW.md)
 
+[![PyPI](https://img.shields.io/pypi/v/mcp-test-runner.svg?logo=pypi&logoColor=white&color=3775A9)](https://pypi.org/project/mcp-test-runner/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/minikao)
+
 > Universal MCP server for running tests across pytest / Jest / Cypress / Go,
 > with built-in DOM analyzer, run history, and a self-improvement coach.
 
@@ -591,6 +595,18 @@ One-time PyPI setup (must be done once before the first publish works):
 After the first successful run, PyPI auto-promotes the pending publisher to a trusted one and subsequent releases authenticate via OIDC.
 
 The workflow refuses to publish if the release tag doesn't match `pyproject.version`, which catches "tagged but forgot to bump" mistakes before they hit PyPI.
+
+---
+
+## Support the project ☕
+
+`mcp-test-runner` is built and maintained solo on nights and weekends. If it saved you time or shaped how your team thinks about AI-driven QA, a coffee keeps the late-night Maestro debugging sessions going:
+
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buy-me-a-coffee&logoColor=black&style=for-the-badge)](https://www.buymeacoffee.com/minikao)
+
+Your support funds: keeping this repo free + actively maintained, more device variants for Maestro testing (real iPhones / Android tablets / BlueStacks), recorded tutorials for the QA community, and the next 2am bug hunt.
+
+No ads, no sponsorships, no enterprise upsell — just the work.
 
 ---
 
