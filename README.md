@@ -479,6 +479,55 @@ screenshots + step lists, and the collapsed Passed section.
 
 ---
 
+## Integrations
+
+`mcp-test-runner` doesn't bundle third-party SDKs — it stays a pure
+test-execution + analysis layer. Real QA workflows are composed by
+running multiple MCP servers side-by-side in the same client config;
+**Claude orchestrates the chain across servers**. There's no MCP-to-MCP
+RPC — each server is independent, the AI client is the conductor.
+
+The pairings below are the ones that complete the loop most often:
+
+| Pair with | Why | Example chain |
+|---|---|---|
+| **[Atlassian MCP](https://www.atlassian.com/platform/remote-mcp-server)** *(JIRA + Confluence)* | Auto-open bug tickets from failures; sync `optimization-plan.md` to a team Confluence page | `run_tests` → `get_failure_details` → `atlassian.createJiraIssue` *(attaches screenshot + trace path)* |
+| **[Slack MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/slack)** | Notify channels on failure, share the rendered HTML report, mention oncall for flaky tests | `generate_html_report` → `slack.send_message(channel="#qa-bots", attachments=...)` |
+| **[GitHub MCP](https://github.com/github/github-mcp-server)** | Read PR description / linked issues for *business context* before generating tests; post results back as PR comments | `github.get_pull_request` → `analyze_url` → `generate_test(business_context=PR body)` → `github.create_issue_comment` |
+| **[Sentry MCP](https://github.com/getsentry/sentry-mcp)** | Production errors drive regression priority: top crashes → matching regression tests | `sentry.list_issues(sort="frequency")` → `generate_test(business_context=stack trace)` → `run_tests` |
+| **[Filesystem MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem)** | Read a shared `qa-knowledge.md` or TC source files that live outside `QA_PROJECT_ROOT` (monorepos, multi-project setups) | `filesystem.read_file("~/shared/qa-knowledge.md")` → `init_qa_knowledge` |
+
+**Honorable mention — [Google Drive MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive)**: pairs with Google-Sheet-based TC management (read TCs from a sheet → `generate_test` → write status back).
+
+### Composing in your client config
+
+All five run as separate processes alongside `mcp-test-runner`:
+
+```json
+{
+  "mcpServers": {
+    "mcp-test-runner": { "command": "python", "args": ["-m", "mcp_test_runner.server"], "env": { "QA_RUNNER": "maestro" } },
+    "atlassian":       { "command": "npx", "args": ["-y", "@atlassian/mcp"] },
+    "slack":           { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-slack"] },
+    "github":          { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"] }
+  }
+}
+```
+
+Then a single prompt walks the chain:
+
+> "Run the checkout suite. For each failure, open a JIRA in project QA with the RIDER format and the screenshot attached. Post the HTML report to #qa-bots when done."
+
+Why this matters: `mcp-test-runner` stays focused on the test loop
+(analyze → generate → run → coach). JIRA / Slack / Sentry are entire
+domains with their own dedicated servers — bolting them into this one
+would dilute the scope, duplicate auth handling, and force every user
+to inherit dependencies they may not want.
+
+本 repo 不打包任何第三方 SDK——維持「測試執行 + 分析」單一職責。實務上 QA 工作流是**多個 MCP server 並存、由 Claude 編排跨 server 的 tool chain**達成的。範例配套：JIRA / Slack / GitHub / Sentry / Filesystem 各自獨立 MCP server，配上 `mcp-test-runner` 拼出完整測試管線。
+
+---
+
 ## Contributing
 
 This repo is **maintained solo**. Ideas and bug reports are very welcome — please open an [Issue](https://github.com/kao273183/mcp-test-runner/issues/new/choose) or start a [Discussion](https://github.com/kao273183/mcp-test-runner/discussions). I read every one and will implement what fits the project's direction.
