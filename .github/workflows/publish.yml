@@ -1,0 +1,80 @@
+name: Publish to PyPI
+
+# Triggered by every published GitHub Release. Releases are created
+# manually (via `gh release create` or the GitHub UI) so we keep
+# control over what hits PyPI — no auto-publish on tag push.
+#
+# Authentication: PyPI Trusted Publishing (OIDC). No API token stored;
+# instead a one-time setup on PyPI links this repo + workflow file to
+# the project name. Setup steps live in the README "Publishing" section.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  # OIDC token exchange for Trusted Publishing — no PYPI_API_TOKEN secret needed.
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: python -m pip install --upgrade build twine
+
+      - name: Verify pyproject version matches the release tag
+        # The release tag (e.g. `v0.4.2`) must equal `v<pyproject.version>`.
+        # Catches the "tagged but forgot to bump pyproject" failure mode
+        # before we ship a wrong-versioned wheel.
+        run: |
+          set -eu
+          TAG="${GITHUB_REF_NAME#v}"
+          PY_VER=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "release tag (without v) = $TAG"
+          echo "pyproject version       = $PY_VER"
+          test "$TAG" = "$PY_VER"
+
+      - name: Build sdist + wheel
+        run: python -m build
+
+      - name: Validate distribution metadata
+        # Catches malformed README, missing classifiers, etc. before upload.
+        run: twine check dist/*
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    # Pin to an environment so PyPI's Trusted Publisher config can scope
+    # to this exact workflow + env name; protects against a compromised
+    # PR ever auto-publishing.
+    environment:
+      name: pypi
+      url: https://pypi.org/project/mcp-test-runner/
+    steps:
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # No `with: password:` — Trusted Publishing uses OIDC token in
+        # the runner's environment automatically.

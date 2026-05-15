@@ -48,13 +48,51 @@ Full design notes: [`docs/framework.md`](docs/framework.md).
 
 ## Install
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
-playwright install               # only if you use pytest-playwright
-pip install pytest-rerunfailures # optional, enables auto-retry
+Two paths — pick the one that matches how you'll use it.
+
+### A. Run via `uvx` (zero install, recommended for end users)
+
+Add `mcp-test-runner` to your client config without installing anything globally; [`uv`](https://docs.astral.sh/uv/) fetches and runs it in an ephemeral environment per session:
+
+```json
+{
+  "mcpServers": {
+    "mcp-test-runner": {
+      "command": "uvx",
+      "args": ["mcp-test-runner"],
+      "env": { "QA_RUNNER": "pytest", "QA_PROJECT_ROOT": "/path/to/your-test-project" }
+    }
+  }
+}
 ```
+
+That's the whole setup. First call downloads the package; subsequent calls are cached. Switching versions: `uvx mcp-test-runner@0.4.1 ...`.
+
+### B. Install into a project venv (for contributors / hacking)
+
+```bash
+pip install mcp-test-runner       # or: pip install -e . from a clone
+playwright install                # only if you use pytest-playwright
+pip install pytest-rerunfailures  # optional, enables auto-retry
+```
+
+Then point your client config at the same Python interpreter:
+
+```json
+"command": "/path/to/.venv/bin/python",
+"args": ["-m", "mcp_test_runner.server"]
+```
+
+### Runner-specific prerequisites
+
+| `QA_RUNNER` | You also need |
+|---|---|
+| `pytest` / `pytest-playwright` | `pip install pytest-playwright` + `playwright install chromium` |
+| `jest` | A Node project with `jest` installed (`npm i -D jest`) |
+| `cypress` | A Node project with `cypress` installed (`npm i -D cypress`) |
+| `go` | Go toolchain on PATH |
+| `maestro` | [Maestro CLI](https://maestro.mobile.dev/) + a booted simulator / emulator / device (or BlueStacks reachable via `adb connect`) |
+
 
 ## Wire into Claude Desktop
 
@@ -525,6 +563,34 @@ would dilute the scope, duplicate auth handling, and force every user
 to inherit dependencies they may not want.
 
 本 repo 不打包任何第三方 SDK——維持「測試執行 + 分析」單一職責。實務上 QA 工作流是**多個 MCP server 並存、由 Claude 編排跨 server 的 tool chain**達成的。範例配套：JIRA / Slack / GitHub / Sentry / Filesystem 各自獨立 MCP server，配上 `mcp-test-runner` 拼出完整測試管線。
+
+---
+
+## Publishing (maintainer-only)
+
+Releases ship to PyPI via [Trusted Publishing](https://docs.pypi.org/trusted-publishers/) — no API tokens stored in the repo. The flow:
+
+1. Bump `version = "x.y.z"` in `pyproject.toml` (via a normal PR — main is branch-protected).
+2. After merge, tag main and push:
+   ```bash
+   git tag -a vX.Y.Z -m "vX.Y.Z — short summary"
+   git push origin vX.Y.Z
+   ```
+3. Create a GitHub Release for that tag (`gh release create vX.Y.Z ...`).
+4. The release event fires `.github/workflows/publish.yml` → builds sdist + wheel → uploads to PyPI.
+
+One-time PyPI setup (must be done once before the first publish works):
+
+- Sign in at https://pypi.org → enable 2FA.
+- Project page → *Settings → Publishing* → add a **pending publisher** with:
+  - Owner: `kao273183`
+  - Repository: `mcp-test-runner`
+  - Workflow filename: `publish.yml`
+  - Environment name: `pypi`
+
+After the first successful run, PyPI auto-promotes the pending publisher to a trusted one and subsequent releases authenticate via OIDC.
+
+The workflow refuses to publish if the release tag doesn't match `pyproject.version`, which catches "tagged but forgot to bump" mistakes before they hit PyPI.
 
 ---
 

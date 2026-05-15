@@ -1,12 +1,11 @@
 {
   "mcpServers": {
     "mcp-test-runner": {
-      "command": "python",
-      "args": ["-m", "mcp_test_runner.server"],
-      "cwd": "/absolute/path/to/mcp-test-runner",
+      "command": "uvx",
+      "args": ["mcp-test-runner"],
       "env": {
         "QA_RUNNER": "pytest",
-        "QA_PROJECT_ROOT": "/absolute/path/to/mcp-test-runner/tests_project"
+        "QA_PROJECT_ROOT": "/absolute/path/to/your-test-project"
       }
     }
   }
