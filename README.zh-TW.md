@@ -34,13 +34,51 @@
 
 ## 安裝
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
-playwright install               # 用 pytest-playwright 才需要
-pip install pytest-rerunfailures # 選用，啟用自動 retry
+兩條路線，看你怎麼用：
+
+### A. 用 `uvx` 跑（零安裝，推薦給一般使用者）
+
+在 client config 加 `mcp-test-runner`，不用全域裝任何東西；[`uv`](https://docs.astral.sh/uv/) 會每次幫你抓並在隔離環境跑：
+
+```json
+{
+  "mcpServers": {
+    "mcp-test-runner": {
+      "command": "uvx",
+      "args": ["mcp-test-runner"],
+      "env": { "QA_RUNNER": "pytest", "QA_PROJECT_ROOT": "/path/to/your-test-project" }
+    }
+  }
+}
 ```
+
+整個設定就這樣。第一次呼叫會下載，後續走 cache。要指定版本：`uvx mcp-test-runner@0.4.1 ...`。
+
+### B. 裝進自己的 venv（給貢獻者 / 想 hack 的人）
+
+```bash
+pip install mcp-test-runner       # 或 git clone 後 pip install -e .
+playwright install                # pytest-playwright 才需要
+pip install pytest-rerunfailures  # 選用，啟用自動 retry
+```
+
+client config 指向同一個 Python：
+
+```json
+"command": "/path/to/.venv/bin/python",
+"args": ["-m", "mcp_test_runner.server"]
+```
+
+### 各 runner 的先決條件
+
+| `QA_RUNNER` | 還要先裝 |
+|---|---|
+| `pytest` / `pytest-playwright` | `pip install pytest-playwright` + `playwright install chromium` |
+| `jest` | Node 專案 + `npm i -D jest` |
+| `cypress` | Node 專案 + `npm i -D cypress` |
+| `go` | Go toolchain 在 PATH |
+| `maestro` | [Maestro CLI](https://maestro.mobile.dev/) + 模擬器 / 實機 / BlueStacks（透過 `adb connect`） |
+
 
 ## 接到 Claude Desktop
 

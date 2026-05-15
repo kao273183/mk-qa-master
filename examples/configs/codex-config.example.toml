@@ -3,9 +3,8 @@
 # Docs: https://github.com/openai/codex (MCP server section)
 
 [mcp_servers.mcp-test-runner]
-command = "/absolute/path/to/.venv/bin/python"
-args = ["-m", "mcp_test_runner.server"]
-cwd = "/absolute/path/to/mcp-test-runner"
+command = "uvx"
+args = ["mcp-test-runner"]
 
 [mcp_servers.mcp-test-runner.env]
 QA_RUNNER = "pytest"
