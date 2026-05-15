@@ -1,6 +1,6 @@
 [project]
 name = "mk-qa-master"
-version = "0.5.0"
+version = "0.5.1"
 description = "MCP server for running tests across pytest / Jest / Cypress / Go test / Maestro, with self-improvement analytics (AI 測試大師)"
 readme = "README.md"
 requires-python = ">=3.10"
