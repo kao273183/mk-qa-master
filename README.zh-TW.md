@@ -1,8 +1,12 @@
 <p align="center">
-  <img src="assets/logo.png" alt="mcp-test-runner logo" width="180" />
+  <img src="assets/logo.png" alt="AI 測試大師 logo" width="180" />
 </p>
 
-<h1 align="center">MCP Test Runner</h1>
+<h1 align="center">AI 測試大師 ｜ MCP Test Runner</h1>
+
+<p align="center">
+  <em>你的 AI QA 全鏈路工具 — 分析、生成、執行、給建議。</em>
+</p>
 
 <p align="center">
   <a href="README.md">English</a> · <strong>繁體中文</strong>
