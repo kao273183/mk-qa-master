@@ -70,6 +70,7 @@ Two environment variables drive the runtime:
 | `QA_RUNNER` | `pytest` / `jest` / `cypress` / `go` / `maestro` | Selects which test framework |
 | `QA_PROJECT_ROOT` | `/path/to/your/project` | Points at the project under test |
 | `QA_ANDROID_HOST` *(optional)* | `127.0.0.1:5555` | Remote-ADB endpoint for **BlueStacks** / Genymotion / Nox / cloud Android. When set, the Maestro runner auto-runs `adb connect <host>` before each test / `analyze_screen` call. Requires `adb` on PATH. |
+| `QA_TIMEOUT_SECONDS` *(optional)* | `600` (default) | Hard ceiling on any single subprocess invocation (pytest / jest / cypress / go test / maestro). Returns `exit_code=124` with a `[TIMEOUT…]` tag in stderr when exceeded, so the AI client can react cleanly instead of hanging the MCP server forever. |
 
 ### Per-runner snippet
 

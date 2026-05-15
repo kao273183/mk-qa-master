@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from .base import TestRunner
 from ..config import PROJECT_ROOT, REPORT_PATH, JUNIT_PATH, ARTIFACTS_DIR, HISTORY_DIR
+from ..security import safe_run
 
 
 def _parse_docstrings(file_path: Path) -> dict[str, str]:
@@ -88,10 +89,7 @@ class PytestPlaywrightRunner(TestRunner):
     name = "pytest-playwright"
 
     def list_tests(self) -> str:
-        result = subprocess.run(
-            ["pytest", "--collect-only", "-q"],
-            cwd=PROJECT_ROOT, capture_output=True, text=True,
-        )
+        result = safe_run(["pytest", "--collect-only", "-q"], cwd=PROJECT_ROOT)
         return result.stdout or result.stderr
 
     def _base_cmd(self, browser: str) -> list[str]:
@@ -121,7 +119,7 @@ class PytestPlaywrightRunner(TestRunner):
         if filter:
             cmd.extend(["-k", filter])
 
-        result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
+        result = safe_run(cmd, cwd=PROJECT_ROOT)
         self._archive_report()
         return {
             "exit_code": result.returncode,
@@ -132,7 +130,7 @@ class PytestPlaywrightRunner(TestRunner):
 
     def run_failed(self) -> dict:
         cmd = self._base_cmd("chromium") + ["--lf"]
-        result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
+        result = safe_run(cmd, cwd=PROJECT_ROOT)
         self._archive_report()
         return {
             "exit_code": result.returncode,

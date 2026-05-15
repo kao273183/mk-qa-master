@@ -1,7 +1,7 @@
 import json
-import subprocess
 from .base import TestRunner
 from ..config import PROJECT_ROOT, REPORT_PATH
+from ..security import safe_run
 
 
 GO_TEMPLATE = '''package main
@@ -20,17 +20,14 @@ class GoTestRunner(TestRunner):
     name = "go"
 
     def list_tests(self) -> str:
-        result = subprocess.run(
-            ["go", "test", "-list", ".*", "./..."],
-            cwd=PROJECT_ROOT, capture_output=True, text=True,
-        )
+        result = safe_run(["go", "test", "-list", ".*", "./..."], cwd=PROJECT_ROOT)
         return result.stdout or result.stderr
 
     def run_tests(self, filter=None, **kwargs) -> dict:
         cmd = ["go", "test", "-json", "./..."]
         if filter:
             cmd.extend(["-run", filter])
-        result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
+        result = safe_run(cmd, cwd=PROJECT_ROOT)
         REPORT_PATH.write_text(result.stdout)
         return {
             "exit_code": result.returncode,
