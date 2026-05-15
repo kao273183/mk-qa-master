@@ -6,6 +6,8 @@
 <title>mcp-test-runner — Let's make QA simple</title>
 <meta name="description" content="An open-source MCP server that lets your AI client run web (pytest / Jest / Cypress / Go) and mobile (Maestro on iOS + Android, incl. BlueStacks) tests, write the next round from a URL or a live screen, and coach you on what to fix next.">
 <meta name="theme-color" content="#0A0E14">
+<link rel="icon" type="image/png" href="assets/logo.png">
+<link rel="apple-touch-icon" href="assets/logo.png">
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="mcp-test-runner">
@@ -98,9 +100,24 @@
     font-size: 14px;
     color: var(--text);
     letter-spacing: -0.01em;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .brand img.brand-mark {
+    width: 22px; height: 22px;
+    border-radius: 5px;
+    object-fit: cover;
   }
   .brand .dot { color: var(--accent); }
   .brand-group { display: flex; align-items: center; gap: 14px; }
+  .hero-logo {
+    width: 96px; height: 96px;
+    border-radius: 20px;
+    margin: 0 auto 28px;
+    display: block;
+    box-shadow: 0 20px 60px rgba(120, 110, 240, 0.35), 0 0 32px rgba(0, 200, 255, 0.18);
+  }
   .parent-link {
     font-family: var(--mono);
     font-size: 11px;
@@ -578,7 +595,10 @@
   <div class="container">
     <div class="brand-group">
       <a href="https://chenjundigital.com" class="parent-link">← 宸鈞數位</a>
-      <a href="#" class="brand">mcp-test-runner<span class="dot">.</span></a>
+      <a href="#" class="brand">
+        <img src="assets/logo.png" alt="" class="brand-mark" />
+        mcp-test-runner<span class="dot">.</span>
+      </a>
     </div>
     <div class="nav-links">
       <a href="#features" data-i18n="nav.features"></a>
@@ -597,6 +617,7 @@
 
 <section class="hero">
   <div class="container">
+    <img src="assets/logo.png" alt="mcp-test-runner" class="hero-logo" />
     <span class="eyebrow" data-i18n="hero.eyebrow"></span>
     <h1 class="hero-title" data-i18n-html="hero.title"></h1>
     <p class="hero-sub" data-i18n-html="hero.sub"></p>
