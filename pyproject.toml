@@ -1,14 +1,14 @@
 [project]
 name = "mcp-test-runner"
-version = "0.4.2"
-description = "MCP server for running tests across pytest / Jest / Cypress / Go test, with self-improvement analytics"
+version = "0.4.3"
+description = "[DEPRECATED — renamed to mk-qa-master] MCP server for running tests across pytest / Jest / Cypress / Go test / Maestro. Install mk-qa-master from PyPI for active development."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Jack Kao", email = "52775937+kao273183@users.noreply.github.com" }]
 keywords = ["mcp", "testing", "qa", "pytest", "playwright", "jest", "cypress", "automation", "model-context-protocol"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 7 - Inactive",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",

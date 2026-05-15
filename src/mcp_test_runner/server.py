@@ -807,7 +807,32 @@ async def _auto_generate_tests(
     }
 
 
+_DEPRECATION_NOTICE = (
+    "\n"
+    "============================================================\n"
+    "  ⚠️  mcp-test-runner has been renamed to mk-qa-master.\n"
+    "  This package (0.4.3) is the final release under the old\n"
+    "  name and will receive no further updates.\n"
+    "\n"
+    "  Switch to the new package:\n"
+    "      pip uninstall mcp-test-runner\n"
+    "      uvx mk-qa-master      # or: pip install mk-qa-master\n"
+    "\n"
+    "  In your MCP client config, replace the entry:\n"
+    "      \"mcp-test-runner\": { \"command\": \"uvx\", \"args\": [\"mcp-test-runner\"] }\n"
+    "  with:\n"
+    "      \"mk-qa-master\":     { \"command\": \"uvx\", \"args\": [\"mk-qa-master\"] }\n"
+    "\n"
+    "  Why the rename: collision with privsim/mcp-test-runner.\n"
+    "  Same project, same tools, same env vars — just a unique\n"
+    "  name. New repo: github.com/kao273183/mk-qa-master\n"
+    "============================================================\n"
+)
+
+
 async def main():
+    import sys
+    print(_DEPRECATION_NOTICE, file=sys.stderr, flush=True)
     async with stdio_server() as (read, write):
         await app.run(read, write, app.create_initialization_options())
 

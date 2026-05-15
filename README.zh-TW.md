@@ -1,8 +1,38 @@
+<!-- ============================================================
+     棄用通知 — 本套件已改名。
+     ============================================================ -->
+
+> # ⚠️ `mcp-test-runner` 已改名為 [`mk-qa-master`](https://pypi.org/project/mk-qa-master/)
+>
+> 這是舊名最後一版（**0.4.3**），之後不再更新。
+>
+> **一分鐘遷移：**
+>
+> ```bash
+> pip uninstall mcp-test-runner
+> uvx mk-qa-master    # 或：pip install mk-qa-master
+> ```
+>
+> 更新 MCP client config：
+>
+> ```diff
+> - "mcp-test-runner": { "command": "uvx", "args": ["mcp-test-runner"] }
+> + "mk-qa-master":    { "command": "uvx", "args": ["mk-qa-master"] }
+> ```
+>
+> 所有環境變數（`QA_RUNNER`、`QA_PROJECT_ROOT`、`QA_ANDROID_HOST`、`QA_KNOWLEDGE_FILE`）、16 個工具、5 個 runner（pytest / Jest / Cypress / Go / Maestro）**完全相同**。
+>
+> **為什麼改名？** 與 [privsim/mcp-test-runner](https://github.com/privsim/mcp-test-runner) 撞名。改名後 SEO 清楚，也預留 `mk-*` 家族空間給未來 MCP。
+>
+> **新家：** https://github.com/kao273183/mk-qa-master
+
+---
+
 <p align="center">
   <img src="assets/logo.png" alt="AI 測試大師 logo" width="180" />
 </p>
 
-<h1 align="center">AI 測試大師 ｜ MCP Test Runner</h1>
+<h1 align="center">AI 測試大師 ｜ MCP Test Runner <sub><sup>(已改名 → mk-qa-master)</sup></sub></h1>
 
 <p align="center">
   <em>你的 AI QA 全鏈路工具 — 分析、生成、執行、給建議。</em>
