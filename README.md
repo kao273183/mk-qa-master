@@ -5,6 +5,10 @@
 <h1 align="center">MCP Test Runner</h1>
 
 <p align="center">
+  <em>AI 測試大師 — your AI QA loop, from analyze to advise.</em>
+</p>
+
+<p align="center">
   <strong>English</strong> · <a href="README.zh-TW.md">繁體中文</a>
 </p>
 
