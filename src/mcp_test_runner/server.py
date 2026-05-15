@@ -19,52 +19,109 @@ async def list_tools() -> list[Tool]:
     return [
         Tool(
             name="get_runner_info",
-            description="回傳目前使用的測試 runner 名稱與所有可用 runner",
+            description=(
+                "回傳目前由 QA_RUNNER 環境變數選定的測試 runner（pytest / jest / cypress / "
+                "go / maestro 五選一）加上 server 編譯時內建的全部 runner 清單。"
+                "建議每個 session 第一個呼叫——AI 用它判斷後續該產 Playwright .py 還是 "
+                "Maestro .yaml、要不要 headed browser，避免後面拿錯模板。"
+                "也用來確認專案環境設定正確：QA_PROJECT_ROOT 指對地方、QA_RUNNER 沒拼錯。"
+                "回傳 shape：{active: 'pytest', available: ['pytest', 'jest', ...]}。"
+            ),
             inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
             name="list_tests",
-            description="列出受測專案內所有 Playwright/pytest 測試",
+            description=(
+                "用 runner 的原生 collection 機制列出受測專案內所有可執行測試："
+                "pytest 走 `pytest --collect-only`、Jest 走 `npx jest --listTests`、"
+                "Cypress 走 `cypress/e2e/*.cy.*` glob、Go 走 `go test -list .*`、"
+                "Maestro 走 `*.yaml` 遞迴掃。回傳一份逐行 nodeid / 檔名清單。"
+                "用法：run_tests 前確認 collection 沒漏、generate_test 前避免跟既有 case 重複。"
+            ),
             inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
             name="run_tests",
-            description="執行測試。可用 filter 篩選、選擇 headed 模式與瀏覽器",
+            description=(
+                "在 QA_PROJECT_ROOT 下執行整個 suite（或 filter 過後的子集），寫出 report.json "
+                "+ JUnit XML，並把結果快照進 history/。完成後自動觸發 optimizer 重寫 "
+                "optimization-plan.md。pytest 版自動帶 --screenshot=on / --tracing=on / "
+                "--video=retain-on-failure 抓 artifact；Maestro 版內建自實作 retry wrapper。"
+                "回傳 exit_code + stdout_tail / stderr_tail；接 get_test_report 看摘要、"
+                "接 get_failure_details 看失敗細節。"
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "filter": {
                         "type": "string",
-                        "description": "測試名稱關鍵字（pytest -k）",
+                        "description": (
+                            "選填，測試名稱關鍵字。pytest 走 -k 表達式（支援 and/or/not）、"
+                            "Jest 走 -t、Cypress 走 --spec '**/*<filter>*'、Go 走 -run "
+                            "regex、Maestro 在 flow 檔名作子字串比對。"
+                        ),
                     },
-                    "headed": {"type": "boolean", "default": False},
+                    "headed": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": (
+                            "選填，僅對 pytest-playwright 有效。True 時瀏覽器有 UI 模式跑（適合 debug、"
+                            "看 flake 視覺現象）；預設 headless 跑、CI / 大量套件用這個。"
+                        ),
+                    },
                     "browser": {
                         "type": "string",
                         "enum": ["chromium", "firefox", "webkit"],
                         "default": "chromium",
+                        "description": (
+                            "選填，僅對 pytest-playwright 有效，指定 Playwright 啟用的 browser engine。"
+                            "需事先 `playwright install <browser>` 過。"
+                        ),
                     },
                 },
             },
         ),
         Tool(
             name="run_failed",
-            description="只重跑上次失敗的測試（pytest --lf）",
+            description=(
+                "只重跑上次失敗的測試——比跑整套套件快很多，適合修完一個 bug 後驗證迭代。"
+                "pytest 走 `--lf`（last-failed）、Jest 走 `--onlyFailures`、"
+                "Cypress 解析上次 report.json 的 failures[] 反查 spec 重跑、"
+                "Go 撈失敗的 Test 名組成 regex 餵 -run、Maestro 反查 nodeid 對應 .yaml 重跑。"
+                "需要先有過一次 run_tests（不然 report.json 不存在）。"
+                "回傳 shape 跟 run_tests 一樣，接 get_test_report / get_failure_details 同樣方式檢視。"
+            ),
             inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
             name="get_test_report",
-            description="取得最近一次測試報告的摘要（pass/fail 統計）",
+            description=(
+                "讀上一次 run_tests 留下的 report.json，回傳一個輕量摘要："
+                "total / passed / failed / skipped / flaky_in_run（auto-retry 救回的數量）/ "
+                "duration（秒）。比再跑一次 suite 便宜得多——適合在連續操作中間反覆查狀態。"
+                "未跑過時回 {error: 找不到報告，請先執行 run_tests}。"
+                "拿到摘要後若 failed > 0，接 get_failure_details 拿錯誤細節。"
+            ),
             inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
             name="get_failure_details",
-            description="取得失敗測試的詳細錯誤訊息與 stack trace",
+            description=(
+                "為上次 run_tests 中每個失敗 case 抽出完整錯誤訊息、stack trace、duration、"
+                "step list、以及 artifact 路徑（screenshot / Playwright trace.zip / video / "
+                "Maestro recording）。pytest 版能解析 trace.zip 萃取出真實 step list、"
+                "Maestro 版用 takeScreenshot 命名抓對應截圖。"
+                "用法：run_tests 報告 failed > 0 之後接這個 → 拿到逐 case 詳情 → 給 AI 做 RCA。"
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "test_id": {
                         "type": "string",
-                        "description": "選填，特定 test 的 nodeid 關鍵字",
+                        "description": (
+                            "選填，僅回傳 nodeid 含此關鍵字的 case（substring match，不分大小寫）。"
+                            "省略則回傳全部失敗 case。常用模式：先全部抓→看到特定模式後再用 test_id 收斂。"
+                        ),
                     }
                 },
             },
@@ -82,8 +139,22 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "description": {"type": "string"},
-                    "filename": {"type": "string"},
+                    "description": {
+                        "type": "string",
+                        "description": (
+                            "test 的描述文字。會直接寫成產出 test 函式的 docstring（pytest）"
+                            "或 YAML 開頭註解（Maestro），HTML 報告會用這段當 case 名稱顯示。"
+                            "建議直接傳 analyze_url / analyze_screen 回來的某個 candidate_tc 整段字串。"
+                        ),
+                    },
+                    "filename": {
+                        "type": "string",
+                        "description": (
+                            "輸出檔名，相對於 PROJECT_ROOT。pytest 用 .py、Maestro 用 .yaml、"
+                            "Jest 用 .test.js、Cypress 用 .cy.js、Go 用 _test.go。"
+                            "不可絕對路徑、不可含 `..`（會被 security guardrail 擋）。"
+                        ),
+                    },
                     "url": {
                         "type": "string",
                         "description": "選填，受測 URL；提供後 page.goto 會預填",
@@ -107,26 +178,54 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="codegen",
-            description="啟動 Playwright codegen 錄製操作（會開瀏覽器視窗）",
+            description=(
+                "啟動互動式錄製工具：web runner 打開 Playwright codegen Chromium 視窗、"
+                "錄下你的點擊與輸入、把對應 pytest 程式碼寫進 PROJECT_ROOT/<output>；"
+                "Maestro runner 因為沒有 shell-able codegen，回傳一段提示要你手動跑 `maestro studio`。"
+                "適合「快速建立 happy-path 基準測試」；要結構化 AI 產測請改用 generate_test 或 "
+                "auto_generate_tests。注意：互動式工具會開瀏覽器、不適合在 headless CI 中跑。"
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "url": {"type": "string"},
-                    "output": {"type": "string", "default": "recorded_test.py"},
+                    "url": {
+                        "type": "string",
+                        "description": (
+                            "受測 URL。Playwright codegen 會開瀏覽器 navigate 到此網址、"
+                            "從這頁開始錄製你的互動。"
+                        ),
+                    },
+                    "output": {
+                        "type": "string",
+                        "default": "recorded_test.py",
+                        "description": (
+                            "選填，輸出檔名（相對於 PROJECT_ROOT，不可絕對路徑、不可含 `..`）。"
+                            "預設 `recorded_test.py`。"
+                        ),
+                    },
                 },
                 "required": ["url"],
             },
         ),
         Tool(
             name="generate_html_report",
-            description="把最近一次測試結果渲染成自包含 HTML 報告，儲存至受測專案根目錄",
+            description=(
+                "把最近一次 run_tests 的結果渲染成單檔自包含 HTML——base64 內嵌截圖、"
+                "嵌入式 step list、history sparkline 走勢、折疊的 Passed 區塊、展開的 Failed cards。"
+                "沒外部 CSS/JS 依賴，可以直接寄信、丟靜態 host、貼到 Slack。"
+                "預設輸出 PROJECT_ROOT/report.html。實作位於 reporters/html.py，"
+                "走 sample_report.html 同款設計。"
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "output": {
                         "type": "string",
                         "default": "report.html",
-                        "description": "輸出檔名（相對於 QA_PROJECT_ROOT）",
+                        "description": (
+                            "選填，輸出檔名（相對於 QA_PROJECT_ROOT）。"
+                            "預設 `report.html`。"
+                        ),
                     },
                 },
             },
@@ -134,52 +233,106 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="get_test_history",
             description=(
-                "回傳最近 N 次測試 run 的摘要（時間戳、pass/fail/skipped、duration、pass rate），"
-                "用於檢視 flake 與趨勢。"
+                "遍歷 test-results/history/*.json 快照（每次 run_tests 完會自動歸檔），"
+                "回傳逐次摘要：timestamp / total / passed / failed / skipped / "
+                "duration / pass_rate(0-100)。用於 flake 分析（『這條測試上週一直 fail 嗎』）、"
+                "速度退化分析（『duration 是不是越來越長』）、覆蓋趨勢圖。"
+                "預設回最近 10 次，limit 可調 1-100。"
+                "想要可執行行動建議的話接 get_optimization_plan，它已綜合 history + telemetry。"
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "limit": {"type": "integer", "default": 10, "minimum": 1, "maximum": 100},
+                    "limit": {
+                        "type": "integer",
+                        "default": 10,
+                        "minimum": 1,
+                        "maximum": 100,
+                        "description": (
+                            "選填，回最近 N 次 run 的摘要。"
+                            "1-100，預設 10。長期 flake 分析建議 30+。"
+                        ),
+                    },
                 },
             },
         ),
         Tool(
             name="get_optimization_plan",
             description=(
-                "綜合 run history、telemetry、analyze_url 紀錄，產出三層自我強化分析："
-                "(1) 測試套件品質：flake / broken / slow_regression / stable_passing；"
-                "(2) MCP 使用模式：高頻 tool、重複呼叫、錯誤率、常見鏈；"
-                "(3) AI 產測效益：generate_test 採用率、analyze_url 覆蓋缺口。"
-                "回傳 JSON 並同步寫成 optimization-plan.md。"
+                "綜合 history/ 快照、telemetry tool-usage、analyze_url 偵測過的 modules，"
+                "產出三層自我強化分析："
+                "(1) 測試套件品質：每條 test 算 outcomes 字串（PFPFP 那種）→ flake_score、"
+                "再對失敗 error signature 做指紋比對，連 3 次相同 signature 升級為 broken，"
+                "duration 退化超 1.5x 標記 slow_regression，否則 stable_passing；"
+                "(2) MCP 使用模式：top tool、重複 args、錯誤率、常見呼叫鏈（A→B 共現）；"
+                "(3) AI 產測效益：generate_test 寫的 test 有沒有出現在下一次 run、"
+                "analyze_url 偵測到的 module 對不對得到 test 檔（採用率 vs 覆蓋缺口）。"
+                "回傳結構化 JSON 並同步寫進 PROJECT_ROOT/optimization-plan.md。"
+                "每次 run_tests 結束會自動 trigger 一次、所以這個 tool 用來「即時讀」結果。"
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "history_limit": {"type": "integer", "default": 10, "minimum": 1, "maximum": 100},
-                    "telemetry_limit": {"type": "integer", "default": 500, "minimum": 10, "maximum": 5000},
+                    "history_limit": {
+                        "type": "integer",
+                        "default": 10,
+                        "minimum": 1,
+                        "maximum": 100,
+                        "description": (
+                            "選填，套件品質分析會看最近 N 次 history 快照。"
+                            "1-100，預設 10。flake score 至少要 5 次以上才穩，"
+                            "深度分析建議 30+。"
+                        ),
+                    },
+                    "telemetry_limit": {
+                        "type": "integer",
+                        "default": 500,
+                        "minimum": 10,
+                        "maximum": 5000,
+                        "description": (
+                            "選填，MCP 使用模式分析會看 telemetry 最近 N 筆 tool-call。"
+                            "10-5000，預設 500。長期使用模式分析拉到 2000+，"
+                            "近期問題排查 100-200 就夠。"
+                        ),
+                    },
                 },
             },
         ),
         Tool(
             name="analyze_url",
             description=(
-                "開啟網頁、自動拆解可測模塊（form / nav / dialog / labeled section / CTA），"
-                "並為每個模塊提出候選 TC 清單。給 AI 編輯器作為設計測試的素材，"
-                "後續可餵給 generate_test 寫骨架。"
+                "開啟網頁（headless Chromium）並做四件事："
+                "(1) DOM probe 拆解 form / nav / dialog / labeled section / CTA 五種可測模塊，"
+                "每個模塊附 selectors + candidate_tcs（自動產生的測試案例文字）；"
+                "(2) 記錄載入過程中所有 fetch/XHR endpoints 給 backend coverage 參考；"
+                "(3) 偵測 visible-but-overflowing 元素（跑版警告，閾值 hor>2px / ver>10px）；"
+                "(4) 回傳 page_title + scanned_at timestamp。"
+                "結果 shape 跟 analyze_screen 一致，所以下游 generate_test 可以 module-driven 模式統一處理。"
+                "若頁面需登入，用 auth_cookie 注入。"
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "url": {"type": "string", "description": "要分析的網頁 URL"},
+                    "url": {
+                        "type": "string",
+                        "description": "要分析的網頁 URL，需含 protocol（http:// 或 https://）。",
+                    },
                     "timeout_ms": {
                         "type": "integer",
                         "default": 15000,
-                        "description": "page.goto 的逾時毫秒數",
+                        "description": (
+                            "選填，page.goto 等待 DOMContentLoaded 的逾時毫秒數。"
+                            "之後額外 wait 5 秒讓 networkidle（XHR 載入）穩定。"
+                            "預設 15000。慢站 / 需要 SSR / 重 JS hydration 的網站可拉到 30000+。"
+                        ),
                     },
                     "auth_cookie": {
                         "type": "string",
-                        "description": "選填，預先注入登入 cookie，格式：name1=value1; name2=value2",
+                        "description": (
+                            "選填，預先注入登入 cookie，格式：`name1=value1; name2=value2`（一行 cookie header）。"
+                            "用法：先在瀏覽器 DevTools / Application / Cookies 複製值再貼進來。"
+                            "用於分析需要登入後才看得到的頁面。"
+                        ),
                     },
                 },
                 "required": ["url"],
@@ -188,24 +341,42 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="analyze_screen",
             description=(
-                "Mobile 版的 analyze_url：dump 當前 iOS Simulator / Android Emulator / 真機"
-                "前景 app 的 screen hierarchy（透過 `maestro hierarchy`）並轉成可測 modules"
-                "（inputs / CTAs / tab bar）+ candidate TCs。需 Maestro CLI 已裝、且裝置 booted、app 在前景。"
-                "若提供 app_id + launch_app=true 會先啟動該 app。"
+                "Mobile 版的 analyze_url：透過 `maestro hierarchy` dump 當前 iOS Simulator / "
+                "Android Emulator / 實體機 / BlueStacks（透過 QA_ANDROID_HOST）前景 app 的 view tree，"
+                "再分類成 form（具 hint_text 的輸入欄位）、cta（enabled + 有文字的可點元件）、"
+                "tab_bar（selected 狀態 + 同 y 對齊的 2+ 個 tab）三種 modules 並附 candidate_tcs。"
+                "內建 noise filter 自動排除 iOS 狀態列 + asset 命名標籤（bg_* / *_filled / 純數字 / "
+                "單一 ASCII 字元等）讓結果信號集中。需 Maestro CLI 已裝、裝置 booted、app 已在前景。"
+                "若給 app_id + launch_app=true，會先用 launchApp 啟動再 dump。"
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "app_id": {
                         "type": "string",
-                        "description": "選填，bundle id / package name（如 com.example.app）",
+                        "description": (
+                            "選填，bundle id (iOS) / package name (Android)，"
+                            "格式如 `com.example.app`。搭配 launch_app=true 使用，"
+                            "或為了在輸出標註是分析哪個 app。"
+                        ),
                     },
                     "launch_app": {
                         "type": "boolean",
                         "default": False,
-                        "description": "搭配 app_id 使用：true 時 dump 前先 launchApp",
+                        "description": (
+                            "搭配 app_id：True 時在 hierarchy dump 前用 maestro launchApp 啟動 app。"
+                            "用 clearState: false（保留 app 狀態），確保看到「真實」起始畫面。"
+                            "省略則假設裝置上 app 已是當前前景。"
+                        ),
                     },
-                    "timeout_ms": {"type": "integer", "default": 30000},
+                    "timeout_ms": {
+                        "type": "integer",
+                        "default": 30000,
+                        "description": (
+                            "選填，hierarchy 命令超時毫秒。預設 30000；"
+                            "BlueStacks / 遠端 ADB 較慢，QA_ANDROID_HOST 有設時會自動拉到 60000 起跳。"
+                        ),
+                    },
                 },
             },
         ),
@@ -216,6 +387,8 @@ async def list_tools() -> list[Tool]:
                 "含業務規則 / 歷史 Bug / 標準斷言文字 / User Journeys / 技術約束 5 個 H2 區段，"
                 "每段都有 TODO 提示。Idempotent：檔已存在不會覆蓋（除非 overwrite=true）。"
                 "新用戶建議第一次跑 MCP 就先 call 一次。"
+                "這份檔案後續會被 get_qa_context 讀、做為 business_context 傳進 generate_test，"
+                "讓 AI 寫出有業務邏輯的測試（而不是泛例 monkey testing）。"
             ),
             inputSchema={
                 "type": "object",
@@ -235,6 +408,8 @@ async def list_tools() -> list[Tool]:
                 "User Journeys 等領域知識），用 ## H2 區段拆分。"
                 "用法：先 call 拿到整份或指定 section，再把相關段落以 business_context "
                 "傳給 generate_test，產出的 test 就會自帶業務知識註解 — 跳脫 monkey testing。"
+                "若檔案不存在會 fallback 到內建的 ISTQB 七大原則 + 等價分割 + 邊界值 + 決策表 + "
+                "狀態轉換 + Mobile checklist 通用知識，先用著也可以；之後跑 init_qa_knowledge 建立專案專屬版本。"
             ),
             inputSchema={
                 "type": "object",
@@ -252,27 +427,46 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="auto_generate_tests",
             description=(
-                "一鍵交付：分析 URL → 為每個偵測到的模塊用其 candidate_tcs 自動產出對應 pytest 測試。"
-                "等同於『analyze_url → 對每個 module 連跑 generate_test』，"
-                "適合『給 URL、其他自動』的快速覆蓋場景。"
-                "每條 candidate_tc 會變成對應 test 的 docstring，"
-                "之後 run_tests 跑完、HTML 報告就會用這些 docstring 當 case 名稱。"
+                "一鍵交付：在內部依序做 analyze_url → 為每個偵測到的 module 用 candidate_tcs 內容"
+                "各跑一次 generate_test，把整套 pytest 測試骨架寫進 PROJECT_ROOT/tests/。"
+                "等同於『analyze_url 後對每個 module 手動跑 N 次 generate_test』的自動化版本，"
+                "適合「給我一個 URL、其他你看著辦」這種快速覆蓋場景。每條 candidate_tc 變成對應"
+                " test 函式的 docstring，run_tests 跑完 HTML 報告會用 docstring 當 case 名稱顯示。"
+                "回傳產生的檔案路徑列表 + 每個 module 對應幾個 test。預設每個 module 1 條，"
+                "想要更密的覆蓋拉 tests_per_module。"
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "url": {"type": "string", "description": "要分析並產測的 URL"},
-                    "timeout_ms": {"type": "integer", "default": 15000},
+                    "url": {
+                        "type": "string",
+                        "description": "要分析並批次產測的 URL，需含 protocol（http:// 或 https://）。",
+                    },
+                    "timeout_ms": {
+                        "type": "integer",
+                        "default": 15000,
+                        "description": (
+                            "選填，analyze_url 內部 page.goto 等 DOMContentLoaded 的逾時毫秒。"
+                            "預設 15000，慢站可拉到 30000+。"
+                        ),
+                    },
                     "auth_cookie": {
                         "type": "string",
-                        "description": "選填，登入 cookie，格式：name1=value1; name2=value2",
+                        "description": (
+                            "選填，登入後分析所需 cookie，格式：`name1=value1; name2=value2`。"
+                            "從 DevTools / Application / Cookies 抓現成值貼進來。"
+                        ),
                     },
                     "tests_per_module": {
                         "type": "integer",
                         "default": 1,
                         "minimum": 1,
                         "maximum": 10,
-                        "description": "每個模塊從 candidate_tcs 取前 N 條各產一條 test（預設 1）",
+                        "description": (
+                            "選填，每個 module 從 candidate_tcs 取前 N 條各產一條 test。"
+                            "1-10，預設 1（最少噪音）。想要更密的覆蓋拉 3-5；"
+                            "拉到 10 通常會產 garbage tests，因為 candidate_tcs 後段是泛例。"
+                        ),
                     },
                 },
                 "required": ["url"],
