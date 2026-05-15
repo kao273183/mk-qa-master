@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/logo.png" alt="mcp-test-runner logo" width="180" />
+  <img src="assets/logo.png" alt="mk-qa-master logo" width="180" />
 </p>
 
-<h1 align="center">MCP Test Runner</h1>
+<h1 align="center">MK QA Master</h1>
 
 <p align="center">
   <em>AI 測試大師 — your AI QA loop, from analyze to advise.</em>
@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/mcp-test-runner/"><img src="https://img.shields.io/pypi/v/mcp-test-runner.svg?logo=pypi&logoColor=white&color=3775A9" alt="PyPI" /></a>
+  <a href="https://pypi.org/project/mk-qa-master/"><img src="https://img.shields.io/pypi/v/mk-qa-master.svg?logo=pypi&logoColor=white&color=3775A9" alt="PyPI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
   <a href="https://www.buymeacoffee.com/minikao"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-FFDD00?logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee" /></a>
 </p>
@@ -68,26 +68,26 @@ Two paths — pick the one that matches how you'll use it.
 
 ### A. Run via `uvx` (zero install, recommended for end users)
 
-Add `mcp-test-runner` to your client config without installing anything globally; [`uv`](https://docs.astral.sh/uv/) fetches and runs it in an ephemeral environment per session:
+Add `mk-qa-master` to your client config without installing anything globally; [`uv`](https://docs.astral.sh/uv/) fetches and runs it in an ephemeral environment per session:
 
 ```json
 {
   "mcpServers": {
-    "mcp-test-runner": {
+    "mk-qa-master": {
       "command": "uvx",
-      "args": ["mcp-test-runner"],
+      "args": ["mk-qa-master"],
       "env": { "QA_RUNNER": "pytest", "QA_PROJECT_ROOT": "/path/to/your-test-project" }
     }
   }
 }
 ```
 
-That's the whole setup. First call downloads the package; subsequent calls are cached. Switching versions: `uvx mcp-test-runner@0.4.1 ...`.
+That's the whole setup. First call downloads the package; subsequent calls are cached. Switching versions: `uvx mk-qa-master@0.4.1 ...`.
 
 ### B. Install into a project venv (for contributors / hacking)
 
 ```bash
-pip install mcp-test-runner       # or: pip install -e . from a clone
+pip install mk-qa-master       # or: pip install -e . from a clone
 playwright install                # only if you use pytest-playwright
 pip install pytest-rerunfailures  # optional, enables auto-retry
 ```
@@ -96,7 +96,7 @@ Then point your client config at the same Python interpreter:
 
 ```json
 "command": "/path/to/.venv/bin/python",
-"args": ["-m", "mcp_test_runner.server"]
+"args": ["-m", "mk_qa_master.server"]
 ```
 
 ### Runner-specific prerequisites
@@ -171,11 +171,11 @@ Example configs ship in the repo:
 
 Codex (TOML):
 ```toml
-[mcp_servers.mcp-test-runner]
+[mcp_servers.mk-qa-master]
 command = "/path/to/.venv/bin/python"
-args = ["-m", "mcp_test_runner.server"]
-cwd = "/path/to/mcp-test-runner"
-[mcp_servers.mcp-test-runner.env]
+args = ["-m", "mk_qa_master.server"]
+cwd = "/path/to/mk-qa-master"
+[mcp_servers.mk-qa-master.env]
 QA_RUNNER = "pytest"
 QA_PROJECT_ROOT = "/path/to/your-test-project"
 ```
@@ -184,10 +184,10 @@ Gemini (JSON, same shape as Claude Desktop):
 ```json
 {
   "mcpServers": {
-    "mcp-test-runner": {
+    "mk-qa-master": {
       "command": "/path/to/.venv/bin/python",
-      "args": ["-m", "mcp_test_runner.server"],
-      "cwd": "/path/to/mcp-test-runner",
+      "args": ["-m", "mk_qa_master.server"],
+      "cwd": "/path/to/mk-qa-master",
       "env": {
         "QA_RUNNER": "pytest",
         "QA_PROJECT_ROOT": "/path/to/your-test-project"
@@ -257,9 +257,9 @@ can chain into the next tool call.
 ## Project layout
 
 ```
-mcp-test-runner/
+mk-qa-master/
 ├── pyproject.toml
-├── src/mcp_test_runner/
+├── src/mk_qa_master/
 │   ├── server.py            # MCP entry (tool routing + telemetry wrap)
 │   ├── config.py            # Paths + env vars
 │   ├── runners/             # Per-framework plugins
@@ -278,7 +278,7 @@ mcp-test-runner/
 
 ## Adding a runner
 
-1. Create `src/mcp_test_runner/runners/your_runner.py`, subclass `TestRunner`,
+1. Create `src/mk_qa_master/runners/your_runner.py`, subclass `TestRunner`,
    implement the abstract methods
 2. Register the name in `runners/__init__.py`'s `REGISTRY`
 3. Done
@@ -524,7 +524,7 @@ _Based on 6 archived runs._
 
 ### HTML report
 
-[**Open the live rendered demo →**](https://kao273183.github.io/mcp-test-runner/sample_report.html)
+[**Open the live rendered demo →**](https://kao273183.github.io/mk-qa-master/sample_report.html)
 (served via GitHub Pages — clicking the link in GitHub's UI to
 [`sample_report.html`](sample_report.html) would only show source).
 
@@ -535,7 +535,7 @@ screenshots + step lists, and the collapsed Passed section.
 
 ## Integrations
 
-`mcp-test-runner` doesn't bundle third-party SDKs — it stays a pure
+`mk-qa-master` doesn't bundle third-party SDKs — it stays a pure
 test-execution + analysis layer. Real QA workflows are composed by
 running multiple MCP servers side-by-side in the same client config;
 **Claude orchestrates the chain across servers**. There's no MCP-to-MCP
@@ -555,12 +555,12 @@ The pairings below are the ones that complete the loop most often:
 
 ### Composing in your client config
 
-All five run as separate processes alongside `mcp-test-runner`:
+All five run as separate processes alongside `mk-qa-master`:
 
 ```json
 {
   "mcpServers": {
-    "mcp-test-runner": { "command": "python", "args": ["-m", "mcp_test_runner.server"], "env": { "QA_RUNNER": "maestro" } },
+    "mk-qa-master": { "command": "python", "args": ["-m", "mk_qa_master.server"], "env": { "QA_RUNNER": "maestro" } },
     "atlassian":       { "command": "npx", "args": ["-y", "@atlassian/mcp"] },
     "slack":           { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-slack"] },
     "github":          { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"] }
@@ -572,13 +572,13 @@ Then a single prompt walks the chain:
 
 > "Run the checkout suite. For each failure, open a JIRA in project QA with the RIDER format and the screenshot attached. Post the HTML report to #qa-bots when done."
 
-Why this matters: `mcp-test-runner` stays focused on the test loop
+Why this matters: `mk-qa-master` stays focused on the test loop
 (analyze → generate → run → coach). JIRA / Slack / Sentry are entire
 domains with their own dedicated servers — bolting them into this one
 would dilute the scope, duplicate auth handling, and force every user
 to inherit dependencies they may not want.
 
-本 repo 不打包任何第三方 SDK——維持「測試執行 + 分析」單一職責。實務上 QA 工作流是**多個 MCP server 並存、由 Claude 編排跨 server 的 tool chain**達成的。範例配套：JIRA / Slack / GitHub / Sentry / Filesystem 各自獨立 MCP server，配上 `mcp-test-runner` 拼出完整測試管線。
+本 repo 不打包任何第三方 SDK——維持「測試執行 + 分析」單一職責。實務上 QA 工作流是**多個 MCP server 並存、由 Claude 編排跨 server 的 tool chain**達成的。範例配套：JIRA / Slack / GitHub / Sentry / Filesystem 各自獨立 MCP server，配上 `mk-qa-master` 拼出完整測試管線。
 
 ---
 
@@ -600,7 +600,7 @@ One-time PyPI setup (must be done once before the first publish works):
 - Sign in at https://pypi.org → enable 2FA.
 - Project page → *Settings → Publishing* → add a **pending publisher** with:
   - Owner: `kao273183`
-  - Repository: `mcp-test-runner`
+  - Repository: `mk-qa-master`
   - Workflow filename: `publish.yml`
   - Environment name: `pypi`
 
@@ -612,7 +612,7 @@ The workflow refuses to publish if the release tag doesn't match `pyproject.vers
 
 ## Support the project ☕
 
-`mcp-test-runner` is built and maintained solo on nights and weekends. If it saved you time or shaped how your team thinks about AI-driven QA, a coffee keeps the late-night Maestro debugging sessions going:
+`mk-qa-master` is built and maintained solo on nights and weekends. If it saved you time or shaped how your team thinks about AI-driven QA, a coffee keeps the late-night Maestro debugging sessions going:
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buy-me-a-coffee&logoColor=black&style=for-the-badge)](https://www.buymeacoffee.com/minikao)
 
@@ -624,7 +624,7 @@ No ads, no sponsorships, no enterprise upsell — just the work.
 
 ## Contributing
 
-This repo is **maintained solo**. Ideas and bug reports are very welcome — please open an [Issue](https://github.com/kao273183/mcp-test-runner/issues/new/choose) or start a [Discussion](https://github.com/kao273183/mcp-test-runner/discussions). I read every one and will implement what fits the project's direction.
+This repo is **maintained solo**. Ideas and bug reports are very welcome — please open an [Issue](https://github.com/kao273183/mk-qa-master/issues/new/choose) or start a [Discussion](https://github.com/kao273183/mk-qa-master/discussions). I read every one and will implement what fits the project's direction.
 
 **External pull requests are auto-closed.** Not because contributions aren't appreciated, but because keeping the codebase coherent under a single voice matters more here than the throughput a multi-contributor model would bring. If you really want a specific change, an Issue describing the problem gets you further than a PR.
 

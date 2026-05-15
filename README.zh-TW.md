@@ -2,7 +2,7 @@
   <img src="assets/logo.png" alt="AI 測試大師 logo" width="180" />
 </p>
 
-<h1 align="center">AI 測試大師 ｜ MCP Test Runner</h1>
+<h1 align="center">AI 測試大師 ｜ MK QA Master</h1>
 
 <p align="center">
   <em>你的 AI QA 全鏈路工具 — 分析、生成、執行、給建議。</em>
@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/mcp-test-runner/"><img src="https://img.shields.io/pypi/v/mcp-test-runner.svg?logo=pypi&logoColor=white&color=3775A9" alt="PyPI" /></a>
+  <a href="https://pypi.org/project/mk-qa-master/"><img src="https://img.shields.io/pypi/v/mk-qa-master.svg?logo=pypi&logoColor=white&color=3775A9" alt="PyPI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
   <a href="https://www.buymeacoffee.com/minikao"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-FFDD00?logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee" /></a>
 </p>
@@ -54,26 +54,26 @@
 
 ### A. 用 `uvx` 跑（零安裝，推薦給一般使用者）
 
-在 client config 加 `mcp-test-runner`，不用全域裝任何東西；[`uv`](https://docs.astral.sh/uv/) 會每次幫你抓並在隔離環境跑：
+在 client config 加 `mk-qa-master`，不用全域裝任何東西；[`uv`](https://docs.astral.sh/uv/) 會每次幫你抓並在隔離環境跑：
 
 ```json
 {
   "mcpServers": {
-    "mcp-test-runner": {
+    "mk-qa-master": {
       "command": "uvx",
-      "args": ["mcp-test-runner"],
+      "args": ["mk-qa-master"],
       "env": { "QA_RUNNER": "pytest", "QA_PROJECT_ROOT": "/path/to/your-test-project" }
     }
   }
 }
 ```
 
-整個設定就這樣。第一次呼叫會下載，後續走 cache。要指定版本：`uvx mcp-test-runner@0.4.1 ...`。
+整個設定就這樣。第一次呼叫會下載，後續走 cache。要指定版本：`uvx mk-qa-master@0.4.1 ...`。
 
 ### B. 裝進自己的 venv（給貢獻者 / 想 hack 的人）
 
 ```bash
-pip install mcp-test-runner       # 或 git clone 後 pip install -e .
+pip install mk-qa-master       # 或 git clone 後 pip install -e .
 playwright install                # pytest-playwright 才需要
 pip install pytest-rerunfailures  # 選用，啟用自動 retry
 ```
@@ -82,7 +82,7 @@ client config 指向同一個 Python：
 
 ```json
 "command": "/path/to/.venv/bin/python",
-"args": ["-m", "mcp_test_runner.server"]
+"args": ["-m", "mk_qa_master.server"]
 ```
 
 ### 各 runner 的先決條件
@@ -154,11 +154,11 @@ Repo 內附三份範例：
 
 **Codex（TOML）**：
 ```toml
-[mcp_servers.mcp-test-runner]
+[mcp_servers.mk-qa-master]
 command = "/path/to/.venv/bin/python"
-args = ["-m", "mcp_test_runner.server"]
-cwd = "/path/to/mcp-test-runner"
-[mcp_servers.mcp-test-runner.env]
+args = ["-m", "mk_qa_master.server"]
+cwd = "/path/to/mk-qa-master"
+[mcp_servers.mk-qa-master.env]
 QA_RUNNER = "pytest"
 QA_PROJECT_ROOT = "/path/to/your-test-project"
 ```
@@ -167,10 +167,10 @@ QA_PROJECT_ROOT = "/path/to/your-test-project"
 ```json
 {
   "mcpServers": {
-    "mcp-test-runner": {
+    "mk-qa-master": {
       "command": "/path/to/.venv/bin/python",
-      "args": ["-m", "mcp_test_runner.server"],
-      "cwd": "/path/to/mcp-test-runner",
+      "args": ["-m", "mk_qa_master.server"],
+      "cwd": "/path/to/mk-qa-master",
       "env": {
         "QA_RUNNER": "pytest",
         "QA_PROJECT_ROOT": "/path/to/your-test-project"
@@ -233,9 +233,9 @@ QA_PROJECT_ROOT = "/path/to/your-test-project"
 ## 專案結構
 
 ```
-mcp-test-runner/
+mk-qa-master/
 ├── pyproject.toml
-├── src/mcp_test_runner/
+├── src/mk_qa_master/
 │   ├── server.py            # MCP 入口（tool 路由 + telemetry 包裝）
 │   ├── config.py            # 路徑與環境變數
 │   ├── runners/             # 各框架的 plugin
@@ -254,7 +254,7 @@ mcp-test-runner/
 
 ## 新增一個 runner
 
-1. 在 `src/mcp_test_runner/runners/` 新增 `your_runner.py`，繼承 `TestRunner`，實作必要的 abstract method
+1. 在 `src/mk_qa_master/runners/` 新增 `your_runner.py`，繼承 `TestRunner`，實作必要的 abstract method
 2. 在 `runners/__init__.py` 的 `REGISTRY` 註冊名稱
 3. 完成 ✅
 
@@ -475,7 +475,7 @@ _Based on 6 archived runs._
 
 ### HTML 報告
 
-[**直接看實際渲染 →**](https://kao273183.github.io/mcp-test-runner/sample_report.html)
+[**直接看實際渲染 →**](https://kao273183.github.io/mk-qa-master/sample_report.html)
 （透過 GitHub Pages；點 GitHub UI 裡的 [`sample_report.html`](sample_report.html) 只會看到原始碼）。
 
 實際渲染內容含統計卡、Trend sparkline、失敗卡片（嵌入截圖 + step list）、折疊的 Passed 區塊。
@@ -484,7 +484,7 @@ _Based on 6 archived runs._
 
 ## 配套整合（Integrations）
 
-`mcp-test-runner` **不打包**任何第三方 SDK——保持「測試執行 + 分析」單一職責。實務上 QA 工作流是**多個 MCP server 並存**、由 Claude 自動編排跨 server 的 tool chain 達成的。MCP 協議本身沒有 server-to-server RPC，每個 server 互不知曉彼此存在，AI client 才是指揮。
+`mk-qa-master` **不打包**任何第三方 SDK——保持「測試執行 + 分析」單一職責。實務上 QA 工作流是**多個 MCP server 並存**、由 Claude 自動編排跨 server 的 tool chain 達成的。MCP 協議本身沒有 server-to-server RPC，每個 server 互不知曉彼此存在，AI client 才是指揮。
 
 最常見的配套：
 
@@ -505,7 +505,7 @@ _Based on 6 archived runs._
 ```json
 {
   "mcpServers": {
-    "mcp-test-runner": { "command": "python", "args": ["-m", "mcp_test_runner.server"], "env": { "QA_RUNNER": "maestro" } },
+    "mk-qa-master": { "command": "python", "args": ["-m", "mk_qa_master.server"], "env": { "QA_RUNNER": "maestro" } },
     "atlassian":       { "command": "npx", "args": ["-y", "@atlassian/mcp"] },
     "slack":           { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-slack"] },
     "github":          { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"] }
@@ -517,13 +517,13 @@ _Based on 6 archived runs._
 
 > 「跑 checkout suite。失敗的每條開 JIRA 到 QA project、用 RIDER 格式、附 screenshot。跑完把 HTML 報告貼到 #qa-bots。」
 
-為什麼這樣設計：`mcp-test-runner` 專注做「測試這個迴圈」（analyze → generate → run → coach）。JIRA / Slack / Sentry 各自有專業 server 維護，硬塞進這個 repo 只會稀釋焦點、重複處理 auth、強迫所有使用者繼承不需要的依賴。
+為什麼這樣設計：`mk-qa-master` 專注做「測試這個迴圈」（analyze → generate → run → coach）。JIRA / Slack / Sentry 各自有專業 server 維護，硬塞進這個 repo 只會稀釋焦點、重複處理 auth、強迫所有使用者繼承不需要的依賴。
 
 ---
 
 ## 支持這個專案 ☕
 
-`mcp-test-runner` 是我一人在下班和週末維護的。如果它幫你省了時間，或改變了你們團隊看 AI-driven QA 的方式，一杯咖啡能讓凌晨 debug Maestro 的夜晚撐下去：
+`mk-qa-master` 是我一人在下班和週末維護的。如果它幫你省了時間，或改變了你們團隊看 AI-driven QA 的方式，一杯咖啡能讓凌晨 debug Maestro 的夜晚撐下去：
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buy-me-a-coffee&logoColor=black&style=for-the-badge)](https://www.buymeacoffee.com/minikao)
 

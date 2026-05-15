@@ -2,11 +2,11 @@
 # Location: ~/.codex/config.toml
 # Docs: https://github.com/openai/codex (MCP server section)
 
-[mcp_servers.mcp-test-runner]
+[mcp_servers.mk-qa-master]
 command = "uvx"
-args = ["mcp-test-runner"]
+args = ["mk-qa-master"]
 
-[mcp_servers.mcp-test-runner.env]
+[mcp_servers.mk-qa-master.env]
 QA_RUNNER = "pytest"
 QA_PROJECT_ROOT = "/absolute/path/to/your-test-project"
 

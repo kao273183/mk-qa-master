@@ -12,7 +12,7 @@
 >
 > | 元件 | 提供什麼 | 哪裡 |
 > |---|---|---|
-> | **內建方法論**（ISTQB / 邊界值 / 測試金字塔 / 回歸 / Mobile / Metrics） | 「**怎麼測**」的業界標準觀念 | mcp-test-runner 內建、`get_qa_context` 自動含 |
+> | **內建方法論**（ISTQB / 邊界值 / 測試金字塔 / 回歸 / Mobile / Metrics） | 「**怎麼測**」的業界標準觀念 | mk-qa-master 內建、`get_qa_context` 自動含 |
 > | **領域知識**（業務規則 / 歷史 Bug / 標準斷言文字 / Journeys / 技術約束） | 「**測什麼**」的專案專屬知識 | 你的 `qa-knowledge.md`（本檔示範填法） |
 >
 > ## 怎麼用這份範例

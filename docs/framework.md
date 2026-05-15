@@ -55,13 +55,13 @@ MCP 三大原語在 QA 場景的對應：
 ## 專案結構
 
 ```
-mcp-test-runner/
+mk-qa-master/
 ├── pyproject.toml
 ├── README.md
 ├── docs/                              # framework.md, qa-knowledge.example.md
 ├── examples/configs/                  # client config examples
 ├── src/
-│   └── mcp_test_runner/
+│   └── mk_qa_master/
 │       ├── __init__.py
 │       ├── server.py            # MCP 入口
 │       ├── config.py            # 設定（受測專案路徑等）
@@ -86,7 +86,7 @@ mcp-test-runner/
 
 ```toml
 [project]
-name = "mcp-test-runner"
+name = "mk-qa-master"
 version = "0.1.0"
 description = "QA Test Automation MCP Server"
 requires-python = ">=3.10"
@@ -99,7 +99,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mcp-test-runner = "mcp_test_runner.server:run"
+mk-qa-master = "mk_qa_master.server:run"
 
 [build-system]
 requires = ["hatchling"]
@@ -108,7 +108,7 @@ build-backend = "hatchling.build"
 
 ---
 
-### `src/mcp_test_runner/config.py`
+### `src/mk_qa_master/config.py`
 
 ```python
 from pathlib import Path
@@ -124,7 +124,7 @@ ARTIFACTS_DIR = PROJECT_ROOT / "test-results"
 
 ---
 
-### `src/mcp_test_runner/tools/runner.py`
+### `src/mk_qa_master/tools/runner.py`
 
 ```python
 import subprocess
@@ -181,7 +181,7 @@ def run_failed() -> dict:
 
 ---
 
-### `src/mcp_test_runner/tools/reporter.py`
+### `src/mk_qa_master/tools/reporter.py`
 
 ```python
 import json
@@ -223,7 +223,7 @@ def get_failure_details(test_id: str | None = None) -> list[dict]:
 
 ---
 
-### `src/mcp_test_runner/tools/generator.py`
+### `src/mk_qa_master/tools/generator.py`
 
 ```python
 from pathlib import Path
@@ -271,7 +271,7 @@ def codegen(url: str, output: str = "recorded_test.py") -> str:
 
 ---
 
-### `src/mcp_test_runner/server.py`
+### `src/mk_qa_master/server.py`
 
 ```python
 import asyncio
@@ -282,7 +282,7 @@ from mcp.types import Tool, TextContent
 
 from .tools import runner, reporter, generator
 
-app = Server("mcp-test-runner")
+app = Server("mk-qa-master")
 
 
 @app.list_tools()
@@ -456,7 +456,7 @@ def test_link_visible(page: Page):
 
 ```bash
 # 建立專案
-mkdir mcp-test-runner && cd mcp-test-runner
+mkdir mk-qa-master && cd mk-qa-master
 
 # 建立虛擬環境
 python -m venv .venv
@@ -477,19 +477,19 @@ playwright install
 ```json
 {
   "mcpServers": {
-    "mcp-test-runner": {
+    "mk-qa-master": {
       "command": "python",
-      "args": ["-m", "mcp_test_runner.server"],
-      "cwd": "/absolute/path/to/mcp-test-runner",
+      "args": ["-m", "mk_qa_master.server"],
+      "cwd": "/absolute/path/to/mk-qa-master",
       "env": {
-        "QA_PROJECT_ROOT": "/absolute/path/to/mcp-test-runner/tests_project"
+        "QA_PROJECT_ROOT": "/absolute/path/to/mk-qa-master/tests_project"
       }
     }
   }
 }
 ```
 
-重啟 Claude Desktop，左下角應該看到 `mcp-test-runner` 的工具圖示。
+重啟 Claude Desktop，左下角應該看到 `mk-qa-master` 的工具圖示。
 
 ---
 

@@ -1,5 +1,5 @@
 name: Bug report
-description: Something broken or behaving unexpectedly in mcp-test-runner.
+description: Something broken or behaving unexpectedly in mk-qa-master.
 title: "[Bug] "
 labels: ["bug"]
 body:

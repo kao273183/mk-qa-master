@@ -1,9 +1,9 @@
-# MCP test runner container — built primarily so Glama (and any other MCP
+# MK QA Master container — built primarily so Glama (and any other MCP
 # catalog that introspects servers in a sandbox) can boot the server,
 # send `initialize` + `tools/list` over stdio, and confirm a clean
 # JSON-RPC response.
 #
-# Day-to-day use stays `uvx mcp-test-runner` on the host: real test runs
+# Day-to-day use stays `uvx mk-qa-master` on the host: real test runs
 # need access to the user's project files, browsers, simulators, etc.
 # that live outside any sane container. This image is deliberately
 # minimal — enough to answer introspection, not enough to actually run
@@ -27,4 +27,4 @@ ENV QA_RUNNER=pytest \
     PYTHONUNBUFFERED=1
 
 WORKDIR /tmp/qa-project
-ENTRYPOINT ["python", "-m", "mcp_test_runner.server"]
+ENTRYPOINT ["python", "-m", "mk_qa_master.server"]

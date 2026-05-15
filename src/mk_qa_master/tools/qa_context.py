@@ -296,7 +296,7 @@ _DOMAIN_TODO_SECTIONS = """## 你的業務規則
 
 _BUILTIN_DEFAULTS = (
     "# QA Knowledge — Universal Testing Methodology (built-in fallback)\n\n"
-    "> 這份是 mcp-test-runner 內建的通用 QA 方法論，整理自 ISTQB / Google 測試金字塔 / 業界 mobile QA 標準。\n"
+    "> 這份是 mk-qa-master 內建的通用 QA 方法論，整理自 ISTQB / Google 測試金字塔 / 業界 mobile QA 標準。\n"
     "> 任何測試專案都可以套用 — **但缺少你的領域知識**（業務規則 / 回歸點 / 標準文案）\n"
     "> 就還是會偏向 monkey testing。解法：執行 init_qa_knowledge tool，\n"
     "> 在受測專案根產生 qa-knowledge.md、把下面五個「你的 XXX」TODO 區段填上你的領域內容。\n\n"
@@ -308,12 +308,12 @@ _BUILTIN_DEFAULTS = (
 
 _STARTER_TEMPLATE = (
     "# QA Knowledge — {project_name}\n\n"
-    "> 給 mcp-test-runner 讀的領域知識。get_qa_context() 會把這份內容暴露給 AI，\n"
+    "> 給 mk-qa-master 讀的領域知識。get_qa_context() 會把這份內容暴露給 AI，\n"
     "> 用於決定要測什麼 + 把規則印進產出 test 的 `# Business context:` 區段。\n"
     "> **規則**：以 H2 (`##`) 區段為單位、client 可指定 section 拉取單一段（partial match）。\n\n"
     "> ---\n"
     "> **上半部「通用測試方法論」**（ISTQB / 邊界值 / 測試金字塔 / 回歸策略 / Mobile checklist / QA metrics）\n"
-    "> 由 mcp-test-runner 預載。一般不需要動；場景不適用某些方法論可以刪除對應 H2 段落。\n"
+    "> 由 mk-qa-master 預載。一般不需要動；場景不適用某些方法論可以刪除對應 H2 段落。\n"
     "> \n"
     "> **下半部「你的 XXX」TODO 區段**才是讓測試脫離 monkey 等級的關鍵 — 請填入你的領域業務規則。\n"
     "> ---\n\n"

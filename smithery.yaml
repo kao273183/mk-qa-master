@@ -44,7 +44,7 @@ startCommand:
   commandFunction: |-
     (config) => ({
       command: "uvx",
-      args: ["mcp-test-runner"],
+      args: ["mk-qa-master"],
       env: {
         QA_RUNNER: config.qaRunner,
         QA_PROJECT_ROOT: config.qaProjectRoot,
