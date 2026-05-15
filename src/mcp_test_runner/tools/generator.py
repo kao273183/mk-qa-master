@@ -1,6 +1,8 @@
 import inspect
 
+from ..config import PROJECT_ROOT
 from ..runners import get_runner
+from ..security import validate_filename
 
 
 def generate_test(
@@ -16,6 +18,9 @@ def generate_test(
     (description, filename) signature. Calling them with extra kwargs would
     raise TypeError. Sniffing the signature lets us stay graceful.
     """
+    ok, result = validate_filename(filename, PROJECT_ROOT)
+    if not ok:
+        return f"error: {result}"
     runner = get_runner()
     sig = inspect.signature(runner.generate_test)
     extra: dict = {}
@@ -29,4 +34,7 @@ def generate_test(
 
 
 def codegen(url: str, output: str = "recorded_test.py") -> str:
+    ok, result = validate_filename(output, PROJECT_ROOT)
+    if not ok:
+        return f"error: {result}"
     return get_runner().codegen(url, output)

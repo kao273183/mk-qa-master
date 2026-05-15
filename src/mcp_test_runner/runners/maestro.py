@@ -46,6 +46,7 @@ from ..config import (
     ANDROID_HOST,
     connect_android_host,
 )
+from ..security import safe_run
 
 
 # Default skeleton when the caller has no module info. Mobile equivalent of
@@ -76,7 +77,7 @@ class MaestroRunner(TestRunner):
             return {"error": f"no Maestro flows match filter={filter!r}"}
         android_ok, android_msg = connect_android_host()
         cmd = self._base_cmd() + [str(f) for f in flows]
-        result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
+        result = safe_run(cmd, cwd=PROJECT_ROOT)
         self._junit_to_report_json()
         retried = self._retry_failures_if_any()
         self._archive_report()
@@ -126,7 +127,7 @@ class MaestroRunner(TestRunner):
             return {"info": "no previous failures to re-run"}
         connect_android_host()
         cmd = self._base_cmd() + [str(p) for p in failed_files]
-        result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
+        result = safe_run(cmd, cwd=PROJECT_ROOT)
         self._junit_to_report_json()
         retried = self._retry_failures_if_any()
         self._archive_report()
@@ -615,7 +616,7 @@ class MaestroRunner(TestRunner):
         # and the retry; reconnect is idempotent so this is cheap.
         connect_android_host()
         try:
-            subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
+            safe_run(cmd, cwd=PROJECT_ROOT)
         except OSError:
             return 0
         if not retry_junit.is_file():

@@ -1,7 +1,7 @@
 import json
-import subprocess
 from .base import TestRunner
 from ..config import PROJECT_ROOT, REPORT_PATH
+from ..security import safe_run
 
 
 CYPRESS_TEMPLATE = '''/**
@@ -33,7 +33,7 @@ class CypressRunner(TestRunner):
         ]
         if filter:
             cmd.extend(["--spec", f"**/*{filter}*"])
-        result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
+        result = safe_run(cmd, cwd=PROJECT_ROOT)
         return {
             "exit_code": result.returncode,
             "stdout_tail": result.stdout[-2000:],
@@ -56,7 +56,7 @@ class CypressRunner(TestRunner):
             "--reporter-options", f"output={REPORT_PATH}",
             "--spec", ",".join(failed_files),
         ]
-        result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
+        result = safe_run(cmd, cwd=PROJECT_ROOT)
         return {"exit_code": result.returncode, "stdout_tail": result.stdout[-2000:]}
 
     def get_report_summary(self) -> dict:

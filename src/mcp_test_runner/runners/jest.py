@@ -1,7 +1,7 @@
 import json
-import subprocess
 from .base import TestRunner
 from ..config import PROJECT_ROOT, REPORT_PATH
+from ..security import safe_run
 
 
 JEST_TEMPLATE = '''/**
@@ -19,17 +19,14 @@ class JestRunner(TestRunner):
     name = "jest"
 
     def list_tests(self) -> str:
-        result = subprocess.run(
-            ["npx", "jest", "--listTests"],
-            cwd=PROJECT_ROOT, capture_output=True, text=True,
-        )
+        result = safe_run(["npx", "jest", "--listTests"], cwd=PROJECT_ROOT)
         return result.stdout or result.stderr
 
     def run_tests(self, filter=None, **kwargs) -> dict:
         cmd = ["npx", "jest", "--json", f"--outputFile={REPORT_PATH}"]
         if filter:
             cmd.extend(["-t", filter])
-        result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
+        result = safe_run(cmd, cwd=PROJECT_ROOT)
         return {
             "exit_code": result.returncode,
             "stdout_tail": result.stdout[-2000:],
@@ -38,7 +35,7 @@ class JestRunner(TestRunner):
 
     def run_failed(self) -> dict:
         cmd = ["npx", "jest", "--onlyFailures", "--json", f"--outputFile={REPORT_PATH}"]
-        result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
+        result = safe_run(cmd, cwd=PROJECT_ROOT)
         return {"exit_code": result.returncode, "stdout_tail": result.stdout[-2000:]}
 
     def get_report_summary(self) -> dict:
