@@ -1,0 +1,33 @@
+# Keep the image small and predictable — only the package source needs
+# to enter the build context.
+.git
+.gitignore
+.github
+.venv
+venv
+.python-version
+
+# Python build artifacts
+__pycache__
+*.py[cod]
+*.egg-info
+build
+dist
+
+# Test outputs from local development (don't ship sample data)
+tests_project
+test-results
+
+# Repo-level docs, examples, branding — not needed at runtime
+docs
+examples
+assets
+index.html
+sample_report.html
+*.zh-TW.md
+CNAME
+
+# Editor / OS noise
+.DS_Store
+.vscode
+.idea
