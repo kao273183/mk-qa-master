@@ -1,10 +1,18 @@
-# MCP Test Runner
+<p align="center">
+  <img src="assets/logo.png" alt="mcp-test-runner logo" width="180" />
+</p>
 
-**English** · [繁體中文](README.zh-TW.md)
+<h1 align="center">MCP Test Runner</h1>
 
-[![PyPI](https://img.shields.io/pypi/v/mcp-test-runner.svg?logo=pypi&logoColor=white&color=3775A9)](https://pypi.org/project/mcp-test-runner/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/minikao)
+<p align="center">
+  <strong>English</strong> · <a href="README.zh-TW.md">繁體中文</a>
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/mcp-test-runner/"><img src="https://img.shields.io/pypi/v/mcp-test-runner.svg?logo=pypi&logoColor=white&color=3775A9" alt="PyPI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+  <a href="https://www.buymeacoffee.com/minikao"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-FFDD00?logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee" /></a>
+</p>
 
 > Universal MCP server for running tests across pytest / Jest / Cypress / Go,
 > with built-in DOM analyzer, run history, and a self-improvement coach.
