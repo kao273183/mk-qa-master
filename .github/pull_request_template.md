@@ -6,7 +6,7 @@ collaborator, your PR will be politely closed by a bot and you'll be
 redirected to Issues.
 
 If you have a bug or idea, please file it here instead:
-https://github.com/kao273183/mcp-test-runner/issues/new/choose
+https://github.com/kao273183/mk-qa-master/issues/new/choose
 
 Owner / collaborator PRs: delete this comment block and describe the change below.
 -->

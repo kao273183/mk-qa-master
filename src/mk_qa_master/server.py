@@ -11,7 +11,7 @@ from .runners import get_runner, REGISTRY
 from .reporters import html as html_reporter
 from .config import REPORT_PATH, OPTIMIZATION_PATH
 
-app = Server("mcp-test-runner")
+app = Server("mk-qa-master")
 
 
 @app.list_tools()

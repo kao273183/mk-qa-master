@@ -3,29 +3,29 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI 測試大師 ｜ mcp-test-runner — Let's make QA simple</title>
+<title>AI 測試大師 ｜ mk-qa-master — Let's make QA simple</title>
 <meta name="description" content="AI 測試大師 — an open-source MCP server that lets your AI client run web (pytest / Jest / Cypress / Go) and mobile (Maestro on iOS + Android, incl. BlueStacks) tests, write the next round from a URL or a live screen, and coach you on what to fix next.">
 <meta name="theme-color" content="#0A0E14">
 <link rel="icon" type="image/png" href="assets/logo.png">
 <link rel="apple-touch-icon" href="assets/logo.png">
 
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="AI 測試大師 ｜ mcp-test-runner">
-<meta property="og:title" content="AI 測試大師 ｜ mcp-test-runner — Let's make QA simple">
+<meta property="og:site_name" content="AI 測試大師 ｜ mk-qa-master">
+<meta property="og:title" content="AI 測試大師 ｜ mk-qa-master — Let's make QA simple">
 <meta property="og:description" content="AI 測試大師 — open-source MCP server driving web + mobile tests (pytest / Jest / Cypress / Go / Maestro). Analyze, generate, run, advise.">
 <meta property="og:url" content="https://mcp.chenjundigital.com/">
 <meta property="og:image" content="https://mcp.chenjundigital.com/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="讓我們把 QA 簡單化 — mcp-test-runner">
+<meta property="og:image:alt" content="讓我們把 QA 簡單化 — mk-qa-master">
 <meta property="og:locale" content="zh_TW">
 <meta property="og:locale:alternate" content="en_US">
 
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="AI 測試大師 ｜ mcp-test-runner">
+<meta name="twitter:title" content="AI 測試大師 ｜ mk-qa-master">
 <meta name="twitter:description" content="AI 測試大師 — web + mobile (Maestro iOS/Android) test runner over MCP. The coach that tells you what to fix next.">
 <meta name="twitter:image" content="https://mcp.chenjundigital.com/og-image.png">
-<meta name="twitter:image:alt" content="讓我們把 QA 簡單化 — mcp-test-runner">
+<meta name="twitter:image:alt" content="讓我們把 QA 簡單化 — mk-qa-master">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -606,7 +606,7 @@
       <a href="https://chenjundigital.com" class="parent-link">← 宸鈞數位</a>
       <a href="#" class="brand">
         <img src="assets/logo.png" alt="" class="brand-mark" />
-        mcp-test-runner<span class="dot">.</span>
+        mk-qa-master<span class="dot">.</span>
       </a>
     </div>
     <div class="nav-links">
@@ -619,27 +619,27 @@
       <button class="lang-toggle" id="langToggle" aria-label="Toggle language">
         <span data-lang="en">EN</span> / <span data-lang="zh">中</span>
       </button>
-      <a class="btn btn-ghost btn-sm" href="https://github.com/kao273183/mcp-test-runner">GitHub</a>
+      <a class="btn btn-ghost btn-sm" href="https://github.com/kao273183/mk-qa-master">GitHub</a>
     </div>
   </div>
 </nav>
 
 <section class="hero">
   <div class="container">
-    <img src="assets/logo.png" alt="mcp-test-runner" class="hero-logo" />
+    <img src="assets/logo.png" alt="mk-qa-master" class="hero-logo" />
     <span class="eyebrow" data-i18n="hero.eyebrow"></span>
     <h1 class="hero-title" data-i18n-html="hero.title"></h1>
-    <p class="hero-alt-name">AI 測試大師 · MCP TEST RUNNER</p>
+    <p class="hero-alt-name">AI 測試大師 · MK QA MASTER</p>
     <p class="hero-sub" data-i18n-html="hero.sub"></p>
     <div class="cta-row">
       <a class="btn btn-primary" href="#install" data-i18n="hero.cta1"></a>
-      <a class="btn btn-ghost" href="https://github.com/kao273183/mcp-test-runner" data-i18n="hero.cta2"></a>
+      <a class="btn btn-ghost" href="https://github.com/kao273183/mk-qa-master" data-i18n="hero.cta2"></a>
     </div>
 
     <div class="terminal" aria-hidden="true">
       <div class="terminal-bar">
         <div class="dots"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
-        <span class="title">claude · mcp-test-runner</span>
+        <span class="title">claude · mk-qa-master</span>
       </div>
       <div class="terminal-body">
         <div><span class="prompt">you ▸</span> <span class="user" data-i18n="term.line1"></span></div>
@@ -747,8 +747,8 @@
         <div>
           <h4 data-i18n="install.s1.title"></h4>
           <p data-i18n-html="install.s1.body"></p>
-<pre class="code">git clone https://github.com/kao273183/mcp-test-runner.git
-cd mcp-test-runner
+<pre class="code">git clone https://github.com/kao273183/mk-qa-master.git
+cd mk-qa-master
 python -m venv .venv &amp;&amp; source .venv/bin/activate
 pip install -e .
 playwright install chromium</pre>
@@ -761,10 +761,10 @@ playwright install chromium</pre>
           <p data-i18n-html="install.s2.body"></p>
 <pre class="code">{
   <span class="k">"mcpServers"</span>: {
-    <span class="k">"mcp-test-runner"</span>: {
+    <span class="k">"mk-qa-master"</span>: {
       <span class="k">"command"</span>: <span class="s">"/path/to/.venv/bin/python"</span>,
-      <span class="k">"args"</span>: [<span class="s">"-m"</span>, <span class="s">"mcp_test_runner.server"</span>],
-      <span class="k">"cwd"</span>: <span class="s">"/path/to/mcp-test-runner"</span>,
+      <span class="k">"args"</span>: [<span class="s">"-m"</span>, <span class="s">"mk_qa_master.server"</span>],
+      <span class="k">"cwd"</span>: <span class="s">"/path/to/mk-qa-master"</span>,
       <span class="k">"env"</span>: {
         <span class="k">"QA_RUNNER"</span>: <span class="s">"pytest"</span>,
         <span class="k">"QA_PROJECT_ROOT"</span>: <span class="s">"/path/to/your-test-project"</span>
@@ -886,7 +886,7 @@ playwright install chromium</pre>
       <p data-i18n="final.sub"></p>
       <div class="cta-row">
         <a class="btn btn-primary" href="#install" data-i18n="final.cta1"></a>
-        <a class="btn btn-ghost" href="https://github.com/kao273183/mcp-test-runner" data-i18n="final.cta2"></a>
+        <a class="btn btn-ghost" href="https://github.com/kao273183/mk-qa-master" data-i18n="final.cta2"></a>
         <a class="btn btn-bmc" href="https://www.buymeacoffee.com/minikao" target="_blank" rel="noopener" data-i18n="final.cta3"></a>
       </div>
     </div>
@@ -896,12 +896,12 @@ playwright install chromium</pre>
 <footer>
   <div class="container">
     <div class="links">
-      <a href="https://github.com/kao273183/mcp-test-runner">GitHub</a>
-      <a href="https://pypi.org/project/mcp-test-runner/">PyPI</a>
-      <a href="https://github.com/kao273183/mcp-test-runner/blob/main/README.md">README</a>
-      <a href="https://github.com/kao273183/mcp-test-runner/blob/main/README.zh-TW.md">繁中</a>
+      <a href="https://github.com/kao273183/mk-qa-master">GitHub</a>
+      <a href="https://pypi.org/project/mk-qa-master/">PyPI</a>
+      <a href="https://github.com/kao273183/mk-qa-master/blob/main/README.md">README</a>
+      <a href="https://github.com/kao273183/mk-qa-master/blob/main/README.zh-TW.md">繁中</a>
       <a href="sample_report.html">Demo</a>
-      <a href="https://github.com/kao273183/mcp-test-runner/blob/main/docs/framework.md">Internals</a>
+      <a href="https://github.com/kao273183/mk-qa-master/blob/main/docs/framework.md">Internals</a>
       <a href="https://www.buymeacoffee.com/minikao" target="_blank" rel="noopener" style="color: #FFDD00;">☕ Support</a>
     </div>
     <div class="meta">MIT License · Built by <a href="https://chenjundigital.com" style="color: var(--accent);">宸鈞數位</a> →</div>
@@ -918,7 +918,7 @@ playwright install chromium</pre>
 
       'hero.eyebrow': 'Open source · Web + Mobile · Model Context Protocol server',
       'hero.title': "Let's make <span class=\"accent\">QA</span><br>simple.",
-      'hero.sub': 'mcp-test-runner is an MCP server that drives <strong>web</strong> (pytest / Jest / Cypress / Go) and <strong>mobile</strong> (Maestro on iOS + Android, incl. BlueStacks) test suites — writes the next round from a URL or a live screen, and acts as your data-driven QA advisor every single run.',
+      'hero.sub': 'mk-qa-master is an MCP server that drives <strong>web</strong> (pytest / Jest / Cypress / Go) and <strong>mobile</strong> (Maestro on iOS + Android, incl. BlueStacks) test suites — writes the next round from a URL or a live screen, and acts as your data-driven QA advisor every single run.',
       'hero.cta1': 'Quick Start →',
       'hero.cta2': 'View on GitHub',
 
@@ -954,7 +954,7 @@ playwright install chromium</pre>
       'install.s1.title': 'Install the server',
       'install.s1.body': 'Clone, create a venv, install. For web add Playwright; for mobile install <a href="https://maestro.mobile.dev/">Maestro</a> instead.',
       'install.s2.title': 'Connect your MCP client',
-      'install.s2.body': 'Example: Claude Desktop config at <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>. Set <code>QA_RUNNER=maestro</code> for mobile, and (optional) <code>QA_ANDROID_HOST=127.0.0.1:5555</code> for BlueStacks. <a href="https://github.com/kao273183/mcp-test-runner/blob/main/examples/configs/codex-config.example.toml">Codex (TOML)</a> and <a href="https://github.com/kao273183/mcp-test-runner/blob/main/examples/configs/gemini-config.example.json">Gemini CLI</a> samples live in the repo.',
+      'install.s2.body': 'Example: Claude Desktop config at <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>. Set <code>QA_RUNNER=maestro</code> for mobile, and (optional) <code>QA_ANDROID_HOST=127.0.0.1:5555</code> for BlueStacks. <a href="https://github.com/kao273183/mk-qa-master/blob/main/examples/configs/codex-config.example.toml">Codex (TOML)</a> and <a href="https://github.com/kao273183/mk-qa-master/blob/main/examples/configs/gemini-config.example.json">Gemini CLI</a> samples live in the repo.',
       'install.s3.title': 'Send your first prompt',
       'install.s3.body': 'Restart your MCP client, open a session, try any of these:',
       'install.p1': '# Web: analyze a URL and produce runnable tests',
@@ -986,7 +986,7 @@ playwright install chromium</pre>
 
       'tools.eyebrow': 'Tools',
       'tools.title': '15 tools across 5 categories',
-      'tools.sub': "You don't need to memorize names — the <a href=\"https://github.com/kao273183/mcp-test-runner/blob/main/README.md#prompting-cookbook\">prompting cookbook</a> has natural-language phrasings for both web and mobile.",
+      'tools.sub': "You don't need to memorize names — the <a href=\"https://github.com/kao273183/mk-qa-master/blob/main/README.md#prompting-cookbook\">prompting cookbook</a> has natural-language phrasings for both web and mobile.",
 
       'final.title': 'Make every test run smarter.',
       'final.sub': "Run your first AI-driven test in under five minutes.",
@@ -1002,7 +1002,7 @@ playwright install chromium</pre>
 
       'hero.eyebrow': '開源 · Web + 手機 · Model Context Protocol server',
       'hero.title': '讓我們把 <span class="accent">QA</span><br>簡單化。',
-      'hero.sub': 'mcp-test-runner 是一個 MCP server，讓 AI client 幫你跑 <strong>Web</strong>（pytest / Jest / Cypress / Go）和<strong>手機</strong>（Maestro · iOS + Android · 含 BlueStacks）測試——從 URL 或當下的手機畫面寫下一輪 TC，並在每次跑完後當你的「資料驅動 QA 優化顧問」。',
+      'hero.sub': 'mk-qa-master 是一個 MCP server，讓 AI client 幫你跑 <strong>Web</strong>（pytest / Jest / Cypress / Go）和<strong>手機</strong>（Maestro · iOS + Android · 含 BlueStacks）測試——從 URL 或當下的手機畫面寫下一輪 TC，並在每次跑完後當你的「資料驅動 QA 優化顧問」。',
       'hero.cta1': '快速開始 →',
       'hero.cta2': '到 GitHub 看原始碼',
 
@@ -1038,7 +1038,7 @@ playwright install chromium</pre>
       'install.s1.title': '安裝 server',
       'install.s1.body': 'Clone、開 venv、裝 package。Web 要 <code>playwright install chromium</code>，手機改裝 <a href="https://maestro.mobile.dev/">Maestro</a>。',
       'install.s2.title': '接到 MCP client',
-      'install.s2.body': '範例是 Claude Desktop：<code>~/Library/Application Support/Claude/claude_desktop_config.json</code>。手機端把 <code>QA_RUNNER</code> 改成 <code>maestro</code>，BlueStacks 再加一個 <code>QA_ANDROID_HOST=127.0.0.1:5555</code>。其他 client：<a href="https://github.com/kao273183/mcp-test-runner/blob/main/examples/configs/codex-config.example.toml">Codex (TOML)</a>、<a href="https://github.com/kao273183/mcp-test-runner/blob/main/examples/configs/gemini-config.example.json">Gemini CLI</a>。',
+      'install.s2.body': '範例是 Claude Desktop：<code>~/Library/Application Support/Claude/claude_desktop_config.json</code>。手機端把 <code>QA_RUNNER</code> 改成 <code>maestro</code>，BlueStacks 再加一個 <code>QA_ANDROID_HOST=127.0.0.1:5555</code>。其他 client：<a href="https://github.com/kao273183/mk-qa-master/blob/main/examples/configs/codex-config.example.toml">Codex (TOML)</a>、<a href="https://github.com/kao273183/mk-qa-master/blob/main/examples/configs/gemini-config.example.json">Gemini CLI</a>。',
       'install.s3.title': '送出第一個 prompt',
       'install.s3.body': '重啟 MCP client、開 session、隨便挑一條：',
       'install.p1': '# Web：分析 URL 並產出可執行測試',
@@ -1070,7 +1070,7 @@ playwright install chromium</pre>
 
       'tools.eyebrow': '工具',
       'tools.title': '15 個 tool、分 5 類',
-      'tools.sub': '你不用記名稱 — README 裡的<a href="https://github.com/kao273183/mcp-test-runner/blob/main/README.md#prompting-cookbook">prompting cookbook</a>有對應的中文 prompt 寫法，Web 跟手機都有。',
+      'tools.sub': '你不用記名稱 — README 裡的<a href="https://github.com/kao273183/mk-qa-master/blob/main/README.md#prompting-cookbook">prompting cookbook</a>有對應的中文 prompt 寫法，Web 跟手機都有。',
 
       'final.title': '讓每次測試都更聰明。',
       'final.sub': '5 分鐘內跑出你第一條 AI 驅動的測試。',

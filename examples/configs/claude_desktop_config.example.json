@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "mcp-test-runner": {
+    "mk-qa-master": {
       "command": "uvx",
-      "args": ["mcp-test-runner"],
+      "args": ["mk-qa-master"],
       "env": {
         "QA_RUNNER": "pytest",
         "QA_PROJECT_ROOT": "/absolute/path/to/your-test-project"

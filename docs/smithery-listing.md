@@ -1,7 +1,7 @@
 # Smithery Listing — Copy / Paste
 
 This is the content to paste into Smithery's web form when claiming
-`kao273183/mcp-test-runner`. The `smithery.yaml` at repo root handles
+`kao273183/mk-qa-master`. The `smithery.yaml` at repo root handles
 runtime + config schema; this doc covers the human-facing copy.
 
 ---
@@ -9,7 +9,7 @@ runtime + config schema; this doc covers the human-facing copy.
 ## Display name
 
 ```
-MCP Test Runner (AI 測試大師)
+MK QA Master (AI 測試大師)
 ```
 
 ## Tagline (≤80 chars — shows in catalog cards)
@@ -31,7 +31,7 @@ self-improvement plan.
 ## Long description (Markdown — rendered on the listing page)
 
 ```markdown
-**MCP Test Runner** turns your AI client (Claude Desktop, Claude Code, Cursor,
+**MK QA Master** turns your AI client (Claude Desktop, Claude Code, Cursor,
 Cline, anything that speaks MCP) into a full QA agent. It stays a pure
 **test-execution + analysis** layer — no bundled JIRA / Slack / Sentry SDKs.
 Real QA workflows are composed by running multiple MCP servers side-by-side
@@ -78,7 +78,7 @@ and letting the AI orchestrate the chain.
 - **Sentry MCP** — prioritize regression tests from top crashes
 
 Full pairing matrix + example chains in the
-[README](https://github.com/kao273183/mcp-test-runner#integrations).
+[README](https://github.com/kao273183/mk-qa-master#integrations).
 
 ### Why no bundled integrations?
 
@@ -104,10 +104,10 @@ test-automation, e2e, regression, test-generation, html-report
 
 ## Homepage / Repo / Docs links
 
-- Repository: https://github.com/kao273183/mcp-test-runner
-- Homepage:   https://github.com/kao273183/mcp-test-runner
-- README:     https://github.com/kao273183/mcp-test-runner#readme
-- PyPI:       https://pypi.org/project/mcp-test-runner/
+- Repository: https://github.com/kao273183/mk-qa-master
+- Homepage:   https://github.com/kao273183/mk-qa-master
+- README:     https://github.com/kao273183/mk-qa-master#readme
+- PyPI:       https://pypi.org/project/mk-qa-master/
 
 ## License
 
@@ -131,9 +131,9 @@ test-automation, e2e, regression, test-generation, html-report
 ```json
 {
   "mcpServers": {
-    "mcp-test-runner": {
+    "mk-qa-master": {
       "command": "uvx",
-      "args": ["mcp-test-runner"],
+      "args": ["mk-qa-master"],
       "env": {
         "QA_RUNNER": "pytest",
         "QA_PROJECT_ROOT": "/absolute/path/to/your/project"
@@ -146,7 +146,7 @@ test-automation, e2e, regression, test-generation, html-report
 ## Launch announcement template (X / LinkedIn / Reddit r/mcp)
 
 ```
-🚀 mcp-test-runner is now on Smithery — one-click install for Claude Desktop,
+🚀 mk-qa-master is now on Smithery — one-click install for Claude Desktop,
 Cursor, Cline, and any MCP client.
 
 Tell Claude:
@@ -156,6 +156,6 @@ It probes the DOM, picks selectors, writes a runnable .py, executes it, and
 hands you an HTML report. Same loop works for Jest, Cypress, Go test, and
 Maestro (mobile).
 
-→ smithery.ai/server/kao273183/mcp-test-runner
-→ github.com/kao273183/mcp-test-runner
+→ smithery.ai/server/kao273183/mk-qa-master
+→ github.com/kao273183/mk-qa-master
 ```
