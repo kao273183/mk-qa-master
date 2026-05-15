@@ -428,6 +428,45 @@ _Based on 6 archived runs._
 
 ---
 
+## 配套整合（Integrations）
+
+`mcp-test-runner` **不打包**任何第三方 SDK——保持「測試執行 + 分析」單一職責。實務上 QA 工作流是**多個 MCP server 並存**、由 Claude 自動編排跨 server 的 tool chain 達成的。MCP 協議本身沒有 server-to-server RPC，每個 server 互不知曉彼此存在，AI client 才是指揮。
+
+最常見的配套：
+
+| 搭配 | 為什麼 | 範例 chain |
+|---|---|---|
+| **[Atlassian MCP](https://www.atlassian.com/platform/remote-mcp-server)**（JIRA + Confluence）| 失敗自動開 ticket；把 `optimization-plan.md` 同步到 Confluence 共享頁 | `run_tests` → `get_failure_details` → `atlassian.createJiraIssue`（自動帶 screenshot + trace 路徑）|
+| **[Slack MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/slack)** | 失敗通知頻道、發 HTML 報告、flaky 測試 mention oncall | `generate_html_report` → `slack.send_message(channel="#qa-bots", ...)` |
+| **[GitHub MCP](https://github.com/github/github-mcp-server)** | 讀 PR 描述 / 關聯 issue 當作 *business context*；測試結果反貼回 PR comment | `github.get_pull_request` → `analyze_url` → `generate_test(business_context=PR body)` → `github.create_issue_comment` |
+| **[Sentry MCP](https://github.com/getsentry/sentry-mcp)** | 用生產錯誤反向驅動回歸測試優先序：top crash → 對應 regression | `sentry.list_issues(sort="frequency")` → `generate_test(business_context=stack trace)` → `run_tests` |
+| **[Filesystem MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem)** | 讀 `QA_PROJECT_ROOT` 以外的共用 `qa-knowledge.md` / TC 卡（monorepo / 多專案場景） | `filesystem.read_file("~/shared/qa-knowledge.md")` → `init_qa_knowledge` |
+
+**榮譽提名 — [Google Drive MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive)**：搭配 Google Sheet 管 TC（從 sheet 讀 TC → `generate_test` → 狀態寫回 sheet）。
+
+### 在 client config 怎麼組
+
+幾個 MCP server 同時跑、互不干涉：
+
+```json
+{
+  "mcpServers": {
+    "mcp-test-runner": { "command": "python", "args": ["-m", "mcp_test_runner.server"], "env": { "QA_RUNNER": "maestro" } },
+    "atlassian":       { "command": "npx", "args": ["-y", "@atlassian/mcp"] },
+    "slack":           { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-slack"] },
+    "github":          { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"] }
+  }
+}
+```
+
+之後一句 prompt 就走完整條 chain：
+
+> 「跑 checkout suite。失敗的每條開 JIRA 到 QA project、用 RIDER 格式、附 screenshot。跑完把 HTML 報告貼到 #qa-bots。」
+
+為什麼這樣設計：`mcp-test-runner` 專注做「測試這個迴圈」（analyze → generate → run → coach）。JIRA / Slack / Sentry 各自有專業 server 維護，硬塞進這個 repo 只會稀釋焦點、重複處理 auth、強迫所有使用者繼承不需要的依賴。
+
+---
+
 ## License
 
 MIT © 2026 Jack Kao — 英文原版（具法律效力）見 [`LICENSE`](LICENSE)；
