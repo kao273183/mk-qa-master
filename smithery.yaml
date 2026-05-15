@@ -1,0 +1,54 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required:
+      - qaRunner
+      - qaProjectRoot
+    properties:
+      qaRunner:
+        type: string
+        title: Test runner
+        description: >-
+          Which framework drives the suite. pytest = pytest-playwright (web),
+          jest / cypress = JS web, go = `go test`, maestro = mobile (Android /
+          iOS, real device / simulator / BlueStacks via adb).
+        enum:
+          - pytest
+          - jest
+          - cypress
+          - go
+          - maestro
+        default: pytest
+      qaProjectRoot:
+        type: string
+        title: Project root (absolute path)
+        description: >-
+          Absolute path to the project under test. Reports, telemetry, and
+          generated tests are written here. Example:
+          /Users/you/work/my-app
+      qaAndroidHost:
+        type: string
+        title: Remote ADB host (optional)
+        description: >-
+          host:port for BlueStacks / Genymotion / Nox / LDPlayer / WSA / cloud
+          farms. When set, the Maestro runner runs `adb connect <host>` before
+          each invocation. Example: 127.0.0.1:5555
+      qaKnowledgeFile:
+        type: string
+        title: QA knowledge file (optional)
+        description: >-
+          Absolute path to a markdown file with domain rules + test methodology.
+          Defaults to <qaProjectRoot>/qa-knowledge.md. Drives "real QA" test
+          generation instead of rule-based monkey-testing.
+  commandFunction: |-
+    (config) => ({
+      command: "uvx",
+      args: ["mcp-test-runner"],
+      env: {
+        QA_RUNNER: config.qaRunner,
+        QA_PROJECT_ROOT: config.qaProjectRoot,
+        ...(config.qaAndroidHost ? { QA_ANDROID_HOST: config.qaAndroidHost } : {}),
+        ...(config.qaKnowledgeFile ? { QA_KNOWLEDGE_FILE: config.qaKnowledgeFile } : {})
+      }
+    })
