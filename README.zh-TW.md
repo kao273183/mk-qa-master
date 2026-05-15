@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="AI 測試大師 logo" width="180" />
+  <img src="https://raw.githubusercontent.com/kao273183/mk-qa-master/main/assets/logo.png" alt="AI 測試大師 logo" width="180" />
 </p>
 
 <h1 align="center">AI 測試大師 ｜ MK QA Master</h1>

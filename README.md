@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="mk-qa-master logo" width="180" />
+  <img src="https://raw.githubusercontent.com/kao273183/mk-qa-master/main/assets/logo.png" alt="mk-qa-master logo" width="180" />
 </p>
 
 <h1 align="center">MK QA Master</h1>
