@@ -524,7 +524,7 @@ _Based on 6 archived runs._
 
 ### HTML report
 
-[**Open the live rendered demo →**](https://kao273183.github.io/mk-qa-master/sample_report.html)
+[**Open the live rendered demo →**](https://htmlpreview.github.io/?https://github.com/kao273183/mk-qa-master/blob/main/sample_report.html)
 (served via GitHub Pages — clicking the link in GitHub's UI to
 [`sample_report.html`](sample_report.html) would only show source).
 
