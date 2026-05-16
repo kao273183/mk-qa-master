@@ -1,0 +1,73 @@
+name: CI
+
+# Runs on every push to main and every pull request. Two jobs:
+#
+# 1. smoke — fast: install + import + tool-registration parity checks.
+#    Matrix over the supported Python versions. No browsers needed, so
+#    every Python version is cheap to verify.
+#
+# 2. sample — slow: spin up Playwright + a chromium browser and run the
+#    bundled `tests_project/` against the live example.com. Single
+#    Python version (3.12) since the dependency is the browser, not
+#    Python version. This is what answers the question "can the QA MCP
+#    actually drive a runner end-to-end?"
+#
+# Added in response to issue #35.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke:
+    name: smoke · Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install package + test deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run smoke tests
+        run: pytest tests/ -v
+
+  sample:
+    name: bundled sample · Python 3.12 + chromium
+    runs-on: ubuntu-latest
+    needs: smoke
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Install chromium for Playwright
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run bundled tests_project sample
+        env:
+          QA_PROJECT_ROOT: ${{ github.workspace }}/tests_project
+          QA_RUNNER: pytest
+        run: pytest tests_project/ -v
