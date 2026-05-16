@@ -8,4 +8,7 @@ def test_homepage_title(page: Page):
 
 def test_link_visible(page: Page):
     page.goto("https://example.com")
-    expect(page.get_by_role("link", name="More information...")).to_be_visible()
+    # example.com renamed its only link from "More information..." to
+    # "Learn more" (reported in issue #34). Match the stable href instead
+    # of the visible copy so a future text tweak doesn't break this again.
+    expect(page.locator('a[href*="iana.org"]')).to_be_visible()
