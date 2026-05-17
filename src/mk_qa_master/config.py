@@ -61,6 +61,41 @@ SCHEMATHESIS_DRY_RUN = os.getenv("QA_SCHEMATHESIS_DRY_RUN", "").lower() in ("1",
 # Flip to "1" only for short debug sessions; archived reports may be shared.
 NO_REDACT = os.getenv("QA_NO_REDACT", "").lower() in ("1", "true", "yes")
 
+# ---- API testing (QA_RUNNER=newman) ---------------------------------------
+# Required when QA_RUNNER=newman. Plain filesystem path to a Postman 2.x
+# collection.json (no `file://` prefix — Newman doesn't need scheme
+# disambiguation since collections are always local artifacts).
+POSTMAN_COLLECTION = os.getenv("QA_POSTMAN_COLLECTION", "").strip()
+
+# Optional Postman environment file (`-e <path>`). Contains per-environment
+# variables (base URL, credentials) referenced from the collection via
+# `{{var_name}}` placeholders.
+POSTMAN_ENVIRONMENT = os.getenv("QA_POSTMAN_ENVIRONMENT", "").strip()
+
+# Optional Postman globals file (`-g <path>`). Same shape as the environment
+# file but scoped globally across workspaces.
+POSTMAN_GLOBALS = os.getenv("QA_POSTMAN_GLOBALS", "").strip()
+
+# Iteration count (`-n <N>`). Newman replays the whole collection N times;
+# useful for soak tests and flake detection. Default 1.
+try:
+    POSTMAN_ITERATIONS = int(os.getenv("QA_POSTMAN_ITERATIONS", "1") or "1")
+except ValueError:
+    POSTMAN_ITERATIONS = 1
+
+# Optional CSV of folder names to restrict the run to (`--folder <name>`
+# repeated). Postman folders group requests; this is the equivalent of
+# pytest's `-k` filter but at the collection-organization level.
+POSTMAN_FOLDER = os.getenv("QA_POSTMAN_FOLDER", "").strip()
+
+# Per-request timeout in milliseconds (`--timeout-request`). Default 30s;
+# distinct from QA_TIMEOUT_SECONDS, which caps the *whole subprocess* on
+# top of this.
+try:
+    POSTMAN_TIMEOUT_REQUEST_MS = int(os.getenv("QA_POSTMAN_TIMEOUT_REQUEST_MS", "30000") or "30000")
+except ValueError:
+    POSTMAN_TIMEOUT_REQUEST_MS = 30000
+
 
 def connect_android_host(timeout_s: float = 10.0) -> tuple[bool, str]:
     """Ensure the configured remote-ADB endpoint is paired before Maestro runs.

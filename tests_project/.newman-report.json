@@ -1,0 +1,2509 @@
+{
+  "collection": {
+    "_": {
+      "postman_id": "mk-qa-master-sample-library-api"
+    },
+    "item": [
+      {
+        "id": "10234c1c-6d3e-45ec-9038-a7c31d208aae",
+        "name": "Books",
+        "description": {
+          "content": "All requests against /books and /books/{id}. Grouped into a folder so `run_failed` can scope re-runs via `--folder Books`.",
+          "type": "text/plain"
+        },
+        "item": [
+          {
+            "id": "6c1a1c2f-7e3a-45bf-9b82-abbb48cceb93",
+            "name": "List books",
+            "request": {
+              "url": {
+                "path": [
+                  "books"
+                ],
+                "host": [
+                  "{{baseUrl}}"
+                ],
+                "query": [
+                  {
+                    "key": "limit",
+                    "value": "20"
+                  }
+                ],
+                "variable": []
+              },
+              "header": [
+                {
+                  "key": "Accept",
+                  "value": "application/json"
+                }
+              ],
+              "method": "GET"
+            },
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "id": "02ae0e4d-8303-46fa-9d4f-6d8c0a7448b3",
+                  "type": "text/javascript",
+                  "exec": [
+                    "pm.test('GET /books returns 200', function () {",
+                    "    pm.response.to.have.status(200);",
+                    "});",
+                    "",
+                    "pm.test('GET /books returns an array', function () {",
+                    "    const body = pm.response.json();",
+                    "    pm.expect(body).to.be.an('array');",
+                    "});"
+                  ],
+                  "_lastExecutionId": "435e900d-932a-42c0-9518-39d1eba7bab9"
+                }
+              }
+            ]
+          },
+          {
+            "id": "68f8c2bc-42fe-421d-b0d3-009d2a870910",
+            "name": "Create book",
+            "request": {
+              "url": {
+                "path": [
+                  "books"
+                ],
+                "host": [
+                  "{{baseUrl}}"
+                ],
+                "query": [],
+                "variable": []
+              },
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "method": "POST",
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"title\": \"The Pragmatic Programmer\",\n  \"author\": \"Andrew Hunt\",\n  \"published_year\": 1999\n}"
+              }
+            },
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "id": "a3112f17-7a00-45b3-becb-b9ebea7ad273",
+                  "type": "text/javascript",
+                  "exec": [
+                    "pm.test('POST /books returns 201', function () {",
+                    "    pm.response.to.have.status(201);",
+                    "});",
+                    "",
+                    "pm.test('POST /books response has id', function () {",
+                    "    const body = pm.response.json();",
+                    "    pm.expect(body).to.have.property('id');",
+                    "    pm.expect(body.id).to.be.a('string');",
+                    "    pm.collectionVariables.set('bookId', body.id);",
+                    "});"
+                  ],
+                  "_lastExecutionId": "1ff1439e-12d9-439e-8828-bfbab8271067"
+                }
+              }
+            ]
+          },
+          {
+            "id": "d70dfea3-8e08-45ad-a348-c9d0d206f6b0",
+            "name": "Get book by id",
+            "request": {
+              "url": {
+                "path": [
+                  "books",
+                  "{{bookId}}"
+                ],
+                "host": [
+                  "{{baseUrl}}"
+                ],
+                "query": [],
+                "variable": []
+              },
+              "header": [
+                {
+                  "key": "Accept",
+                  "value": "application/json"
+                }
+              ],
+              "method": "GET"
+            },
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "id": "a6795621-8a2c-423a-9d27-014b29527571",
+                  "type": "text/javascript",
+                  "exec": [
+                    "pm.test('GET /books/{id} returns 200', function () {",
+                    "    pm.response.to.have.status(200);",
+                    "});",
+                    "",
+                    "pm.test('GET /books/{id} response id matches request', function () {",
+                    "    const body = pm.response.json();",
+                    "    pm.expect(body).to.have.property('id');",
+                    "    pm.expect(body.id).to.equal(pm.collectionVariables.get('bookId'));",
+                    "});"
+                  ],
+                  "_lastExecutionId": "d1003cd4-b73d-4d61-a1a8-60e6080e47ba"
+                }
+              }
+            ]
+          }
+        ],
+        "event": []
+      }
+    ],
+    "event": [],
+    "variable": [
+      {
+        "description": {
+          "content": "Base URL of the running Library API. Defaults to a Prism mock on :4010 to mirror the OpenAPI sample's servers[0].url.",
+          "type": "text/plain"
+        },
+        "type": "string",
+        "value": "http://localhost:4010",
+        "key": "baseUrl"
+      },
+      {
+        "description": {
+          "content": "Book id used by the GET /books/{id} request. Prism will return an example matching the schema; against a real backend, seed this id first or chain from the POST /books response.",
+          "type": "text/plain"
+        },
+        "type": "string",
+        "value": "abc123",
+        "key": "bookId"
+      }
+    ],
+    "info": {
+      "_postman_id": "mk-qa-master-sample-library-api",
+      "name": "Sample Library API",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+      "description": {
+        "content": "Self-contained 3-request Postman collection bundled with mk-qa-master v0.6.1 for dogfooding the Newman runner. Targets the same fictional Library API as the OpenAPI sample (`openapi.yaml`). Each request has `pm.test(...)` assertions covering happy-path status code + response shape. Use `{{baseUrl}}` to point at a Prism mock (`prism mock examples/sample_api_project/openapi.yaml`) or your own staging server.",
+        "type": "text/plain"
+      }
+    }
+  },
+  "environment": {
+    "id": "0ad50cf3-cf8e-43b4-9b1a-f1060d7fd8fb",
+    "values": []
+  },
+  "globals": {
+    "id": "667f3c05-d871-4cbe-9f3e-db8d91a49465",
+    "values": []
+  },
+  "run": {
+    "stats": {
+      "iterations": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "items": {
+        "total": 3,
+        "pending": 0,
+        "failed": 0
+      },
+      "scripts": {
+        "total": 3,
+        "pending": 0,
+        "failed": 0
+      },
+      "prerequests": {
+        "total": 3,
+        "pending": 0,
+        "failed": 0
+      },
+      "requests": {
+        "total": 3,
+        "pending": 0,
+        "failed": 3
+      },
+      "tests": {
+        "total": 3,
+        "pending": 0,
+        "failed": 0
+      },
+      "assertions": {
+        "total": 6,
+        "pending": 0,
+        "failed": 6
+      },
+      "testScripts": {
+        "total": 3,
+        "pending": 0,
+        "failed": 0
+      },
+      "prerequestScripts": {
+        "total": 0,
+        "pending": 0,
+        "failed": 0
+      }
+    },
+    "timings": {
+      "responseAverage": 0,
+      "responseMin": 0,
+      "responseMax": 0,
+      "responseSd": 0,
+      "dnsAverage": 0,
+      "dnsMin": 0,
+      "dnsMax": 0,
+      "dnsSd": 0,
+      "firstByteAverage": 0,
+      "firstByteMin": 0,
+      "firstByteMax": 0,
+      "firstByteSd": 0,
+      "started": 1779026510848,
+      "completed": 1779026510898
+    },
+    "executions": [
+      {
+        "cursor": {
+          "position": 0,
+          "iteration": 0,
+          "length": 3,
+          "cycles": 1,
+          "empty": false,
+          "eof": false,
+          "bof": true,
+          "cr": false,
+          "ref": "2b937dc1-6119-4afb-a5e6-a9168a8de8a0",
+          "httpRequestId": "65845f82-bc6f-42cc-8291-4c4dc8de8985"
+        },
+        "item": {
+          "id": "6c1a1c2f-7e3a-45bf-9b82-abbb48cceb93",
+          "name": "List books",
+          "request": {
+            "url": {
+              "path": [
+                "books"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "02ae0e4d-8303-46fa-9d4f-6d8c0a7448b3",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('GET /books returns 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('GET /books returns an array', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.be.an('array');",
+                  "});"
+                ],
+                "_lastExecutionId": "435e900d-932a-42c0-9518-39d1eba7bab9"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "4010",
+            "path": [
+              "books"
+            ],
+            "host": [
+              "localhost"
+            ],
+            "query": [
+              {
+                "key": "limit",
+                "value": "20"
+              }
+            ],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Accept",
+              "value": "application/json"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "0b6c99a2-0c16-4546-af9e-f8521a1a6859",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "localhost:4010",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            }
+          ],
+          "method": "GET"
+        },
+        "id": "6c1a1c2f-7e3a-45bf-9b82-abbb48cceb93",
+        "requestError": {
+          "errno": -61,
+          "code": "ECONNREFUSED",
+          "syscall": "connect",
+          "address": "127.0.0.1",
+          "port": 4010
+        },
+        "assertions": [
+          {
+            "assertion": "GET /books returns 200",
+            "skipped": false,
+            "error": {
+              "name": "AssertionError",
+              "index": 0,
+              "test": "GET /books returns 200",
+              "message": "expected PostmanResponse{ …(5) } to have property 'code'",
+              "stack": "AssertionError: expected PostmanResponse{ …(5) } to have property 'code'\n   at Object.eval sandbox-script.js:1:1)"
+            }
+          },
+          {
+            "assertion": "GET /books returns an array",
+            "skipped": false,
+            "error": {
+              "name": "JSONError",
+              "index": 1,
+              "test": "GET /books returns an array",
+              "message": "\"undefined\" is not valid JSON",
+              "stack": "JSONError: \"undefined\" is not valid JSON\n   at Object.eval sandbox-script.js:2:1)"
+            }
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "3284d52f-0d73-4773-8403-59d01525535a",
+          "length": 3,
+          "cycles": 1,
+          "position": 1,
+          "iteration": 0,
+          "httpRequestId": "3a976135-fb47-4797-927c-0f680283a84d"
+        },
+        "item": {
+          "id": "68f8c2bc-42fe-421d-b0d3-009d2a870910",
+          "name": "Create book",
+          "request": {
+            "url": {
+              "path": [
+                "books"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"The Pragmatic Programmer\",\n  \"author\": \"Andrew Hunt\",\n  \"published_year\": 1999\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "a3112f17-7a00-45b3-becb-b9ebea7ad273",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('POST /books returns 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('POST /books response has id', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id');",
+                  "    pm.expect(body.id).to.be.a('string');",
+                  "    pm.collectionVariables.set('bookId', body.id);",
+                  "});"
+                ],
+                "_lastExecutionId": "1ff1439e-12d9-439e-8828-bfbab8271067"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "4010",
+            "path": [
+              "books"
+            ],
+            "host": [
+              "localhost"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "aa430c8e-4f7b-4a03-95c1-0b11ec0a5a15",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "localhost:4010",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"title\": \"The Pragmatic Programmer\",\n  \"author\": \"Andrew Hunt\",\n  \"published_year\": 1999\n}"
+          }
+        },
+        "id": "68f8c2bc-42fe-421d-b0d3-009d2a870910",
+        "requestError": {
+          "errno": -61,
+          "code": "ECONNREFUSED",
+          "syscall": "connect",
+          "address": "127.0.0.1",
+          "port": 4010
+        },
+        "assertions": [
+          {
+            "assertion": "POST /books returns 201",
+            "skipped": false,
+            "error": {
+              "name": "AssertionError",
+              "index": 0,
+              "test": "POST /books returns 201",
+              "message": "expected PostmanResponse{ …(5) } to have property 'code'",
+              "stack": "AssertionError: expected PostmanResponse{ …(5) } to have property 'code'\n   at Object.eval sandbox-script.js:1:2)"
+            }
+          },
+          {
+            "assertion": "POST /books response has id",
+            "skipped": false,
+            "error": {
+              "name": "JSONError",
+              "index": 1,
+              "test": "POST /books response has id",
+              "message": "\"undefined\" is not valid JSON",
+              "stack": "JSONError: \"undefined\" is not valid JSON\n   at Object.eval sandbox-script.js:2:2)"
+            }
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "6d4fadda-58a5-494b-9619-9293da6ea9a7",
+          "length": 3,
+          "cycles": 1,
+          "position": 2,
+          "iteration": 0,
+          "httpRequestId": "14a8a54c-d079-46d2-9020-ac6f76015ede"
+        },
+        "item": {
+          "id": "d70dfea3-8e08-45ad-a348-c9d0d206f6b0",
+          "name": "Get book by id",
+          "request": {
+            "url": {
+              "path": [
+                "books",
+                "{{bookId}}"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "a6795621-8a2c-423a-9d27-014b29527571",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('GET /books/{id} returns 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('GET /books/{id} response id matches request', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id');",
+                  "    pm.expect(body.id).to.equal(pm.collectionVariables.get('bookId'));",
+                  "});"
+                ],
+                "_lastExecutionId": "d1003cd4-b73d-4d61-a1a8-60e6080e47ba"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "4010",
+            "path": [
+              "books",
+              "abc123"
+            ],
+            "host": [
+              "localhost"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Accept",
+              "value": "application/json"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "2c2b9ced-e7a9-4a89-bad2-ec6e09268759",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "localhost:4010",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            }
+          ],
+          "method": "GET"
+        },
+        "id": "d70dfea3-8e08-45ad-a348-c9d0d206f6b0",
+        "requestError": {
+          "errno": -61,
+          "code": "ECONNREFUSED",
+          "syscall": "connect",
+          "address": "127.0.0.1",
+          "port": 4010
+        },
+        "assertions": [
+          {
+            "assertion": "GET /books/{id} returns 200",
+            "skipped": false,
+            "error": {
+              "name": "AssertionError",
+              "index": 0,
+              "test": "GET /books/{id} returns 200",
+              "message": "expected PostmanResponse{ …(5) } to have property 'code'",
+              "stack": "AssertionError: expected PostmanResponse{ …(5) } to have property 'code'\n   at Object.eval sandbox-script.js:1:3)"
+            }
+          },
+          {
+            "assertion": "GET /books/{id} response id matches request",
+            "skipped": false,
+            "error": {
+              "name": "JSONError",
+              "index": 1,
+              "test": "GET /books/{id} response id matches request",
+              "message": "\"undefined\" is not valid JSON",
+              "stack": "JSONError: \"undefined\" is not valid JSON\n   at Object.eval sandbox-script.js:2:3)"
+            }
+          }
+        ]
+      }
+    ],
+    "transfers": {
+      "responseTotal": 0
+    },
+    "failures": [
+      {
+        "error": {
+          "errno": -61,
+          "code": "ECONNREFUSED",
+          "syscall": "connect",
+          "address": "127.0.0.1",
+          "port": 4010,
+          "name": "Error",
+          "message": "connect ECONNREFUSED 127.0.0.1:4010",
+          "stack": "Error: connect ECONNREFUSED 127.0.0.1:4010\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)",
+          "checksum": "bd15a46d863fc683283313ca0fe4a338",
+          "id": "801c7cd0-710c-49c5-a699-20b402748315",
+          "timestamp": 1779026510863,
+          "stacktrace": [
+            {
+              "fileName": "node:net",
+              "lineNumber": 1637,
+              "functionName": "TCPConnectWrap.afterConnect [as oncomplete]",
+              "typeName": "TCPConnectWrap",
+              "methodName": "afterConnect [as oncomplete]",
+              "columnNumber": 16,
+              "native": false
+            }
+          ]
+        },
+        "at": "request",
+        "source": {
+          "id": "6c1a1c2f-7e3a-45bf-9b82-abbb48cceb93",
+          "name": "List books",
+          "request": {
+            "url": {
+              "protocol": "http",
+              "port": "4010",
+              "path": [
+                "books"
+              ],
+              "host": [
+                "localhost"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "User-Agent",
+                "value": "PostmanRuntime/7.39.1",
+                "system": true
+              },
+              {
+                "key": "Cache-Control",
+                "value": "no-cache",
+                "system": true
+              },
+              {
+                "key": "Postman-Token",
+                "value": "0b6c99a2-0c16-4546-af9e-f8521a1a6859",
+                "system": true
+              },
+              {
+                "key": "Host",
+                "value": "localhost:4010",
+                "system": true
+              },
+              {
+                "key": "Accept-Encoding",
+                "value": "gzip, deflate, br",
+                "system": true
+              },
+              {
+                "key": "Connection",
+                "value": "keep-alive",
+                "system": true
+              }
+            ],
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "02ae0e4d-8303-46fa-9d4f-6d8c0a7448b3",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('GET /books returns 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('GET /books returns an array', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        "cursor": {
+          "position": 0,
+          "iteration": 0,
+          "length": 3,
+          "cycles": 1,
+          "empty": false,
+          "eof": false,
+          "bof": true,
+          "cr": false,
+          "ref": "2b937dc1-6119-4afb-a5e6-a9168a8de8a0",
+          "httpRequestId": "65845f82-bc6f-42cc-8291-4c4dc8de8985"
+        }
+      },
+      {
+        "error": {
+          "name": "AssertionError",
+          "index": 0,
+          "test": "GET /books returns 200",
+          "message": "expected PostmanResponse{ …(5) } to have property 'code'",
+          "stack": "AssertionError: expected PostmanResponse{ …(5) } to have property 'code'\n   at Object.eval sandbox-script.js:1:1)",
+          "checksum": "5db5d323a718c2420b63df89a3296624",
+          "id": "1417f765-2f80-4f64-8f1d-df94e230049c",
+          "timestamp": 1779026510871,
+          "stacktrace": [
+            {
+              "fileName": "sandbox-script.js",
+              "lineNumber": 1,
+              "functionName": "Object.eval",
+              "typeName": "Object",
+              "methodName": "eval",
+              "columnNumber": 1,
+              "native": false
+            }
+          ]
+        },
+        "at": "assertion:0 in test-script",
+        "source": {
+          "id": "6c1a1c2f-7e3a-45bf-9b82-abbb48cceb93",
+          "name": "List books",
+          "request": {
+            "url": {
+              "path": [
+                "books"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "02ae0e4d-8303-46fa-9d4f-6d8c0a7448b3",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('GET /books returns 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('GET /books returns an array', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.be.an('array');",
+                  "});"
+                ],
+                "_lastExecutionId": "435e900d-932a-42c0-9518-39d1eba7bab9"
+              }
+            }
+          ]
+        },
+        "parent": {
+          "id": "10234c1c-6d3e-45ec-9038-a7c31d208aae",
+          "name": "Books",
+          "description": {
+            "content": "All requests against /books and /books/{id}. Grouped into a folder so `run_failed` can scope re-runs via `--folder Books`.",
+            "type": "text/plain"
+          },
+          "item": [
+            {
+              "id": "6c1a1c2f-7e3a-45bf-9b82-abbb48cceb93",
+              "name": "List books",
+              "request": {
+                "url": {
+                  "path": [
+                    "books"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "02ae0e4d-8303-46fa-9d4f-6d8c0a7448b3",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('GET /books returns 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('GET /books returns an array', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.be.an('array');",
+                      "});"
+                    ],
+                    "_lastExecutionId": "435e900d-932a-42c0-9518-39d1eba7bab9"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "68f8c2bc-42fe-421d-b0d3-009d2a870910",
+              "name": "Create book",
+              "request": {
+                "url": {
+                  "path": [
+                    "books"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"The Pragmatic Programmer\",\n  \"author\": \"Andrew Hunt\",\n  \"published_year\": 1999\n}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "a3112f17-7a00-45b3-becb-b9ebea7ad273",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('POST /books returns 201', function () {",
+                      "    pm.response.to.have.status(201);",
+                      "});",
+                      "",
+                      "pm.test('POST /books response has id', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.have.property('id');",
+                      "    pm.expect(body.id).to.be.a('string');",
+                      "    pm.collectionVariables.set('bookId', body.id);",
+                      "});"
+                    ],
+                    "_lastExecutionId": "1ff1439e-12d9-439e-8828-bfbab8271067"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "d70dfea3-8e08-45ad-a348-c9d0d206f6b0",
+              "name": "Get book by id",
+              "request": {
+                "url": {
+                  "path": [
+                    "books",
+                    "{{bookId}}"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "a6795621-8a2c-423a-9d27-014b29527571",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('GET /books/{id} returns 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('GET /books/{id} response id matches request', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.have.property('id');",
+                      "    pm.expect(body.id).to.equal(pm.collectionVariables.get('bookId'));",
+                      "});"
+                    ],
+                    "_lastExecutionId": "d1003cd4-b73d-4d61-a1a8-60e6080e47ba"
+                  }
+                }
+              ]
+            }
+          ],
+          "event": []
+        },
+        "cursor": {
+          "position": 0,
+          "iteration": 0,
+          "length": 3,
+          "cycles": 1,
+          "empty": false,
+          "eof": false,
+          "bof": true,
+          "cr": false,
+          "ref": "2b937dc1-6119-4afb-a5e6-a9168a8de8a0",
+          "httpRequestId": "65845f82-bc6f-42cc-8291-4c4dc8de8985",
+          "scriptId": "02ae0e4d-8303-46fa-9d4f-6d8c0a7448b3",
+          "execution": "435e900d-932a-42c0-9518-39d1eba7bab9"
+        }
+      },
+      {
+        "error": {
+          "name": "JSONError",
+          "index": 1,
+          "test": "GET /books returns an array",
+          "message": "\"undefined\" is not valid JSON",
+          "stack": "JSONError: \"undefined\" is not valid JSON\n   at Object.eval sandbox-script.js:2:1)",
+          "checksum": "48a03b816ab958d4f1d6252b9f9b3eb5",
+          "id": "7d735eb6-11d3-486c-9dee-7d52aebde45a",
+          "timestamp": 1779026510872,
+          "stacktrace": [
+            {
+              "fileName": "sandbox-script.js",
+              "lineNumber": 2,
+              "functionName": "Object.eval",
+              "typeName": "Object",
+              "methodName": "eval",
+              "columnNumber": 1,
+              "native": false
+            }
+          ]
+        },
+        "at": "assertion:1 in test-script",
+        "source": {
+          "id": "6c1a1c2f-7e3a-45bf-9b82-abbb48cceb93",
+          "name": "List books",
+          "request": {
+            "url": {
+              "path": [
+                "books"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "02ae0e4d-8303-46fa-9d4f-6d8c0a7448b3",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('GET /books returns 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('GET /books returns an array', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.be.an('array');",
+                  "});"
+                ],
+                "_lastExecutionId": "435e900d-932a-42c0-9518-39d1eba7bab9"
+              }
+            }
+          ]
+        },
+        "parent": {
+          "id": "10234c1c-6d3e-45ec-9038-a7c31d208aae",
+          "name": "Books",
+          "description": {
+            "content": "All requests against /books and /books/{id}. Grouped into a folder so `run_failed` can scope re-runs via `--folder Books`.",
+            "type": "text/plain"
+          },
+          "item": [
+            {
+              "id": "6c1a1c2f-7e3a-45bf-9b82-abbb48cceb93",
+              "name": "List books",
+              "request": {
+                "url": {
+                  "path": [
+                    "books"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "02ae0e4d-8303-46fa-9d4f-6d8c0a7448b3",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('GET /books returns 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('GET /books returns an array', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.be.an('array');",
+                      "});"
+                    ],
+                    "_lastExecutionId": "435e900d-932a-42c0-9518-39d1eba7bab9"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "68f8c2bc-42fe-421d-b0d3-009d2a870910",
+              "name": "Create book",
+              "request": {
+                "url": {
+                  "path": [
+                    "books"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"The Pragmatic Programmer\",\n  \"author\": \"Andrew Hunt\",\n  \"published_year\": 1999\n}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "a3112f17-7a00-45b3-becb-b9ebea7ad273",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('POST /books returns 201', function () {",
+                      "    pm.response.to.have.status(201);",
+                      "});",
+                      "",
+                      "pm.test('POST /books response has id', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.have.property('id');",
+                      "    pm.expect(body.id).to.be.a('string');",
+                      "    pm.collectionVariables.set('bookId', body.id);",
+                      "});"
+                    ],
+                    "_lastExecutionId": "1ff1439e-12d9-439e-8828-bfbab8271067"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "d70dfea3-8e08-45ad-a348-c9d0d206f6b0",
+              "name": "Get book by id",
+              "request": {
+                "url": {
+                  "path": [
+                    "books",
+                    "{{bookId}}"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "a6795621-8a2c-423a-9d27-014b29527571",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('GET /books/{id} returns 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('GET /books/{id} response id matches request', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.have.property('id');",
+                      "    pm.expect(body.id).to.equal(pm.collectionVariables.get('bookId'));",
+                      "});"
+                    ],
+                    "_lastExecutionId": "d1003cd4-b73d-4d61-a1a8-60e6080e47ba"
+                  }
+                }
+              ]
+            }
+          ],
+          "event": []
+        },
+        "cursor": {
+          "position": 0,
+          "iteration": 0,
+          "length": 3,
+          "cycles": 1,
+          "empty": false,
+          "eof": false,
+          "bof": true,
+          "cr": false,
+          "ref": "2b937dc1-6119-4afb-a5e6-a9168a8de8a0",
+          "httpRequestId": "65845f82-bc6f-42cc-8291-4c4dc8de8985",
+          "scriptId": "02ae0e4d-8303-46fa-9d4f-6d8c0a7448b3",
+          "execution": "435e900d-932a-42c0-9518-39d1eba7bab9"
+        }
+      },
+      {
+        "error": {
+          "errno": -61,
+          "code": "ECONNREFUSED",
+          "syscall": "connect",
+          "address": "127.0.0.1",
+          "port": 4010,
+          "name": "Error",
+          "message": "connect ECONNREFUSED 127.0.0.1:4010",
+          "stack": "Error: connect ECONNREFUSED 127.0.0.1:4010\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)",
+          "checksum": "bd15a46d863fc683283313ca0fe4a338",
+          "id": "51bbec01-3346-4978-8e82-bae7bb9e7db1",
+          "timestamp": 1779026510882,
+          "stacktrace": [
+            {
+              "fileName": "node:net",
+              "lineNumber": 1637,
+              "functionName": "TCPConnectWrap.afterConnect [as oncomplete]",
+              "typeName": "TCPConnectWrap",
+              "methodName": "afterConnect [as oncomplete]",
+              "columnNumber": 16,
+              "native": false
+            }
+          ]
+        },
+        "at": "request",
+        "source": {
+          "id": "68f8c2bc-42fe-421d-b0d3-009d2a870910",
+          "name": "Create book",
+          "request": {
+            "url": {
+              "protocol": "http",
+              "port": "4010",
+              "path": [
+                "books"
+              ],
+              "host": [
+                "localhost"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "User-Agent",
+                "value": "PostmanRuntime/7.39.1",
+                "system": true
+              },
+              {
+                "key": "Accept",
+                "value": "*/*",
+                "system": true
+              },
+              {
+                "key": "Cache-Control",
+                "value": "no-cache",
+                "system": true
+              },
+              {
+                "key": "Postman-Token",
+                "value": "aa430c8e-4f7b-4a03-95c1-0b11ec0a5a15",
+                "system": true
+              },
+              {
+                "key": "Host",
+                "value": "localhost:4010",
+                "system": true
+              },
+              {
+                "key": "Accept-Encoding",
+                "value": "gzip, deflate, br",
+                "system": true
+              },
+              {
+                "key": "Connection",
+                "value": "keep-alive",
+                "system": true
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"The Pragmatic Programmer\",\n  \"author\": \"Andrew Hunt\",\n  \"published_year\": 1999\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "a3112f17-7a00-45b3-becb-b9ebea7ad273",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('POST /books returns 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('POST /books response has id', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id');",
+                  "    pm.expect(body.id).to.be.a('string');",
+                  "    pm.collectionVariables.set('bookId', body.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        "cursor": {
+          "ref": "3284d52f-0d73-4773-8403-59d01525535a",
+          "length": 3,
+          "cycles": 1,
+          "position": 1,
+          "iteration": 0,
+          "httpRequestId": "3a976135-fb47-4797-927c-0f680283a84d"
+        }
+      },
+      {
+        "error": {
+          "name": "AssertionError",
+          "index": 0,
+          "test": "POST /books returns 201",
+          "message": "expected PostmanResponse{ …(5) } to have property 'code'",
+          "stack": "AssertionError: expected PostmanResponse{ …(5) } to have property 'code'\n   at Object.eval sandbox-script.js:1:2)",
+          "checksum": "f235e00056af7a65784cf19044b3e9e1",
+          "id": "68028b7e-1528-4c9b-bddb-dbee24717efc",
+          "timestamp": 1779026510885,
+          "stacktrace": [
+            {
+              "fileName": "sandbox-script.js",
+              "lineNumber": 1,
+              "functionName": "Object.eval",
+              "typeName": "Object",
+              "methodName": "eval",
+              "columnNumber": 2,
+              "native": false
+            }
+          ]
+        },
+        "at": "assertion:0 in test-script",
+        "source": {
+          "id": "68f8c2bc-42fe-421d-b0d3-009d2a870910",
+          "name": "Create book",
+          "request": {
+            "url": {
+              "path": [
+                "books"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"The Pragmatic Programmer\",\n  \"author\": \"Andrew Hunt\",\n  \"published_year\": 1999\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "a3112f17-7a00-45b3-becb-b9ebea7ad273",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('POST /books returns 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('POST /books response has id', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id');",
+                  "    pm.expect(body.id).to.be.a('string');",
+                  "    pm.collectionVariables.set('bookId', body.id);",
+                  "});"
+                ],
+                "_lastExecutionId": "1ff1439e-12d9-439e-8828-bfbab8271067"
+              }
+            }
+          ]
+        },
+        "parent": {
+          "id": "10234c1c-6d3e-45ec-9038-a7c31d208aae",
+          "name": "Books",
+          "description": {
+            "content": "All requests against /books and /books/{id}. Grouped into a folder so `run_failed` can scope re-runs via `--folder Books`.",
+            "type": "text/plain"
+          },
+          "item": [
+            {
+              "id": "6c1a1c2f-7e3a-45bf-9b82-abbb48cceb93",
+              "name": "List books",
+              "request": {
+                "url": {
+                  "path": [
+                    "books"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "02ae0e4d-8303-46fa-9d4f-6d8c0a7448b3",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('GET /books returns 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('GET /books returns an array', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.be.an('array');",
+                      "});"
+                    ],
+                    "_lastExecutionId": "435e900d-932a-42c0-9518-39d1eba7bab9"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "68f8c2bc-42fe-421d-b0d3-009d2a870910",
+              "name": "Create book",
+              "request": {
+                "url": {
+                  "path": [
+                    "books"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"The Pragmatic Programmer\",\n  \"author\": \"Andrew Hunt\",\n  \"published_year\": 1999\n}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "a3112f17-7a00-45b3-becb-b9ebea7ad273",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('POST /books returns 201', function () {",
+                      "    pm.response.to.have.status(201);",
+                      "});",
+                      "",
+                      "pm.test('POST /books response has id', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.have.property('id');",
+                      "    pm.expect(body.id).to.be.a('string');",
+                      "    pm.collectionVariables.set('bookId', body.id);",
+                      "});"
+                    ],
+                    "_lastExecutionId": "1ff1439e-12d9-439e-8828-bfbab8271067"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "d70dfea3-8e08-45ad-a348-c9d0d206f6b0",
+              "name": "Get book by id",
+              "request": {
+                "url": {
+                  "path": [
+                    "books",
+                    "{{bookId}}"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "a6795621-8a2c-423a-9d27-014b29527571",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('GET /books/{id} returns 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('GET /books/{id} response id matches request', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.have.property('id');",
+                      "    pm.expect(body.id).to.equal(pm.collectionVariables.get('bookId'));",
+                      "});"
+                    ],
+                    "_lastExecutionId": "d1003cd4-b73d-4d61-a1a8-60e6080e47ba"
+                  }
+                }
+              ]
+            }
+          ],
+          "event": []
+        },
+        "cursor": {
+          "ref": "3284d52f-0d73-4773-8403-59d01525535a",
+          "length": 3,
+          "cycles": 1,
+          "position": 1,
+          "iteration": 0,
+          "httpRequestId": "3a976135-fb47-4797-927c-0f680283a84d",
+          "scriptId": "a3112f17-7a00-45b3-becb-b9ebea7ad273",
+          "execution": "1ff1439e-12d9-439e-8828-bfbab8271067"
+        }
+      },
+      {
+        "error": {
+          "name": "JSONError",
+          "index": 1,
+          "test": "POST /books response has id",
+          "message": "\"undefined\" is not valid JSON",
+          "stack": "JSONError: \"undefined\" is not valid JSON\n   at Object.eval sandbox-script.js:2:2)",
+          "checksum": "6d693b12f4b790a736307b4e332b8a4e",
+          "id": "7a9ca92d-f77b-43c2-944a-d6f4ddeae167",
+          "timestamp": 1779026510885,
+          "stacktrace": [
+            {
+              "fileName": "sandbox-script.js",
+              "lineNumber": 2,
+              "functionName": "Object.eval",
+              "typeName": "Object",
+              "methodName": "eval",
+              "columnNumber": 2,
+              "native": false
+            }
+          ]
+        },
+        "at": "assertion:1 in test-script",
+        "source": {
+          "id": "68f8c2bc-42fe-421d-b0d3-009d2a870910",
+          "name": "Create book",
+          "request": {
+            "url": {
+              "path": [
+                "books"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"The Pragmatic Programmer\",\n  \"author\": \"Andrew Hunt\",\n  \"published_year\": 1999\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "a3112f17-7a00-45b3-becb-b9ebea7ad273",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('POST /books returns 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('POST /books response has id', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id');",
+                  "    pm.expect(body.id).to.be.a('string');",
+                  "    pm.collectionVariables.set('bookId', body.id);",
+                  "});"
+                ],
+                "_lastExecutionId": "1ff1439e-12d9-439e-8828-bfbab8271067"
+              }
+            }
+          ]
+        },
+        "parent": {
+          "id": "10234c1c-6d3e-45ec-9038-a7c31d208aae",
+          "name": "Books",
+          "description": {
+            "content": "All requests against /books and /books/{id}. Grouped into a folder so `run_failed` can scope re-runs via `--folder Books`.",
+            "type": "text/plain"
+          },
+          "item": [
+            {
+              "id": "6c1a1c2f-7e3a-45bf-9b82-abbb48cceb93",
+              "name": "List books",
+              "request": {
+                "url": {
+                  "path": [
+                    "books"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "02ae0e4d-8303-46fa-9d4f-6d8c0a7448b3",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('GET /books returns 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('GET /books returns an array', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.be.an('array');",
+                      "});"
+                    ],
+                    "_lastExecutionId": "435e900d-932a-42c0-9518-39d1eba7bab9"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "68f8c2bc-42fe-421d-b0d3-009d2a870910",
+              "name": "Create book",
+              "request": {
+                "url": {
+                  "path": [
+                    "books"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"The Pragmatic Programmer\",\n  \"author\": \"Andrew Hunt\",\n  \"published_year\": 1999\n}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "a3112f17-7a00-45b3-becb-b9ebea7ad273",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('POST /books returns 201', function () {",
+                      "    pm.response.to.have.status(201);",
+                      "});",
+                      "",
+                      "pm.test('POST /books response has id', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.have.property('id');",
+                      "    pm.expect(body.id).to.be.a('string');",
+                      "    pm.collectionVariables.set('bookId', body.id);",
+                      "});"
+                    ],
+                    "_lastExecutionId": "1ff1439e-12d9-439e-8828-bfbab8271067"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "d70dfea3-8e08-45ad-a348-c9d0d206f6b0",
+              "name": "Get book by id",
+              "request": {
+                "url": {
+                  "path": [
+                    "books",
+                    "{{bookId}}"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "a6795621-8a2c-423a-9d27-014b29527571",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('GET /books/{id} returns 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('GET /books/{id} response id matches request', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.have.property('id');",
+                      "    pm.expect(body.id).to.equal(pm.collectionVariables.get('bookId'));",
+                      "});"
+                    ],
+                    "_lastExecutionId": "d1003cd4-b73d-4d61-a1a8-60e6080e47ba"
+                  }
+                }
+              ]
+            }
+          ],
+          "event": []
+        },
+        "cursor": {
+          "ref": "3284d52f-0d73-4773-8403-59d01525535a",
+          "length": 3,
+          "cycles": 1,
+          "position": 1,
+          "iteration": 0,
+          "httpRequestId": "3a976135-fb47-4797-927c-0f680283a84d",
+          "scriptId": "a3112f17-7a00-45b3-becb-b9ebea7ad273",
+          "execution": "1ff1439e-12d9-439e-8828-bfbab8271067"
+        }
+      },
+      {
+        "error": {
+          "errno": -61,
+          "code": "ECONNREFUSED",
+          "syscall": "connect",
+          "address": "127.0.0.1",
+          "port": 4010,
+          "name": "Error",
+          "message": "connect ECONNREFUSED 127.0.0.1:4010",
+          "stack": "Error: connect ECONNREFUSED 127.0.0.1:4010\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)",
+          "checksum": "bd15a46d863fc683283313ca0fe4a338",
+          "id": "1a4d7747-6325-46de-b177-2be8a4a64b96",
+          "timestamp": 1779026510892,
+          "stacktrace": [
+            {
+              "fileName": "node:net",
+              "lineNumber": 1637,
+              "functionName": "TCPConnectWrap.afterConnect [as oncomplete]",
+              "typeName": "TCPConnectWrap",
+              "methodName": "afterConnect [as oncomplete]",
+              "columnNumber": 16,
+              "native": false
+            }
+          ]
+        },
+        "at": "request",
+        "source": {
+          "id": "d70dfea3-8e08-45ad-a348-c9d0d206f6b0",
+          "name": "Get book by id",
+          "request": {
+            "url": {
+              "protocol": "http",
+              "port": "4010",
+              "path": [
+                "books",
+                "abc123"
+              ],
+              "host": [
+                "localhost"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "User-Agent",
+                "value": "PostmanRuntime/7.39.1",
+                "system": true
+              },
+              {
+                "key": "Cache-Control",
+                "value": "no-cache",
+                "system": true
+              },
+              {
+                "key": "Postman-Token",
+                "value": "2c2b9ced-e7a9-4a89-bad2-ec6e09268759",
+                "system": true
+              },
+              {
+                "key": "Host",
+                "value": "localhost:4010",
+                "system": true
+              },
+              {
+                "key": "Accept-Encoding",
+                "value": "gzip, deflate, br",
+                "system": true
+              },
+              {
+                "key": "Connection",
+                "value": "keep-alive",
+                "system": true
+              }
+            ],
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "a6795621-8a2c-423a-9d27-014b29527571",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('GET /books/{id} returns 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('GET /books/{id} response id matches request', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id');",
+                  "    pm.expect(body.id).to.equal(pm.collectionVariables.get('bookId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        "cursor": {
+          "ref": "6d4fadda-58a5-494b-9619-9293da6ea9a7",
+          "length": 3,
+          "cycles": 1,
+          "position": 2,
+          "iteration": 0,
+          "httpRequestId": "14a8a54c-d079-46d2-9020-ac6f76015ede"
+        }
+      },
+      {
+        "error": {
+          "name": "AssertionError",
+          "index": 0,
+          "test": "GET /books/{id} returns 200",
+          "message": "expected PostmanResponse{ …(5) } to have property 'code'",
+          "stack": "AssertionError: expected PostmanResponse{ …(5) } to have property 'code'\n   at Object.eval sandbox-script.js:1:3)",
+          "checksum": "7fc2c00910c1c4c9aa8e0f0d3bbc9533",
+          "id": "4d023754-f3c3-43db-94cf-1e5d041ec242",
+          "timestamp": 1779026510895,
+          "stacktrace": [
+            {
+              "fileName": "sandbox-script.js",
+              "lineNumber": 1,
+              "functionName": "Object.eval",
+              "typeName": "Object",
+              "methodName": "eval",
+              "columnNumber": 3,
+              "native": false
+            }
+          ]
+        },
+        "at": "assertion:0 in test-script",
+        "source": {
+          "id": "d70dfea3-8e08-45ad-a348-c9d0d206f6b0",
+          "name": "Get book by id",
+          "request": {
+            "url": {
+              "path": [
+                "books",
+                "{{bookId}}"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "a6795621-8a2c-423a-9d27-014b29527571",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('GET /books/{id} returns 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('GET /books/{id} response id matches request', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id');",
+                  "    pm.expect(body.id).to.equal(pm.collectionVariables.get('bookId'));",
+                  "});"
+                ],
+                "_lastExecutionId": "d1003cd4-b73d-4d61-a1a8-60e6080e47ba"
+              }
+            }
+          ]
+        },
+        "parent": {
+          "id": "10234c1c-6d3e-45ec-9038-a7c31d208aae",
+          "name": "Books",
+          "description": {
+            "content": "All requests against /books and /books/{id}. Grouped into a folder so `run_failed` can scope re-runs via `--folder Books`.",
+            "type": "text/plain"
+          },
+          "item": [
+            {
+              "id": "6c1a1c2f-7e3a-45bf-9b82-abbb48cceb93",
+              "name": "List books",
+              "request": {
+                "url": {
+                  "path": [
+                    "books"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "02ae0e4d-8303-46fa-9d4f-6d8c0a7448b3",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('GET /books returns 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('GET /books returns an array', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.be.an('array');",
+                      "});"
+                    ],
+                    "_lastExecutionId": "435e900d-932a-42c0-9518-39d1eba7bab9"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "68f8c2bc-42fe-421d-b0d3-009d2a870910",
+              "name": "Create book",
+              "request": {
+                "url": {
+                  "path": [
+                    "books"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"The Pragmatic Programmer\",\n  \"author\": \"Andrew Hunt\",\n  \"published_year\": 1999\n}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "a3112f17-7a00-45b3-becb-b9ebea7ad273",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('POST /books returns 201', function () {",
+                      "    pm.response.to.have.status(201);",
+                      "});",
+                      "",
+                      "pm.test('POST /books response has id', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.have.property('id');",
+                      "    pm.expect(body.id).to.be.a('string');",
+                      "    pm.collectionVariables.set('bookId', body.id);",
+                      "});"
+                    ],
+                    "_lastExecutionId": "1ff1439e-12d9-439e-8828-bfbab8271067"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "d70dfea3-8e08-45ad-a348-c9d0d206f6b0",
+              "name": "Get book by id",
+              "request": {
+                "url": {
+                  "path": [
+                    "books",
+                    "{{bookId}}"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "a6795621-8a2c-423a-9d27-014b29527571",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('GET /books/{id} returns 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('GET /books/{id} response id matches request', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.have.property('id');",
+                      "    pm.expect(body.id).to.equal(pm.collectionVariables.get('bookId'));",
+                      "});"
+                    ],
+                    "_lastExecutionId": "d1003cd4-b73d-4d61-a1a8-60e6080e47ba"
+                  }
+                }
+              ]
+            }
+          ],
+          "event": []
+        },
+        "cursor": {
+          "ref": "6d4fadda-58a5-494b-9619-9293da6ea9a7",
+          "length": 3,
+          "cycles": 1,
+          "position": 2,
+          "iteration": 0,
+          "httpRequestId": "14a8a54c-d079-46d2-9020-ac6f76015ede",
+          "scriptId": "a6795621-8a2c-423a-9d27-014b29527571",
+          "execution": "d1003cd4-b73d-4d61-a1a8-60e6080e47ba"
+        }
+      },
+      {
+        "error": {
+          "name": "JSONError",
+          "index": 1,
+          "test": "GET /books/{id} response id matches request",
+          "message": "\"undefined\" is not valid JSON",
+          "stack": "JSONError: \"undefined\" is not valid JSON\n   at Object.eval sandbox-script.js:2:3)",
+          "checksum": "1f02f2a3b1a297e367087b4d2b615232",
+          "id": "3cf7a3a1-d8c4-4b58-a57f-5b113cecd84f",
+          "timestamp": 1779026510895,
+          "stacktrace": [
+            {
+              "fileName": "sandbox-script.js",
+              "lineNumber": 2,
+              "functionName": "Object.eval",
+              "typeName": "Object",
+              "methodName": "eval",
+              "columnNumber": 3,
+              "native": false
+            }
+          ]
+        },
+        "at": "assertion:1 in test-script",
+        "source": {
+          "id": "d70dfea3-8e08-45ad-a348-c9d0d206f6b0",
+          "name": "Get book by id",
+          "request": {
+            "url": {
+              "path": [
+                "books",
+                "{{bookId}}"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "a6795621-8a2c-423a-9d27-014b29527571",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('GET /books/{id} returns 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('GET /books/{id} response id matches request', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id');",
+                  "    pm.expect(body.id).to.equal(pm.collectionVariables.get('bookId'));",
+                  "});"
+                ],
+                "_lastExecutionId": "d1003cd4-b73d-4d61-a1a8-60e6080e47ba"
+              }
+            }
+          ]
+        },
+        "parent": {
+          "id": "10234c1c-6d3e-45ec-9038-a7c31d208aae",
+          "name": "Books",
+          "description": {
+            "content": "All requests against /books and /books/{id}. Grouped into a folder so `run_failed` can scope re-runs via `--folder Books`.",
+            "type": "text/plain"
+          },
+          "item": [
+            {
+              "id": "6c1a1c2f-7e3a-45bf-9b82-abbb48cceb93",
+              "name": "List books",
+              "request": {
+                "url": {
+                  "path": [
+                    "books"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "02ae0e4d-8303-46fa-9d4f-6d8c0a7448b3",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('GET /books returns 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('GET /books returns an array', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.be.an('array');",
+                      "});"
+                    ],
+                    "_lastExecutionId": "435e900d-932a-42c0-9518-39d1eba7bab9"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "68f8c2bc-42fe-421d-b0d3-009d2a870910",
+              "name": "Create book",
+              "request": {
+                "url": {
+                  "path": [
+                    "books"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"The Pragmatic Programmer\",\n  \"author\": \"Andrew Hunt\",\n  \"published_year\": 1999\n}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "a3112f17-7a00-45b3-becb-b9ebea7ad273",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('POST /books returns 201', function () {",
+                      "    pm.response.to.have.status(201);",
+                      "});",
+                      "",
+                      "pm.test('POST /books response has id', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.have.property('id');",
+                      "    pm.expect(body.id).to.be.a('string');",
+                      "    pm.collectionVariables.set('bookId', body.id);",
+                      "});"
+                    ],
+                    "_lastExecutionId": "1ff1439e-12d9-439e-8828-bfbab8271067"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "d70dfea3-8e08-45ad-a348-c9d0d206f6b0",
+              "name": "Get book by id",
+              "request": {
+                "url": {
+                  "path": [
+                    "books",
+                    "{{bookId}}"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "a6795621-8a2c-423a-9d27-014b29527571",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('GET /books/{id} returns 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('GET /books/{id} response id matches request', function () {",
+                      "    const body = pm.response.json();",
+                      "    pm.expect(body).to.have.property('id');",
+                      "    pm.expect(body.id).to.equal(pm.collectionVariables.get('bookId'));",
+                      "});"
+                    ],
+                    "_lastExecutionId": "d1003cd4-b73d-4d61-a1a8-60e6080e47ba"
+                  }
+                }
+              ]
+            }
+          ],
+          "event": []
+        },
+        "cursor": {
+          "ref": "6d4fadda-58a5-494b-9619-9293da6ea9a7",
+          "length": 3,
+          "cycles": 1,
+          "position": 2,
+          "iteration": 0,
+          "httpRequestId": "14a8a54c-d079-46d2-9020-ac6f76015ede",
+          "scriptId": "a6795621-8a2c-423a-9d27-014b29527571",
+          "execution": "d1003cd4-b73d-4d61-a1a8-60e6080e47ba"
+        }
+      }
+    ],
+    "error": null
+  }
+}

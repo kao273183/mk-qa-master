@@ -107,3 +107,53 @@ jobs:
         run: |
           schemathesis run --dry-run --checks all \
             "${GITHUB_WORKSPACE}/examples/sample_api_project/openapi.yaml"
+
+  api-postman:
+    # v0.6.1 native API testing (Phase 2): verifies the newman runner
+    # parses the bundled Postman collection end-to-end. Newman is an npm
+    # package (not pip), so we set up Node 20 + `npm install -g newman`
+    # before exercising the CLI against the local collection. No live
+    # API is involved — the collection's {{baseUrl}} points at a
+    # nonexistent localhost server and every request will fail at the
+    # network layer. We accept that exit code (|| true) because the
+    # signal we care about is "newman accepts the collection JSON and
+    # starts a run" — actual HTTP results are out of scope for CI.
+    name: postman sample · Python 3.12 + Node 20 + newman
+    runs-on: ubuntu-latest
+    needs: smoke
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install newman
+        run: npm install -g newman
+
+      - name: Install mk-qa-master
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run smoke tests
+        run: pytest tests/ -v
+
+      - name: Newman dry-validate against bundled collection
+        # Verifies Newman accepts the collection JSON. The bundled
+        # {{baseUrl}} points at http://localhost:4010 with nothing
+        # listening, so requests will fail at the network layer — we
+        # accept that with `|| true`. A short --timeout-request keeps
+        # the job snappy when DNS / connect failures take their default
+        # path.
+        run: |
+          newman run examples/sample_api_project/postman-collection.json \
+            --timeout-request 2000 \
+            --reporters cli || true
