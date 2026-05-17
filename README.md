@@ -42,9 +42,15 @@ Full design notes: [`docs/framework.md`](docs/framework.md).
 
 ## What's in the box
 
-- **Run tests** across multiple frameworks (web + mobile) via a single MCP surface
+- **Run tests** across multiple frameworks (web + mobile + API) via a single MCP surface
 - **Mobile via Maestro** (since v0.3.0): same MCP tools, iOS Simulator /
   Android Emulator / real device; YAML flows; cross-platform without rewrites
+- **API testing too** — the runner doesn't care if a test hits a DOM, a screen,
+  an API, or a pure function. Pytest with `httpx` / `requests`, Jest with
+  `supertest`, Cypress `cy.request()`, Go `net/http/httptest` — they all flow
+  through the same history, flake / broken classification, and optimizer
+  pipeline as your UI tests. Dedicated API-contract runners (Schemathesis /
+  Newman / Pact) are on the v0.6 roadmap.
 - **Failure artifacts**: screenshot (base64-inlined), video, Playwright
   trace.zip / Maestro recordings
 - **Run history**: every run snapshotted; HTML report shows a sparkline trend
