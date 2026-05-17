@@ -29,6 +29,7 @@
 | `cypress` | Cypress | JavaScript | Web |
 | `go` / `go-test` | `go test` | Go | Backend |
 | `maestro` / `mobile` | Maestro | YAML | iOS + Android |
+| `schemathesis` / `api` | Schemathesis | OpenAPI 3.x / Swagger 2.0 | API（v0.6.0 起） |
 
 完整設計文件：[`docs/framework.md`](docs/framework.md)。
 
@@ -38,7 +39,7 @@
 
 - **跨框架執行測試**（web + mobile + API），單一 MCP 介面對接所有 runner
 - **行動端透過 Maestro**（v0.3.0 起）：同樣 MCP tool 集、iOS Simulator / Android Emulator / 真機都通；YAML flow 跨平台共用
-- **API 測試也吃**——runner 不在乎你的 test 打的是 DOM、手機畫面、API 還是 pure function。pytest 配 `httpx` / `requests`、Jest 配 `supertest`、Cypress `cy.request()`、Go `net/http/httptest`——通通走同一條 history、flake / broken 分類、optimizer pipeline。專門的 API contract runner（Schemathesis / Newman / Pact）在 v0.6 roadmap 上
+- **原生 API 測試（Schemathesis）**（v0.6.0 起）：餵 runner 一個 OpenAPI URL（`http(s)://` 或 `file://`），自動產生 property-based fuzz 測試案例，涵蓋 status code、response schema、content-type、`5xx` 受 fuzz 影響等檢查。MCP tool surface 完全沿用 — `QA_RUNNER=schemathesis` 與 `pytest` / `jest` / `cypress` / `go` / `maestro` 並列。已經用 pytest+`httpx`、Jest+`supertest`、Cypress `cy.request()`、Go `net/http/httptest` 寫好的 API 測試**仍然走原本的 runner，不需要遷移**。Newman（Postman collection）排在 v0.6.1；Pact provider verification 在 v0.7.0 條件式 roadmap。
 - **失敗產物完整**：截圖（base64 內嵌）、影片、Playwright trace.zip / Maestro recording
 - **執行歷史**：每次 run 自動快照；HTML 報告含 sparkline 趨勢線
 - **DOM / Screen 分析器** — `analyze_url`（web，抓 form / nav / dialog / CTA + 該頁打的 API + 跑版偵測）跟 `analyze_screen`（mobile，透過 `maestro hierarchy` 抓 form / cta / tab_bar）
@@ -95,6 +96,40 @@ client config 指向同一個 Python：
 | `cypress` | Node 專案 + `npm i -D cypress` |
 | `go` | Go toolchain 在 PATH |
 | `maestro` | [Maestro CLI](https://maestro.mobile.dev/) + 模擬器 / 實機 / BlueStacks（透過 `adb connect`） |
+| `schemathesis` / `api` | `pip install 'mk-qa-master[api]'`（自動拉 `schemathesis>=3.0,<4`） |
+
+
+## API 測試（`QA_RUNNER=schemathesis`）
+
+把 runner 指向任何 OpenAPI 3.x / Swagger 2.0 schema，Schemathesis 就會 per
+operation 產生 property-based 測試案例 — 涵蓋 response schema conformance、
+status code conformance、content-type 檢查、被 fuzz 打到 `5xx` 的情況。
+結果跟 UI 測試走同一條 `report.json` / history / flake / optimizer pipeline。
+
+端到端教學：[`docs/walkthrough-api.md`](docs/walkthrough-api.md)。
+3 endpoint 範例 schema：[`examples/sample_api_project/`](examples/sample_api_project/)。
+
+### 5 行設定
+
+```jsonc
+"env": {
+  "QA_RUNNER": "schemathesis",
+  "QA_OPENAPI_URL": "https://api.example.com/openapi.json"
+}
+```
+
+### 環境變數
+
+| 變數 | 必填 | 預設 | 作用 |
+|---|---|---|---|
+| `QA_OPENAPI_URL` | 是 | — | OpenAPI 路徑。`http(s)://...` 或 `file://...`。**純檔案路徑不接受**——一律加 `file://` 前綴避免相對/絕對解析歧義。 |
+| `QA_SCHEMATHESIS_CHECKS` | 否 | `all` | 逗號分隔子集：`response_schema_conformance,status_code_conformance,not_a_server_error,content_type_conformance,response_headers_conformance`。 |
+| `QA_SCHEMATHESIS_AUTH` | 否 | — | Authorization header 值。以 `-H "Authorization: <value>"` 傳入；不會寫進 log，archived report 也會做敏感字串遮罩。 |
+| `QA_SCHEMATHESIS_MAX_EXAMPLES` | 否 | `20` | 每個 operation 的 Hypothesis sample 數。越大 fuzz 越深、跑越久。 |
+| `QA_SCHEMATHESIS_DRY_RUN` | 否 | `0` | 設 `1` 啟用「planning only、不打 HTTP」模式 — 對 production 做安全 preview、或 CI 只跑 schema-only smoke 時用。 |
+| `QA_NO_REDACT` | 否 | `0` | 關閉 archived report 的敏感字串遮罩。預設遮罩 `Authorization: Bearer …`、`"password": …`、`"token" / "api_key" / "secret" / "access_token" / "refresh_token": …`。 |
+
+原本的 `QA_TIMEOUT_SECONDS`（預設 600s）依然作用。
 
 
 ## 接到 Claude Desktop
@@ -108,7 +143,7 @@ client config 指向同一個 Python：
 
 | 變數 | 範例 | 作用 |
 |---|---|---|
-| `QA_RUNNER` | `pytest` / `jest` / `cypress` / `go` | 選擇測試框架 |
+| `QA_RUNNER` | `pytest` / `jest` / `cypress` / `go` / `maestro` / `schemathesis` | 選擇測試框架 |
 | `QA_PROJECT_ROOT` | `/path/to/your/project` | 指向受測專案根目錄 |
 
 ### 各 runner 設定範例
@@ -131,6 +166,14 @@ client config 指向同一個 Python：
 **Go test**：
 ```json
 "env": { "QA_RUNNER": "go", "QA_PROJECT_ROOT": "/path/to/go-project" }
+```
+
+**Schemathesis（API）**：
+```json
+"env": {
+  "QA_RUNNER": "schemathesis",
+  "QA_OPENAPI_URL": "https://api.example.com/openapi.json"
+}
 ```
 
 ---

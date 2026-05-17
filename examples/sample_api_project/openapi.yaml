@@ -1,0 +1,140 @@
+openapi: 3.0.3
+info:
+  title: Sample Library API
+  description: |
+    A fictional 3-endpoint library API for dogfooding mk-qa-master's
+    schemathesis runner. Self-contained, no live backend required —
+    pair with `prism mock openapi.yaml` to exercise full request/response,
+    or run `schemathesis run --dry-run` for parse-only smoke.
+  version: 1.0.0
+  license:
+    name: MIT
+servers:
+  - url: http://localhost:4010
+    description: Local Prism mock (run `prism mock openapi.yaml`)
+paths:
+  /books:
+    get:
+      summary: List books
+      operationId: listBooks
+      tags: [books]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Page of books
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Book"
+        "400":
+          description: Invalid limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Add a book
+      operationId: createBook
+      tags: [books]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewBook"
+      responses:
+        "201":
+          description: Book created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /books/{id}:
+    get:
+      summary: Get a book by id
+      operationId: getBook
+      tags: [books]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-zA-Z0-9_-]+$"
+            minLength: 1
+            maxLength: 64
+      responses:
+        "200":
+          description: The book
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  schemas:
+    Book:
+      type: object
+      required: [id, title, author]
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 64
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        author:
+          type: string
+          minLength: 1
+          maxLength: 120
+        published_year:
+          type: integer
+          minimum: 1450
+          maximum: 2100
+    NewBook:
+      type: object
+      required: [title, author]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        author:
+          type: string
+          minLength: 1
+          maxLength: 120
+        published_year:
+          type: integer
+          minimum: 1450
+          maximum: 2100
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string

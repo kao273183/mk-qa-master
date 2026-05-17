@@ -28,6 +28,39 @@ QA_KNOWLEDGE_PATH = Path(
 # Example: QA_ANDROID_HOST=127.0.0.1:5555 (BlueStacks default).
 ANDROID_HOST = os.getenv("QA_ANDROID_HOST", "").strip()
 
+# ---- API testing (QA_RUNNER=schemathesis) ---------------------------------
+# Required when QA_RUNNER=schemathesis. Accepts http(s):// and file:// only;
+# plain paths must use the file:// prefix to avoid relative/absolute
+# ambiguity. Validated at runner first-use (not import-time) so the rest of
+# the MCP boots even when API config is unset.
+OPENAPI_URL = os.getenv("QA_OPENAPI_URL", "").strip()
+
+# Comma-separated subset of Schemathesis checks. Empty → `--checks all`.
+# Examples: "response_schema_conformance,status_code_conformance".
+SCHEMATHESIS_CHECKS = os.getenv("QA_SCHEMATHESIS_CHECKS", "").strip()
+
+# Authorization header value (the part after "Authorization:"). Passed as
+# `-H "Authorization: <value>"`. Never logged; redaction in the runner
+# scrubs it from request/response captures before they hit disk.
+SCHEMATHESIS_AUTH = os.getenv("QA_SCHEMATHESIS_AUTH", "").strip()
+
+# Hypothesis examples per operation. Higher = deeper fuzz, slower run.
+# Schemathesis default is 100; we default to 20 to keep CI runs snappy.
+try:
+    SCHEMATHESIS_MAX_EXAMPLES = int(os.getenv("QA_SCHEMATHESIS_MAX_EXAMPLES", "20"))
+except ValueError:
+    SCHEMATHESIS_MAX_EXAMPLES = 20
+
+# Dry-run mode — Schemathesis resolves the schema and plans requests but
+# never issues HTTP. Use this when pointing at a production API for a
+# safety preview, or when the runner is wired into CI against a schema-only
+# artifact (no live server).
+SCHEMATHESIS_DRY_RUN = os.getenv("QA_SCHEMATHESIS_DRY_RUN", "").lower() in ("1", "true", "yes")
+
+# Disable secret redaction in archived reports. Default off (redaction on).
+# Flip to "1" only for short debug sessions; archived reports may be shared.
+NO_REDACT = os.getenv("QA_NO_REDACT", "").lower() in ("1", "true", "yes")
+
 
 def connect_android_host(timeout_s: float = 10.0) -> tuple[bool, str]:
     """Ensure the configured remote-ADB endpoint is paired before Maestro runs.

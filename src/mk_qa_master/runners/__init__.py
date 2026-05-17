@@ -4,6 +4,7 @@ from .jest import JestRunner
 from .cypress import CypressRunner
 from .go_test import GoTestRunner
 from .maestro import MaestroRunner
+from .schemathesis import SchemathesisRunner
 from ..config import RUNNER_NAME
 
 REGISTRY: dict[str, type[TestRunner]] = {
@@ -16,6 +17,8 @@ REGISTRY: dict[str, type[TestRunner]] = {
     "go-test": GoTestRunner,
     "maestro": MaestroRunner,
     "mobile": MaestroRunner,
+    "schemathesis": SchemathesisRunner,
+    "api": SchemathesisRunner,
 }
 
 

@@ -71,3 +71,39 @@ jobs:
           QA_PROJECT_ROOT: ${{ github.workspace }}/tests_project
           QA_RUNNER: pytest
         run: pytest tests_project/ -v
+
+  api-sample:
+    # v0.6.0 native API testing: verifies the schemathesis runner +
+    # the bundled OpenAPI sample integrate end-to-end without ever
+    # issuing live HTTP. `--dry-run` exercises schema parsing and
+    # operation enumeration, which is what the MCP integration depends
+    # on; full-fuzz live runs against a real backend are user-side.
+    name: api sample · Python 3.12 + schemathesis
+    runs-on: ubuntu-latest
+    needs: smoke
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package with [api] extra
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[api]'
+
+      - name: Run smoke tests
+        run: pytest tests/ -v
+
+      - name: Schemathesis dry-run against bundled OpenAPI
+        # CLI takes plain filesystem paths or http(s):// URLs. Users may
+        # set QA_OPENAPI_URL=file://... — the runner translates that to a
+        # plain path before subprocess (see _to_cli_target in
+        # runners/schemathesis.py). Here we invoke the CLI directly, so
+        # pass the plain path.
+        run: |
+          schemathesis run --dry-run --checks all \
+            "${GITHUB_WORKSPACE}/examples/sample_api_project/openapi.yaml"

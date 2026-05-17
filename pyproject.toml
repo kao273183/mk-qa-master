@@ -1,12 +1,12 @@
 [project]
 name = "mk-qa-master"
-version = "0.5.1"
-description = "MCP server for running tests across pytest / Jest / Cypress / Go test / Maestro, with self-improvement analytics (AI 測試大師)"
+version = "0.6.0"
+description = "MCP server for running tests across pytest / Jest / Cypress / Go test / Maestro / Schemathesis (web + mobile + native API), with self-improvement analytics (AI 測試大師)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Jack Kao", email = "52775937+kao273183@users.noreply.github.com" }]
-keywords = ["mcp", "testing", "qa", "pytest", "playwright", "jest", "cypress", "maestro", "automation", "model-context-protocol"]
+keywords = ["mcp", "testing", "qa", "pytest", "playwright", "jest", "cypress", "maestro", "schemathesis", "openapi", "api-testing", "automation", "model-context-protocol"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -24,6 +24,11 @@ dependencies = [
     "pytest-playwright>=0.4.0",
     "pytest-json-report>=1.5.0",
 ]
+
+[project.optional-dependencies]
+# Native API testing via Schemathesis (QA_RUNNER=schemathesis). Optional so
+# the base install stays slim; users opt in with `pip install 'mk-qa-master[api]'`.
+api = ["schemathesis>=3.0,<4"]
 
 [project.urls]
 Homepage = "https://github.com/kao273183/mk-qa-master"
