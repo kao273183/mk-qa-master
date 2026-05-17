@@ -533,4 +533,39 @@ Locked 2026-05-17 after PRD review:
 
 ---
 
+## 22. v0.6.1 ratified
+
+Locked 2026-05-16 alongside the Phase 2 (Newman) build:
+
+1. **Scope** — Newman runner ONLY in v0.6.1. No new MCP tools (the
+   existing 16-tool surface drives Newman the same way it drives
+   Schemathesis). Pact provider verification stays deferred to v0.7.0.
+2. **CLI dependency model** — Newman is an **npm** package, not pip, so
+   it cannot ship as an optional dep in `pyproject.toml`. Document as a
+   system prerequisite (`npm install -g newman`). The runner detects
+   the CLI via `shutil.which("newman")` and raises a clear
+   `ImportError` with the install hint if missing — same UX as the
+   Schemathesis import-error path.
+3. **Sample collection** — bundle a self-contained Postman 2.1.0
+   collection at `examples/sample_api_project/postman-collection.json`.
+   Three requests targeting the same fictional Library API as the
+   existing `openapi.yaml`. Each request wraps `pm.test(...)`
+   assertions covering status code + response shape. `{{baseUrl}}`
+   collection variable defaults to `http://localhost:4010` to mirror
+   the OpenAPI sample's `servers[0].url`.
+4. **Report parsing** — use Newman's JSON reporter via
+   `--reporter-json-export <path>`. (Different from Schemathesis, which
+   parses JUnit XML because Schemathesis 3.x has no JSON-report flag —
+   Newman's JSON output is richer than its JUnit, so we use the richer
+   source.) Per-execution × per-assertion mapping yields one
+   mk-qa-master nodeid per `pm.test(...)` call.
+5. **File-path requirement** — `QA_POSTMAN_COLLECTION` accepts a plain
+   filesystem path only. **No `file://` scheme** — Newman doesn't need
+   scheme disambiguation since collections are always local artifacts.
+   Matches what users will paste in directly. (Schemathesis kept the
+   `file://` requirement because OpenAPI URLs are also a valid input
+   for that runner; Newman has no such dual-mode.)
+
+---
+
 *End of PRD v0.1 for mk-qa-master v0.6. Discussion in mk-qa-master Issues once a draft is opened.*

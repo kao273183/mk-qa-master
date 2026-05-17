@@ -36,6 +36,7 @@ to fix or write next.
 | `go` / `go-test` | `go test` | Go | Backend |
 | `maestro` / `mobile` | Maestro | YAML | iOS + Android |
 | `schemathesis` / `api` | Schemathesis | OpenAPI 3.x / Swagger 2.0 | API (since v0.6.0) |
+| `newman` / `postman` | Newman | Postman collection v2.x | API (since v0.6.1) |
 
 Full design notes: [`docs/framework.md`](docs/framework.md).
 
@@ -46,16 +47,26 @@ Full design notes: [`docs/framework.md`](docs/framework.md).
 - **Run tests** across multiple frameworks (web + mobile + API) via a single MCP surface
 - **Mobile via Maestro** (since v0.3.0): same MCP tools, iOS Simulator /
   Android Emulator / real device; YAML flows; cross-platform without rewrites
-- **Native API testing via Schemathesis** (since v0.6.0): give the runner an
-  OpenAPI URL (`http(s)://` or `file://`) and get property-based fuzzed API
-  tests with full coverage of status codes, response schemas, content types,
-  and `5xx`-on-fuzz violations. Drop into the same MCP tool surface as the
-  web / mobile runners — `QA_RUNNER=schemathesis` is a peer to `pytest` /
-  `jest` / `cypress` / `go` / `maestro`. Existing API tests written in
-  pytest+`httpx`, Jest+`supertest`, Cypress `cy.request()`, or Go
-  `net/http/httptest` still ride their existing runners — no migration needed.
-  Newman (Postman collections) follows in v0.6.1; Pact provider verification
-  is on the v0.7.0 conditional roadmap.
+- **Native API testing — two runners** (since v0.6.0 / v0.6.1): two peers
+  now share the API testing slot, each fed by the artifact your team
+  already maintains.
+  - **Schemathesis** (`QA_RUNNER=schemathesis`, since v0.6.0): point at an
+    OpenAPI 3.x / Swagger 2.0 URL or `file://` schema and get property-based
+    fuzzed tests covering status codes, response schemas, content types,
+    and `5xx`-on-fuzz violations.
+  - **Newman** (`QA_RUNNER=newman`, since v0.6.1): point at an exported
+    Postman 2.x collection (plus optional environment / globals files) and
+    Newman replays every request, runs the embedded `pm.test(...)`
+    assertions, and returns one mk-qa-master nodeid per assertion. Newman
+    is a **system prerequisite** (`npm install -g newman`) — it's an npm
+    package, not pip, so it doesn't ship as a Python extra.
+
+  Both drop into the same MCP tool surface as the web / mobile runners, and
+  both feed the same `report.json` / history / flake / optimizer pipeline.
+  Existing API tests written in pytest+`httpx`, Jest+`supertest`, Cypress
+  `cy.request()`, or Go `net/http/httptest` still ride their existing
+  runners — no migration needed. Pact provider verification stays on the
+  v0.7.0 conditional roadmap.
 - **Failure artifacts**: screenshot (base64-inlined), video, Playwright
   trace.zip / Maestro recordings
 - **Run history**: every run snapshotted; HTML report shows a sparkline trend
@@ -121,6 +132,7 @@ Then point your client config at the same Python interpreter:
 | `go` | Go toolchain on PATH |
 | `maestro` | [Maestro CLI](https://maestro.mobile.dev/) + a booted simulator / emulator / device (or BlueStacks reachable via `adb connect`) |
 | `schemathesis` / `api` | `pip install 'mk-qa-master[api]'` (pulls in `schemathesis>=3.0,<4`) |
+| `newman` / `postman` | `npm install -g newman` (Newman is an npm package, not pip — no extra to install) |
 
 
 ## API testing (`QA_RUNNER=schemathesis`)
@@ -158,6 +170,54 @@ a self-contained 3-endpoint sample lives at
 Standard `QA_TIMEOUT_SECONDS` still applies (default 600s).
 
 
+## API testing (`QA_RUNNER=newman`)
+
+Point the runner at any exported Postman 2.x collection and Newman 6.x
+replays every request, runs the embedded `pm.test(...)` assertions, and
+returns one mk-qa-master "test" per assertion. Results flow through the
+same `report.json` / history / flake / optimizer pipeline as the
+Schemathesis and UI runners.
+
+**System prerequisite**: Newman ships via npm, not pip. Install once:
+
+```bash
+npm install -g newman
+```
+
+There's no `pip install 'mk-qa-master[postman]'` extra — the runner
+just shells out to the `newman` binary on PATH. If it's missing, the
+runner raises a clear `ImportError` pointing at the npm install line.
+
+The same 3-endpoint **Library API** that the OpenAPI sample targets
+ships as a Postman collection at
+[`examples/sample_api_project/postman-collection.json`](examples/sample_api_project/postman-collection.json) —
+pair it with `prism mock examples/sample_api_project/openapi.yaml` for
+a fully self-contained dev loop, or point at your own staging server.
+
+### 5-line config
+
+```jsonc
+"env": {
+  "QA_RUNNER": "newman",
+  "QA_POSTMAN_COLLECTION": "/absolute/path/to/your-collection.json"
+}
+```
+
+### Environment variables
+
+| Variable | Required | Default | What it does |
+|---|---|---|---|
+| `QA_POSTMAN_COLLECTION` | yes | — | Plain filesystem path to a Postman 2.x collection JSON. **No `file://` prefix** — Newman doesn't need scheme disambiguation since collections are always local artifacts. |
+| `QA_POSTMAN_ENVIRONMENT` | no | — | Plain path to a Postman environment file (`-e <path>`). Provides values for `{{var_name}}` placeholders in the collection. |
+| `QA_POSTMAN_GLOBALS` | no | — | Plain path to a Postman globals file (`-g <path>`). Same shape as the environment, globally scoped. |
+| `QA_POSTMAN_ITERATIONS` | no | `1` | Replay the whole collection N times (`-n <N>`). Useful for soak tests and flake detection. |
+| `QA_POSTMAN_FOLDER` | no | — | CSV of Postman folder names to restrict the run to (repeated `--folder` flags). `run_failed` also uses folder-scoping when failures cluster in known folders. |
+| `QA_POSTMAN_TIMEOUT_REQUEST_MS` | no | `30000` | Per-request HTTP timeout in milliseconds (`--timeout-request`). Distinct from `QA_TIMEOUT_SECONDS`, which caps the whole subprocess. |
+| `QA_NO_REDACT` | no | `0` | Same redaction policy as the Schemathesis runner — disable only for short debug sessions. |
+
+Standard `QA_TIMEOUT_SECONDS` still applies (default 600s).
+
+
 ## Wire into Claude Desktop
 
 Copy `examples/configs/claude_desktop_config.example.json` to:
@@ -169,7 +229,7 @@ Two environment variables drive the runtime:
 
 | Variable | Example | What it does |
 |---|---|---|
-| `QA_RUNNER` | `pytest` / `jest` / `cypress` / `go` / `maestro` / `schemathesis` | Selects which test framework |
+| `QA_RUNNER` | `pytest` / `jest` / `cypress` / `go` / `maestro` / `schemathesis` / `newman` | Selects which test framework |
 | `QA_PROJECT_ROOT` | `/path/to/your/project` | Points at the project under test |
 | `QA_ANDROID_HOST` *(optional)* | `127.0.0.1:5555` | Remote-ADB endpoint for **BlueStacks** / Genymotion / Nox / cloud Android. When set, the Maestro runner auto-runs `adb connect <host>` before each test / `analyze_screen` call. Requires `adb` on PATH. |
 | `QA_TIMEOUT_SECONDS` *(optional)* | `600` (default) | Hard ceiling on any single subprocess invocation (pytest / jest / cypress / go test / maestro). Returns `exit_code=124` with a `[TIMEOUT…]` tag in stderr when exceeded, so the AI client can react cleanly instead of hanging the MCP server forever. |
@@ -201,6 +261,14 @@ Two environment variables drive the runtime:
 "env": {
   "QA_RUNNER": "schemathesis",
   "QA_OPENAPI_URL": "https://api.example.com/openapi.json"
+}
+```
+
+**Newman (Postman)**:
+```json
+"env": {
+  "QA_RUNNER": "newman",
+  "QA_POSTMAN_COLLECTION": "/absolute/path/to/collection.json"
 }
 ```
 

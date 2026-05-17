@@ -83,3 +83,26 @@ def test_schemathesis_runner_registered():
         "'api' should alias the same SchemathesisRunner class"
     )
     assert REGISTRY["schemathesis"].__name__ == "SchemathesisRunner"
+
+
+def test_newman_runner_registered():
+    """v0.6.1: the newman runner must be discoverable via the REGISTRY
+    under both `newman` and `postman` keys (mirrors how schemathesis
+    aliases as both `schemathesis` and `api`).
+
+    The runner only shells out to the `newman` CLI when methods are
+    called, so this assertion is safe even when newman isn't installed
+    on the test runner's PATH (Newman is npm-side and CI installs it
+    in a dedicated job)."""
+    from mk_qa_master.runners import REGISTRY
+
+    assert "newman" in REGISTRY, (
+        f"newman runner not registered. Available: {sorted(REGISTRY)}"
+    )
+    assert "postman" in REGISTRY, (
+        "expected 'postman' as an alias for the newman runner"
+    )
+    assert REGISTRY["newman"] is REGISTRY["postman"], (
+        "'postman' should alias the same NewmanRunner class"
+    )
+    assert REGISTRY["newman"].__name__ == "NewmanRunner"

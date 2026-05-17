@@ -5,6 +5,7 @@ from .cypress import CypressRunner
 from .go_test import GoTestRunner
 from .maestro import MaestroRunner
 from .schemathesis import SchemathesisRunner
+from .newman import NewmanRunner
 from ..config import RUNNER_NAME
 
 REGISTRY: dict[str, type[TestRunner]] = {
@@ -19,6 +20,8 @@ REGISTRY: dict[str, type[TestRunner]] = {
     "mobile": MaestroRunner,
     "schemathesis": SchemathesisRunner,
     "api": SchemathesisRunner,
+    "newman": NewmanRunner,
+    "postman": NewmanRunner,
 }
 
 

@@ -1,0 +1,148 @@
+{
+  "info": {
+    "_postman_id": "mk-qa-master-sample-library-api",
+    "name": "Sample Library API",
+    "description": "Self-contained 3-request Postman collection bundled with mk-qa-master v0.6.1 for dogfooding the Newman runner. Targets the same fictional Library API as the OpenAPI sample (`openapi.yaml`). Each request has `pm.test(...)` assertions covering happy-path status code + response shape. Use `{{baseUrl}}` to point at a Prism mock (`prism mock examples/sample_api_project/openapi.yaml`) or your own staging server.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4010",
+      "type": "string",
+      "description": "Base URL of the running Library API. Defaults to a Prism mock on :4010 to mirror the OpenAPI sample's servers[0].url."
+    },
+    {
+      "key": "bookId",
+      "value": "abc123",
+      "type": "string",
+      "description": "Book id used by the GET /books/{id} request. Prism will return an example matching the schema; against a real backend, seed this id first or chain from the POST /books response."
+    }
+  ],
+  "item": [
+    {
+      "name": "Books",
+      "description": "All requests against /books and /books/{id}. Grouped into a folder so `run_failed` can scope re-runs via `--folder Books`.",
+      "item": [
+        {
+          "name": "List books",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/books?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["books"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('GET /books returns 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('GET /books returns an array', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create book",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"The Pragmatic Programmer\",\n  \"author\": \"Andrew Hunt\",\n  \"published_year\": 1999\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/books",
+              "host": ["{{baseUrl}}"],
+              "path": ["books"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('POST /books returns 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('POST /books response has id', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id');",
+                  "    pm.expect(body.id).to.be.a('string');",
+                  "    pm.collectionVariables.set('bookId', body.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get book by id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/books/{{bookId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["books", "{{bookId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('GET /books/{id} returns 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('GET /books/{id} response id matches request', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id');",
+                  "    pm.expect(body.id).to.equal(pm.collectionVariables.get('bookId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

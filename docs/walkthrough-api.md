@@ -1,4 +1,23 @@
-# Walkthrough — Native API testing with Schemathesis
+# Walkthrough — Native API testing
+
+mk-qa-master ships two native API runners as of v0.6.1:
+
+- **Track 1 — Schemathesis** (since v0.6.0): point at an OpenAPI 3.x
+  schema and get property-based fuzz coverage of every operation.
+- **Track 2 — Newman** (since v0.6.1): point at a Postman 2.x collection
+  and replay every request with its `pm.test(...)` assertions.
+
+Pick whichever matches how your team already documents the API. The two
+tracks share the same MCP tool surface (`run_tests`, `get_failure_details`,
+`get_optimization_plan`, etc.) and the same `report.json` / history /
+optimizer pipeline — only `QA_RUNNER` and the source-of-truth env var
+change between them.
+
+This document covers Track 1 first (Schemathesis), then Track 2 (Newman).
+
+---
+
+## Track 1 — Schemathesis (OpenAPI-driven)
 
 This walkthrough shows the end-to-end loop for testing an OpenAPI-defined
 API with mk-qa-master v0.6.0 using the bundled 3-endpoint sample. By the
@@ -284,3 +303,176 @@ scaffolding, no boilerplate.
   / history archive as UI / mobile tests. The optimizer ranks them
   side-by-side. A single `get_optimization_plan` call surfaces the
   weakest link across all three layers.
+
+---
+
+## Track 2 — Newman (Postman collections)
+
+If your team's source of truth is a hand-curated Postman collection
+rather than an OpenAPI schema, the Newman runner replays the collection
+end-to-end and runs every embedded `pm.test(...)` assertion. Same MCP
+tool surface, same `report.json` shape — just a different runner key
+and a different source artifact.
+
+### Prerequisites
+
+Newman ships via **npm**, not pip:
+
+```bash
+npm install -g newman
+```
+
+There's no `mk-qa-master[postman]` extra to install. The runner shells
+out to the `newman` binary on PATH; if it's missing, you'll get a clear
+`ImportError` pointing at the install line.
+
+### The bundled Postman sample
+
+`examples/sample_api_project/postman-collection.json` defines the same
+fictional Library API as the OpenAPI sample, organized into a single
+`Books` folder with three requests:
+
+| Method + path | Assertions (via `pm.test(...)`) |
+|---|---|
+| `GET /books` | 200 status · response is an array |
+| `POST /books` | 201 status · response has `id` (cached for next request) |
+| `GET /books/{id}` | 200 status · response `id` matches the one captured above |
+
+A `{{baseUrl}}` collection variable (default `http://localhost:4010`)
+lets you point at a Prism mock running the bundled OpenAPI schema, or
+at any real backend, without editing the file.
+
+### Client config
+
+```jsonc
+{
+  "mcpServers": {
+    "mk-qa-master": {
+      "command": "uvx",
+      "args": ["mk-qa-master"],
+      "env": {
+        "QA_RUNNER": "newman",
+        "QA_POSTMAN_COLLECTION": "/absolute/path/to/examples/sample_api_project/postman-collection.json"
+      }
+    }
+  }
+}
+```
+
+Unlike `QA_OPENAPI_URL`, `QA_POSTMAN_COLLECTION` accepts a **plain
+filesystem path** — no `file://` prefix. Postman collections are always
+local artifacts, so the scheme-disambiguation argument the OpenAPI case
+makes doesn't apply here.
+
+### Session transcript
+
+The MCP tool calls stay the same — only the runner-side semantics change.
+
+**1. `get_runner_info`**
+
+```json
+{
+  "current": "newman",
+  "available": [
+    "pytest", "pytest-playwright", "playwright",
+    "jest", "cypress", "go", "go-test",
+    "maestro", "mobile",
+    "schemathesis", "api",
+    "newman", "postman"
+  ]
+}
+```
+
+**2. `list_tests`**
+
+The runner parses the collection JSON locally (no subprocess) and emits
+one line per request, including the folder breadcrumb:
+
+```text
+GET {{baseUrl}}/books?limit=20 :: Books :: List books
+POST {{baseUrl}}/books :: Books :: Create book
+GET {{baseUrl}}/books/{{bookId}} :: Books :: Get book by id
+```
+
+**3. `run_tests`**
+
+Newman replays each request and runs the embedded `pm.test(...)` calls.
+The JSON report Newman emits gets translated into mk-qa-master's
+`report.json` shape: **one mk-qa-master "test" per pm.test assertion**.
+Three requests × 2 assertions each = 6 nodeids.
+
+Against a Prism mock that conforms to the schema, all 6 pass. Against a
+real backend with a bug, you might see:
+
+```json
+{
+  "total": 6,
+  "passed": 4,
+  "failed": 2,
+  "skipped": 0,
+  "duration": 1.4
+}
+```
+
+**4. `get_failure_details`**
+
+```json
+{
+  "nodeid": "POST Create book :: POST /books response has id",
+  "message": "expected undefined to have property 'id'",
+  "duration": 0.18,
+  "artifacts": {
+    "request_response": {
+      "method": "POST",
+      "url": "http://staging.example.com/books",
+      "request_body": "{\"title\": \"The Pragmatic Programmer\", \"author\": \"Andrew Hunt\"}",
+      "response_status": 201,
+      "response_body": "{\"title\": \"The Pragmatic Programmer\"}",
+      "violation": "POST /books response has id",
+      "parent_folder": "Books"
+    }
+  }
+}
+```
+
+The runner captured the exact request body that triggered the failure,
+the actual response (status 201 but missing the `id` field the schema
+expects), and the assertion message verbatim — same artifact shape as
+the Schemathesis runner, so downstream tools (HTML reporter, optimizer)
+treat it identically.
+
+**5. `run_failed`**
+
+The runner reads the previous `report.json`, extracts the
+`parent_folder` from each failed nodeid's artifacts, and re-runs Newman
+scoped to those folders via `--folder` flags. If the collection has no
+folder structure (everything at the root), `run_failed` degrades to a
+full re-run — which is still cheap on small collections.
+
+### Knobs worth knowing
+
+| Env | Default | When to change |
+|---|---|---|
+| `QA_POSTMAN_ENVIRONMENT` | — | Point at a Postman environment file with `baseUrl` / credentials. Lets you keep the collection itself environment-agnostic. |
+| `QA_POSTMAN_GLOBALS` | — | Same shape as environment, globally scoped. Rarely needed in solo workflows. |
+| `QA_POSTMAN_ITERATIONS` | `1` | Soak / flake detection — replay the collection 10× / 100× and see which assertions flap. The optimizer's flake-score logic picks it up automatically. |
+| `QA_POSTMAN_FOLDER` | — | CSV of folder names. Useful for "only run the auth flow folder" on a large collection. |
+| `QA_POSTMAN_TIMEOUT_REQUEST_MS` | `30000` | Tighten for fast local mocks (250–1000ms catches hung endpoints quickly). |
+| `QA_NO_REDACT` | `0` | Same redaction policy as Schemathesis. Default redacts `Authorization`, `password`, `token`, `api_key`, `secret`, `access_token`, `refresh_token`. |
+
+### When to choose Newman vs Schemathesis
+
+Both runners target the same outcome (verified API behavior), but the
+artifact each consumes differs:
+
+| Pick Newman when | Pick Schemathesis when |
+|---|---|
+| You already maintain a Postman collection | You already maintain an OpenAPI schema |
+| You want concrete, hand-authored assertions per request | You want property-based fuzz coverage of every operation |
+| Your team flows use `pm.environment.set(...)` chaining between requests | The schema is the source of truth and you trust it |
+| You're testing a specific user flow (login → cart → checkout) | You're testing a public REST contract for breakage under fuzz |
+
+Nothing stops you from running both side-by-side — `QA_RUNNER` is just
+an env var, and the report archive is shared. A nightly CI run could
+fire Schemathesis (broad coverage), and a per-PR run could fire Newman
+(targeted flows). Both feed the same optimizer.
