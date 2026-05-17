@@ -35,6 +35,7 @@ to fix or write next.
 | `cypress` | Cypress | JavaScript | Web |
 | `go` / `go-test` | `go test` | Go | Backend |
 | `maestro` / `mobile` | Maestro | YAML | iOS + Android |
+| `schemathesis` / `api` | Schemathesis | OpenAPI 3.x / Swagger 2.0 | API (since v0.6.0) |
 
 Full design notes: [`docs/framework.md`](docs/framework.md).
 
@@ -45,12 +46,16 @@ Full design notes: [`docs/framework.md`](docs/framework.md).
 - **Run tests** across multiple frameworks (web + mobile + API) via a single MCP surface
 - **Mobile via Maestro** (since v0.3.0): same MCP tools, iOS Simulator /
   Android Emulator / real device; YAML flows; cross-platform without rewrites
-- **API testing too** — the runner doesn't care if a test hits a DOM, a screen,
-  an API, or a pure function. Pytest with `httpx` / `requests`, Jest with
-  `supertest`, Cypress `cy.request()`, Go `net/http/httptest` — they all flow
-  through the same history, flake / broken classification, and optimizer
-  pipeline as your UI tests. Dedicated API-contract runners (Schemathesis /
-  Newman / Pact) are on the v0.6 roadmap.
+- **Native API testing via Schemathesis** (since v0.6.0): give the runner an
+  OpenAPI URL (`http(s)://` or `file://`) and get property-based fuzzed API
+  tests with full coverage of status codes, response schemas, content types,
+  and `5xx`-on-fuzz violations. Drop into the same MCP tool surface as the
+  web / mobile runners — `QA_RUNNER=schemathesis` is a peer to `pytest` /
+  `jest` / `cypress` / `go` / `maestro`. Existing API tests written in
+  pytest+`httpx`, Jest+`supertest`, Cypress `cy.request()`, or Go
+  `net/http/httptest` still ride their existing runners — no migration needed.
+  Newman (Postman collections) follows in v0.6.1; Pact provider verification
+  is on the v0.7.0 conditional roadmap.
 - **Failure artifacts**: screenshot (base64-inlined), video, Playwright
   trace.zip / Maestro recordings
 - **Run history**: every run snapshotted; HTML report shows a sparkline trend
@@ -115,6 +120,42 @@ Then point your client config at the same Python interpreter:
 | `cypress` | A Node project with `cypress` installed (`npm i -D cypress`) |
 | `go` | Go toolchain on PATH |
 | `maestro` | [Maestro CLI](https://maestro.mobile.dev/) + a booted simulator / emulator / device (or BlueStacks reachable via `adb connect`) |
+| `schemathesis` / `api` | `pip install 'mk-qa-master[api]'` (pulls in `schemathesis>=3.0,<4`) |
+
+
+## API testing (`QA_RUNNER=schemathesis`)
+
+Point the runner at any OpenAPI 3.x / Swagger 2.0 schema and Schemathesis
+generates property-based test cases per operation — covering response
+schema conformance, status code conformance, content-type checks, and
+`5xx`-on-fuzz. Results flow through the same `report.json` / history /
+flake / optimizer pipeline as your UI tests.
+
+End-to-end walkthrough lives in [`docs/walkthrough-api.md`](docs/walkthrough-api.md);
+a self-contained 3-endpoint sample lives at
+[`examples/sample_api_project/`](examples/sample_api_project/).
+
+### 5-line config
+
+```jsonc
+"env": {
+  "QA_RUNNER": "schemathesis",
+  "QA_OPENAPI_URL": "https://api.example.com/openapi.json"
+}
+```
+
+### Environment variables
+
+| Variable | Required | Default | What it does |
+|---|---|---|---|
+| `QA_OPENAPI_URL` | yes | — | OpenAPI URL. `http(s)://...` for live schemas, `file://...` for local files. **Plain filesystem paths are not accepted** — they need the `file://` prefix. |
+| `QA_SCHEMATHESIS_CHECKS` | no | `all` | Comma-separated subset: `response_schema_conformance,status_code_conformance,not_a_server_error,content_type_conformance,response_headers_conformance`. |
+| `QA_SCHEMATHESIS_AUTH` | no | — | Authorization header value. Sent as `-H "Authorization: <value>"`. Never logged; redacted from archived reports. |
+| `QA_SCHEMATHESIS_MAX_EXAMPLES` | no | `20` | Hypothesis examples per operation. Higher = deeper fuzz, slower run. |
+| `QA_SCHEMATHESIS_DRY_RUN` | no | `0` | Set to `1` to plan-without-HTTP — useful for safety preview against production, or CI smoke against a schema-only artifact. |
+| `QA_NO_REDACT` | no | `0` | Disables secret redaction in archived reports. Default redacts `Authorization: Bearer …`, `"password": …`, `"token" / "api_key" / "secret" / "access_token" / "refresh_token": …`. |
+
+Standard `QA_TIMEOUT_SECONDS` still applies (default 600s).
 
 
 ## Wire into Claude Desktop
@@ -128,7 +169,7 @@ Two environment variables drive the runtime:
 
 | Variable | Example | What it does |
 |---|---|---|
-| `QA_RUNNER` | `pytest` / `jest` / `cypress` / `go` / `maestro` | Selects which test framework |
+| `QA_RUNNER` | `pytest` / `jest` / `cypress` / `go` / `maestro` / `schemathesis` | Selects which test framework |
 | `QA_PROJECT_ROOT` | `/path/to/your/project` | Points at the project under test |
 | `QA_ANDROID_HOST` *(optional)* | `127.0.0.1:5555` | Remote-ADB endpoint for **BlueStacks** / Genymotion / Nox / cloud Android. When set, the Maestro runner auto-runs `adb connect <host>` before each test / `analyze_screen` call. Requires `adb` on PATH. |
 | `QA_TIMEOUT_SECONDS` *(optional)* | `600` (default) | Hard ceiling on any single subprocess invocation (pytest / jest / cypress / go test / maestro). Returns `exit_code=124` with a `[TIMEOUT…]` tag in stderr when exceeded, so the AI client can react cleanly instead of hanging the MCP server forever. |
@@ -153,6 +194,14 @@ Two environment variables drive the runtime:
 **Go test**:
 ```json
 "env": { "QA_RUNNER": "go", "QA_PROJECT_ROOT": "/path/to/go-project" }
+```
+
+**Schemathesis (API)**:
+```json
+"env": {
+  "QA_RUNNER": "schemathesis",
+  "QA_OPENAPI_URL": "https://api.example.com/openapi.json"
+}
 ```
 
 ---

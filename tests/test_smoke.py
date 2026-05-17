@@ -61,3 +61,25 @@ def test_list_tools_count_matches_advertised_16():
 
     declared = {t.name for t in asyncio.run(list_tools())}
     assert len(declared) == 16, f"Expected 16 tools, got {len(declared)}: {sorted(declared)}"
+
+
+def test_schemathesis_runner_registered():
+    """v0.6.0: the schemathesis runner must be discoverable via the
+    REGISTRY. Failing this means QA_RUNNER=schemathesis won't resolve,
+    which would silently regress the whole API-testing capability.
+
+    The runner class itself imports `schemathesis` lazily inside its
+    methods, so this assertion is safe even when the optional
+    `[api]` extra isn't installed."""
+    from mk_qa_master.runners import REGISTRY
+
+    assert "schemathesis" in REGISTRY, (
+        f"schemathesis runner not registered. Available: {sorted(REGISTRY)}"
+    )
+    assert "api" in REGISTRY, (
+        "expected 'api' as an alias for the schemathesis runner"
+    )
+    assert REGISTRY["schemathesis"] is REGISTRY["api"], (
+        "'api' should alias the same SchemathesisRunner class"
+    )
+    assert REGISTRY["schemathesis"].__name__ == "SchemathesisRunner"
