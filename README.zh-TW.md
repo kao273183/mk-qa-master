@@ -36,8 +36,9 @@
 
 ## 功能總覽
 
-- **跨框架執行測試**（web + mobile），單一 MCP 介面對接所有 runner
+- **跨框架執行測試**（web + mobile + API），單一 MCP 介面對接所有 runner
 - **行動端透過 Maestro**（v0.3.0 起）：同樣 MCP tool 集、iOS Simulator / Android Emulator / 真機都通；YAML flow 跨平台共用
+- **API 測試也吃**——runner 不在乎你的 test 打的是 DOM、手機畫面、API 還是 pure function。pytest 配 `httpx` / `requests`、Jest 配 `supertest`、Cypress `cy.request()`、Go `net/http/httptest`——通通走同一條 history、flake / broken 分類、optimizer pipeline。專門的 API contract runner（Schemathesis / Newman / Pact）在 v0.6 roadmap 上
 - **失敗產物完整**：截圖（base64 內嵌）、影片、Playwright trace.zip / Maestro recording
 - **執行歷史**：每次 run 自動快照；HTML 報告含 sparkline 趨勢線
 - **DOM / Screen 分析器** — `analyze_url`（web，抓 form / nav / dialog / CTA + 該頁打的 API + 跑版偵測）跟 `analyze_screen`（mobile，透過 `maestro hierarchy` 抓 form / cta / tab_bar）
