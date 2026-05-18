@@ -187,6 +187,28 @@ def test_flakiness_taxonomy_present_in_both_languages():
         assert cause in zh_built, f"zh-TW flakiness section missing '{cause}'"
 
 
+def test_captcha_section_present_in_both_languages():
+    """v0.6.3 adds a CAPTCHA Testing Strategy section in both languages.
+    The section codifies the Tier 1 / 2 / 3 bypass-first decision flow and
+    cites the official Google reCAPTCHA test keys so users land on the
+    industry-standard fix rather than reaching for a solver."""
+    from mk_qa_master.tools.qa_context import _builtin_for_lang
+
+    en_built = _builtin_for_lang("en")
+    zh_built = _builtin_for_lang("zh-tw")
+
+    # EN side
+    assert "## CAPTCHA Testing Strategy" in en_built
+    assert "Tier 1" in en_built and "Tier 2" in en_built and "Tier 3" in en_built
+    assert "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI" in en_built  # Google test key
+    assert "solve_visual_challenge" in en_built  # forward-pointer to v0.7
+
+    # zh-TW side
+    assert "## 驗證碼 (CAPTCHA) 測試策略" in zh_built
+    assert "Tier 1" in zh_built and "Tier 2" in zh_built and "Tier 3" in zh_built
+    assert "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI" in zh_built
+
+
 def test_newman_runner_registered():
     """v0.6.1: the newman runner must be discoverable via the REGISTRY
     under both `newman` and `postman` keys (mirrors how schemathesis
