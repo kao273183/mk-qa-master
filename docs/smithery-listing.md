@@ -62,13 +62,14 @@ and letting the AI orchestrate the chain.
 | `go` | `QA_RUNNER=go` | `go test` |
 | `maestro` | `QA_RUNNER=maestro` | Maestro (Android / iOS / BlueStacks via remote ADB) |
 
-### Tool surface (16 tools)
+### Tool surface (18 tools)
 
 `get_runner_info` · `list_tests` · `run_tests` · `run_failed` ·
 `get_test_report` · `get_failure_details` · `generate_test` ·
 `auto_generate_tests` · `codegen` · `generate_html_report` ·
 `get_test_history` · `analyze_url` · `analyze_screen` ·
-`init_qa_knowledge` / `get_qa_context` · `get_optimization_plan`
+`init_qa_knowledge` / `get_qa_context` · `get_optimization_plan` ·
+`inspect_visual_challenge` · `solve_visual_challenge` (v0.7.0)
 
 ### Pairs well with
 

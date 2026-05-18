@@ -184,6 +184,89 @@ collection 形式收在
 原本的 `QA_TIMEOUT_SECONDS`（預設 600s）依然作用。
 
 
+## AI 視覺挑戰解析（v0.7.0）
+
+> *當後端 bypass 不可行時：Claude 看 CAPTCHA、mk-qa-master 負責點下去。*
+
+家族裡第一個 **AI client 視覺能力是必要、不是加分項**的功能。新增兩個
+MCP tool（`inspect_visual_challenge` + `solve_visual_challenge`）——
+偵測當前 Playwright 頁面上的 reCAPTCHA v2 image-grid 挑戰、截圖丟給多
+模態 AI client、接收 AI 回傳的 tile 選擇、執行點擊鏈。Runner 是「眼
+睛跟手」，AI client（Claude / Cursor / Gemini / GPT-4o）才是真正的
+解題者。
+
+### 什麼時候用 — Tier 1 vs Tier 3
+
+內建 QA 知識層（`get_qa_context section="CAPTCHA"`）把策略分成三層，
+照順序套：
+
+| Tier | 做法 | 適用 |
+|---|---|---|
+| **1 — bypass** | reCAPTCHA test keys、feature flag、IP allowlist、test-mode headers | 預設首選，~90% 的情境都用這個 |
+| **2 — degrade** | 標為 `external_dependency`、跳過下游斷言 | 改不到後端、但測試本身不是針對 CAPTCHA |
+| **3 — AI 視覺判斷** | 本功能 | 1 + 2 都不行時：客戶網站有授權但拿不到後端、staging 完整鏡像 production CAPTCHA、行動 webview 無法 IP allowlist |
+
+### 同意 (Consent) 閘門
+
+預設關閉、沒明確 opt-in 不做事。兩個環境變數驅動：
+
+| 變數 | 必填 | 預設 | 作用 |
+|---|---|---|---|
+| `QA_VISUAL_CHALLENGE_CONSENT` | 是 | `false` | 必須設成 `true`，否則 inspect / solve 都回 `consent_required` 加上完整法律免責聲明（AI client 會原樣呈現給使用者）。 |
+| `QA_VISUAL_CHALLENGE_AUTHORIZED_DOMAINS` | 否（建議設） | — | 逗號分隔的 domain 白名單。**有設**：不在名單的 domain 直接拒絕。**沒設**：warn-only — 仍會跑、但 response 帶 warning 字串提醒你補設。共用 CI / 多租戶環境**強烈建議設**。 |
+| `QA_VISUAL_CHALLENGE_TIMEOUT` | 否 | `120` | inspect→solve 整個循環的時間預算（秒）。仍受 `QA_TIMEOUT_SECONDS` 天花板限制。 |
+
+### 快速上手
+
+```jsonc
+"env": {
+  "QA_RUNNER": "pytest",
+  "QA_PROJECT_ROOT": "/path/to/project",
+  "QA_VISUAL_CHALLENGE_CONSENT": "true",
+  "QA_VISUAL_CHALLENGE_AUTHORIZED_DOMAINS": "client-staging.example.com"
+}
+```
+
+之後當 `run_tests` 噴 `external_dependency` 且指向 CAPTCHA，AI client
+就能升級到 Tier 3：
+
+```
+mk-qa-master.inspect_visual_challenge()   # 截圖 + tile 網格
+→ AI 視覺判斷後選 [0, 4, 7]
+mk-qa-master.solve_visual_challenge(
+    challenge_id="...", selected_tile_indices=[0, 4, 7], confirm=true,
+)
+→ status: "passed"、token: "..."、hint: "CAPTCHA 驗證通過。繼續跑你的測試。"
+```
+
+完整教學：[`docs/walkthrough-visual-challenge.md`](docs/walkthrough-visual-challenge.md)。
+PRD：[`docs/prd-v0.7-visual-challenge.md`](docs/prd-v0.7-visual-challenge.md)。
+
+### 硬性禁止 domain
+
+無論 consent 或 allowlist 設成什麼，這份名單永遠拒絕：
+`accounts.google.com`、`login.microsoftonline.com`、`id.apple.com`、
+`facebook.com`、`login.live.com` 等知名第三方登入入口。對別人家的
+登入頁解 CAPTCHA 沒有任何合理的 QA 場景。
+
+### 隱私
+
+inspect→solve 循環結束後**完全不保留截圖**。Telemetry 只記 boolean
+結果——絕不記截圖、不記題目文字、不記 tile 選擇。5 分鐘 LRU cache 最
+多保留 10 個未完成挑戰、且完全不寫硬碟。
+
+### 成功率提醒
+
+實際判題的是 AI client 的視覺模型——Claude Sonnet 4 / GPT-4o /
+Gemini 2.5 都內建視覺，但在 3x3 reCAPTCHA 上的準確率各有差異。請預
+留至少一次重試（reCAPTCHA 鎖出前給 3 次）。後續 `get_telemetry` 會
+彙整 pass-rate，方便依 client 調整預期。
+
+**範圍**：v0.7.0 只支援 reCAPTCHA v2 image-grid。hCaptcha 排 v0.7.1。
+reCAPTCHA v3 / Cloudflare Turnstile 永遠不在計畫內——它們根本沒有可
+視化的挑戰可看。
+
+
 ## 接到 Claude Desktop
 
 複製 `examples/configs/claude_desktop_config.example.json` 內容到：

@@ -4,7 +4,7 @@ Catches the "easy" regressions that an MCP catalog or first-time user will
 hit before they get to a real test run:
 - package imports cleanly
 - the MCP Server() is instantiable
-- list_tools() returns the full advertised surface (currently 16 tools)
+- list_tools() returns the full advertised surface (currently 18 tools)
 - dispatch table covers every declared tool (no name typos / unwired tools)
 
 Per issue #35: the QA / testing MCP should have a CI smoke test of its
@@ -31,6 +31,9 @@ EXPECTED_TOOLS = {
     "init_qa_knowledge",
     "get_qa_context",
     "auto_generate_tests",
+    # v0.7.0 — AI Visual Challenge Solver (reCAPTCHA v2 image-grid)
+    "inspect_visual_challenge",
+    "solve_visual_challenge",
 }
 
 
@@ -54,13 +57,59 @@ def test_list_tools_returns_advertised_surface():
     assert not missing, f"Expected tools missing from list_tools(): {missing}"
 
 
-def test_list_tools_count_matches_advertised_16():
-    """If the count drifts, README and the family-site claim of '16 tools
-    across 5 categories' is stale. Catch that here before users do."""
+def test_list_tools_count_matches_advertised_18():
+    """If the count drifts, README and the family-site claim of '18 tools'
+    is stale. Catch that here before users do. v0.7.0 brought the count
+    from 16 to 18 by adding inspect_visual_challenge + solve_visual_challenge.
+    """
     from mk_qa_master.server import list_tools
 
     declared = {t.name for t in asyncio.run(list_tools())}
-    assert len(declared) == 16, f"Expected 16 tools, got {len(declared)}: {sorted(declared)}"
+    assert len(declared) == 18, f"Expected 18 tools, got {len(declared)}: {sorted(declared)}"
+
+
+def test_visual_challenge_tools_registered():
+    """v0.7.0: both new visual-challenge tools must be present in
+    list_tools() and mapped in the dispatch table. The second half
+    matters because a typo'd name in `_dispatch` would silently fall
+    through to the «unknown tool» branch."""
+    import asyncio as _asyncio
+    from mcp.types import TextContent
+
+    from mk_qa_master.server import list_tools, _dispatch
+
+    declared = {t.name for t in _asyncio.run(list_tools())}
+    assert "inspect_visual_challenge" in declared
+    assert "solve_visual_challenge" in declared
+
+    # Dispatch table mapping — calling the tool without env consent should
+    # produce a structured `consent_required` error rather than the
+    # "未知的 tool" fallback. That confirms the name is wired into the
+    # dispatcher.
+    out = _asyncio.run(_dispatch("inspect_visual_challenge", {}))
+    assert isinstance(out, list) and isinstance(out[0], TextContent)
+    assert "未知的 tool" not in out[0].text
+
+
+def test_consent_gate_blocks_without_env(monkeypatch):
+    """Without QA_VISUAL_CHALLENGE_CONSENT=true the tool must refuse with
+    the full disclaimer text — the AI client uses that text to surface
+    consent to the user. This is the §21 #2 ratification: server-level
+    consent on top of per-call confirm latch."""
+    import importlib
+
+    monkeypatch.delenv("QA_VISUAL_CHALLENGE_CONSENT", raising=False)
+
+    import mk_qa_master.config as cfg
+    importlib.reload(cfg)
+
+    from mk_qa_master.tools import visual_challenge as vc
+    importlib.reload(vc)
+
+    result = vc.inspect_visual_challenge_tool({})
+    assert result["error"] == "consent_required"
+    assert "QA_VISUAL_CHALLENGE_CONSENT" in result["hint"]
+    assert "ACCEPTABLE USE" in result["hint"]
 
 
 def test_schemathesis_runner_registered():
