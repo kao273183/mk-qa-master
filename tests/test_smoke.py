@@ -85,6 +85,108 @@ def test_schemathesis_runner_registered():
     assert REGISTRY["schemathesis"].__name__ == "SchemathesisRunner"
 
 
+def test_qa_lang_switches_builtin_methodology():
+    """v0.6.2: `_builtin_for_lang('en')` must return English methodology
+    (contains "ISTQB" but no Chinese H2 markers like "原則"); 'zh-tw' must
+    return the Chinese version (contains "原則"). Common aliases ('zh',
+    'zh_TW', 'CN') normalize to 'zh-tw' via config.py; invalid values
+    fall back to 'en' rather than raising — we'd rather serve the wrong
+    language than crash the server boot."""
+    from mk_qa_master.tools.qa_context import _builtin_for_lang
+
+    en_built = _builtin_for_lang("en")
+    zh_built = _builtin_for_lang("zh-tw")
+
+    assert "ISTQB" in en_built
+    assert "原則" not in en_built, "English build must not contain Chinese section markers"
+    assert "Your Business Rules" in en_built
+
+    assert "原則" in zh_built, "zh-tw build must contain Chinese section markers"
+    assert "你的業務規則" in zh_built
+
+    # The function itself is the normalization boundary — config.py does the
+    # alias mapping. Verify that an unexpected lang value falls back to EN
+    # rather than crashing or returning an empty string.
+    fallback = _builtin_for_lang("invalid-lang-code")
+    assert fallback == en_built, "Unknown lang must fall back to English"
+
+
+def test_qa_lang_alias_normalization():
+    """Config-level alias normalization: zh / zh-cn / zh_cn / CN / zh_tw
+    should all collapse to 'zh-tw'. Anything else (including unset)
+    defaults to 'en'. We exercise the normalization logic by reloading
+    config.py under different env values."""
+    import importlib
+    import os
+    import mk_qa_master.config as cfg
+
+    original = os.environ.get("QA_LANG")
+    try:
+        for alias in ("zh", "zh-cn", "zh_cn", "cn", "zh_tw", "ZH-TW", "Zh-Tw"):
+            os.environ["QA_LANG"] = alias
+            importlib.reload(cfg)
+            assert cfg.QA_LANG == "zh-tw", f"Alias {alias!r} should normalize to zh-tw, got {cfg.QA_LANG!r}"
+
+        for invalid in ("klingon", "fr", "ja", ""):
+            os.environ["QA_LANG"] = invalid
+            importlib.reload(cfg)
+            assert cfg.QA_LANG == "en", f"Invalid lang {invalid!r} should fall back to en, got {cfg.QA_LANG!r}"
+
+        os.environ["QA_LANG"] = "en"
+        importlib.reload(cfg)
+        assert cfg.QA_LANG == "en"
+    finally:
+        if original is None:
+            os.environ.pop("QA_LANG", None)
+        else:
+            os.environ["QA_LANG"] = original
+        importlib.reload(cfg)
+
+
+def test_api_methodology_section_present_in_both_languages():
+    """v0.6.2 adds an API Testing Methodology section in both languages.
+    The English build advertises Pact + Schemathesis + idempotency keys;
+    the Chinese build mirrors the same coverage with Chinese H2 titles."""
+    from mk_qa_master.tools.qa_context import _builtin_for_lang
+
+    en_built = _builtin_for_lang("en")
+    zh_built = _builtin_for_lang("zh-tw")
+
+    # EN side
+    assert "## API Testing Methodology" in en_built
+    assert "Pact" in en_built
+    assert "Schemathesis" in en_built
+    assert "Idempotency" in en_built or "idempotency" in en_built
+
+    # zh-TW side
+    assert "## API 測試方法論" in zh_built
+    assert "Pact" in zh_built
+    assert "冪等" in zh_built  # idempotency
+
+
+def test_flakiness_taxonomy_present_in_both_languages():
+    """v0.6.2 adds a five-cause flakiness taxonomy in both languages. The
+    five causes are: race conditions, external dependencies, order-dependent
+    tests, time-sensitive tests, resource leaks. Each block must carry the
+    smell / fix / example trio."""
+    from mk_qa_master.tools.qa_context import _builtin_for_lang
+
+    en_built = _builtin_for_lang("en")
+    zh_built = _builtin_for_lang("zh-tw")
+
+    assert "## Flaky Test Root-Cause Taxonomy" in en_built
+    for cause in ("Race conditions", "External dependencies", "Order-dependent",
+                  "Time-sensitive", "Resource leaks"):
+        assert cause in en_built, f"EN flakiness section missing '{cause}'"
+    assert en_built.count("**Smell**") >= 5
+    assert en_built.count("**Fix**") >= 5
+    assert en_built.count("**Example**") >= 5
+
+    assert "## Flaky 測試根因分類" in zh_built
+    for cause in ("競態條件", "外部依賴", "順序相依", "時間敏感", "資源洩漏"):
+        assert cause in zh_built, f"zh-TW flakiness section missing '{cause}'"
+
+
 def test_newman_runner_registered():
     """v0.6.1: the newman runner must be discoverable via the REGISTRY
     under both `newman` and `postman` keys (mirrors how schemathesis

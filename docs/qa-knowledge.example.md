@@ -1,5 +1,7 @@
 # QA Knowledge — Domain Examples (cross-domain)
 
+> **English version: see [`qa-knowledge-en.example.md`](qa-knowledge-en.example.md)**
+>
 > 這份是 `qa-knowledge.md`「**你的 XXX**」5 個領域區段的**填滿範本**。
 > 每個區段都示範 4 種常見 web app 架構，找你最像的那個照模仿、不像的略過：
 >

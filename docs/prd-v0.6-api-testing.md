@@ -568,4 +568,33 @@ Locked 2026-05-16 alongside the Phase 2 (Newman) build:
 
 ---
 
+## 23. v0.6.2 ratified
+
+Locked 2026-05-18:
+
+1. **Bilingual built-in knowledge layer** — methodology ships in English
+   by default (`QA_LANG=en`) and Traditional Chinese (`QA_LANG=zh-tw`).
+   No new MCP tools; tool count stays at 16. Aliases (`zh`, `zh-cn`,
+   `zh_TW`, `CN`) normalize to `zh-tw`; invalid values fall back to
+   `en` rather than raise.
+2. **Adapted translation, not literal** — idiomatic English, paragraphs
+   reflowed for natural reading. Code blocks, tool names, and file
+   paths stay verbatim across languages.
+3. **API methodology section** (~80 lines per language) — schema-driven
+   testing, Pact-style contract testing, property-based testing
+   (Hypothesis / fast-check / Schemathesis), auth patterns (Bearer /
+   OAuth2 client_credentials / API key / mTLS), idempotency keys,
+   rate-limit handling, pagination strategies (offset / cursor /
+   keyset), and error response conventions (RFC 7807 problem+json,
+   GraphQL `errors[]`).
+4. **Flakiness taxonomy** — five named root causes (race conditions,
+   external dependencies, order-dependent tests, time-sensitive tests,
+   resource leaks). Each block: one-line smell + one-line fix + one
+   concrete example.
+5. **Test doubles** — full Fowler four-type breakdown (stub, mock,
+   fake, spy) with selection guidance and the canonical anti-patterns
+   (over-mocking, mocking what you don't own, mock-everything-test-nothing).
+
+---
+
 *End of PRD v0.1 for mk-qa-master v0.6. Discussion in mk-qa-master Issues once a draft is opened.*
