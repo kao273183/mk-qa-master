@@ -219,6 +219,97 @@ a fully self-contained dev loop, or point at your own staging server.
 Standard `QA_TIMEOUT_SECONDS` still applies (default 600s).
 
 
+## AI Visual Challenge Solver (v0.7.0)
+
+> *When backend bypass isn't an option: Claude looks at the CAPTCHA, mk-qa-master does the clicks.*
+
+The first capability in the family where the AI client's vision is
+load-bearing, not optional. Two new MCP tools
+(`inspect_visual_challenge` + `solve_visual_challenge`) detect a
+reCAPTCHA v2 image-grid challenge on the active Playwright page,
+screenshot it for the multimodal AI client, accept the tile-selection
+the AI returns, and execute the click chain. The runner is the eyes
+and hands; the AI client (Claude / Cursor / Gemini / GPT-4o) is the
+actual solver.
+
+### When to use this — Tier 1 vs Tier 3
+
+The built-in QA knowledge layer (`get_qa_context section="CAPTCHA"`)
+codifies three tiers. Reach for them in order:
+
+| Tier | Approach | When |
+|---|---|---|
+| **1 — bypass** | reCAPTCHA test keys, feature flags, IP allowlist, test-mode headers | Default. Covers ~90% of cases. |
+| **2 — degrade** | Mark as `external_dependency`, skip downstream assertions | When you can't change the backend but the test isn't about the CAPTCHA itself. |
+| **3 — AI visual judgment** | This feature. | Only when 1 + 2 don't fit (client sites with authorization but no backend access, staging that mirrors prod CAPTCHA, mobile webviews where IP allowlist isn't reachable). |
+
+### Consent gate
+
+The solver does nothing until you explicitly opt in. Two env vars drive
+it:
+
+| Variable | Required | Default | What it does |
+|---|---|---|---|
+| `QA_VISUAL_CHALLENGE_CONSENT` | yes | `false` | Must be set to `true` for either tool to function. Without it, both tools return a `consent_required` error carrying the full legal disclaimer (the AI client surfaces this to the user). |
+| `QA_VISUAL_CHALLENGE_AUTHORIZED_DOMAINS` | no (recommended) | — | Comma-separated allowlist of domains where the tool may operate. When SET, refuses any other domain. When UNSET, warn-only — proceeds but stamps the response with a warning telling you to set one. **Recommended** for shared CI / multi-tenant environments. |
+| `QA_VISUAL_CHALLENGE_TIMEOUT` | no | `120` | Wall-clock budget in seconds for the inspect→solve cycle. Honors `QA_TIMEOUT_SECONDS` as a hard ceiling. |
+
+### Quick start
+
+```jsonc
+"env": {
+  "QA_RUNNER": "pytest",
+  "QA_PROJECT_ROOT": "/path/to/project",
+  "QA_VISUAL_CHALLENGE_CONSENT": "true",
+  "QA_VISUAL_CHALLENGE_AUTHORIZED_DOMAINS": "client-staging.example.com"
+}
+```
+
+Then, when a `run_tests` call surfaces an `external_dependency`
+failure that points at a CAPTCHA, the AI client can escalate:
+
+```
+mk-qa-master.inspect_visual_challenge()  # screenshot + tile grid
+→ AI vision picks tiles [0, 4, 7]
+mk-qa-master.solve_visual_challenge(
+    challenge_id="...", selected_tile_indices=[0, 4, 7], confirm=true,
+)
+→ status: "passed", token: "...", hint: "CAPTCHA verified. Resume your test."
+```
+
+Full walkthrough lives in [`docs/walkthrough-visual-challenge.md`](docs/walkthrough-visual-challenge.md).
+PRD: [`docs/prd-v0.7-visual-challenge.md`](docs/prd-v0.7-visual-challenge.md).
+
+### Hard-stop domains
+
+Regardless of consent or allowlist, the solver refuses to operate on
+known third-party identity providers (`accounts.google.com`,
+`login.microsoftonline.com`, `id.apple.com`, `facebook.com`,
+`login.live.com`, etc.). No legitimate QA scenario justifies a
+CAPTCHA solver against someone else's login portal.
+
+### Privacy
+
+No screenshot retention beyond the active inspect→solve cycle.
+Telemetry logs the boolean outcome only — never the screenshot, never
+the challenge text, never the tile selection. The 5-minute LRU cache
+holds at most 10 outstanding challenges per process and never touches
+disk.
+
+### Success rate caveat
+
+The AI client's vision model does the actual judging — Claude Sonnet
+4, GPT-4o, and Gemini 2.5 all ship with native vision but their
+accuracy on a 3x3 reCAPTCHA varies. Plan for at least one retry per
+challenge (reCAPTCHA gives you three before locking out). `get_telemetry`
+will eventually surface aggregate pass-rate so you can size that
+expectation per-client.
+
+**Scope**: reCAPTCHA v2 image-grid only in v0.7.0. hCaptcha lands in
+v0.7.1. reCAPTCHA v3 / Cloudflare Turnstile are permanently out of
+scope — they don't surface a visible challenge to inspect.
+
+
 ## Wire into Claude Desktop
 
 Copy `examples/configs/claude_desktop_config.example.json` to:
@@ -350,6 +441,7 @@ Shared across all runners (some tools degrade gracefully on non-pytest runners):
 | `analyze_screen` | **Mobile**: `maestro hierarchy` → form / cta / tab_bar modules + candidate TCs (noise-filtered) |
 | `init_qa_knowledge` / `get_qa_context` | Scaffold + read the project's QA knowledge layer (methodology + domain). **Bilingual since v0.6.2** — methodology ships in English by default (`QA_LANG=en`) or Traditional Chinese (`QA_LANG=zh-tw`); same 13 sections in both, the four newest cover API testing methodology, flakiness root-cause taxonomy, test doubles (mock / stub / fake / spy), and test data management. Domain example: [`docs/qa-knowledge-en.example.md`](docs/qa-knowledge-en.example.md) (zh-TW: [`docs/qa-knowledge.example.md`](docs/qa-knowledge.example.md)). |
 | `get_optimization_plan` | Three-layer self-improvement coach (suite / MCP / AI strategy) |
+| `inspect_visual_challenge` / `solve_visual_challenge` | **v0.7.0** AI Visual Challenge Solver — detect a reCAPTCHA v2 image-grid challenge, screenshot it, accept the AI client's tile selection, execute the click chain. Gated by `QA_VISUAL_CHALLENGE_CONSENT=true` + per-call `confirm=true`. See the dedicated section above. |
 
 ### Resources
 

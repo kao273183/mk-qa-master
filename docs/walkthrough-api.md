@@ -25,9 +25,11 @@ end you'll have run property-based fuzz tests, read a failure with the
 exact request + response captured, fixed the bug, and seen `run_failed`
 return zero failures — all from a single AI client session.
 
-The chain has no new MCP tools — the existing 16-tool surface drives the
+The chain has no new MCP tools — the existing MCP surface drives the
 schemathesis runner transparently. The only thing that changes is the
-`QA_RUNNER` env var.
+`QA_RUNNER` env var. (v0.7.0 brought the tool count to 18 by adding
+the AI Visual Challenge Solver — see
+[`docs/walkthrough-visual-challenge.md`](walkthrough-visual-challenge.md).)
 
 ---
 

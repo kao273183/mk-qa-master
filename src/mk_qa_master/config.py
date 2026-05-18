@@ -110,6 +110,47 @@ except ValueError:
     POSTMAN_TIMEOUT_REQUEST_MS = 30000
 
 
+# ---- AI Visual Challenge Solver (v0.7.0) -----------------------------------
+# Two-tool surface (`inspect_visual_challenge` + `solve_visual_challenge`)
+# that lets a multimodal AI client work through reCAPTCHA v2 image-grid
+# challenges via Playwright. Gated by an explicit consent env var so the
+# default install never auto-solves a CAPTCHA — see PRD §13 + §21 for the
+# ratified decisions on consent, allowlist, and hard-stop behavior.
+
+# Master consent gate. Default `false`; must be explicitly set to `true`
+# (or `1` / `yes`) for the visual challenge tools to do anything. Without
+# this, both tools return a `consent_required` structured error carrying
+# the legal disclaimer text from visual_challenge.DISCLAIMER_TEXT.
+QA_VISUAL_CHALLENGE_CONSENT = os.getenv(
+    "QA_VISUAL_CHALLENGE_CONSENT", ""
+).strip().lower() in ("1", "true", "yes")
+
+# Wall-clock budget (seconds) for the inspect→solve cycle. Honors
+# QA_TIMEOUT_SECONDS as a hard ceiling at the runner level. Default 120s
+# matches reCAPTCHA's "two minutes" countdown so the budget never
+# outlasts the challenge itself.
+try:
+    QA_VISUAL_CHALLENGE_TIMEOUT = int(
+        os.getenv("QA_VISUAL_CHALLENGE_TIMEOUT", "120") or "120"
+    )
+except ValueError:
+    QA_VISUAL_CHALLENGE_TIMEOUT = 120
+
+# Optional comma-separated domain allowlist. When SET, the tools refuse
+# to operate on any page whose host doesn't match an entry (suffix
+# match). When UNSET (the default), the tools warn-only — they proceed
+# but include a `warning` field in the response payload nudging the
+# user to set an allowlist. This split was ratified in PRD §21 #3:
+# strict-block when set, warn-only when unset, so single-user dev
+# ergonomics stay clean while shared CI / multi-tenant environments
+# have an explicit safety net.
+_authorized = os.getenv("QA_VISUAL_CHALLENGE_AUTHORIZED_DOMAINS", "").strip()
+QA_VISUAL_CHALLENGE_AUTHORIZED_DOMAINS: frozenset[str] | None = (
+    frozenset(d.strip().lower() for d in _authorized.split(",") if d.strip())
+    if _authorized else None  # None = unset = warn-only mode
+)
+
+
 def connect_android_host(timeout_s: float = 10.0) -> tuple[bool, str]:
     """Ensure the configured remote-ADB endpoint is paired before Maestro runs.
 

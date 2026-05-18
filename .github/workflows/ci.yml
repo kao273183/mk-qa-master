@@ -157,3 +157,38 @@ jobs:
           newman run examples/sample_api_project/postman-collection.json \
             --timeout-request 2000 \
             --reporters cli || true
+
+  api-captcha:
+    # v0.7.0 AI Visual Challenge Solver: verifies the two new MCP tools
+    # (inspect_visual_challenge / solve_visual_challenge) integrate
+    # end-to-end without ever hitting Google. The unit tests use mocked
+    # Playwright objects so this job is fast and deterministic — the
+    # bundled `examples/sample_captcha_fixture/` doubles as documentation
+    # for users who want to wire a real browser+route-mock test on their
+    # side. Consent + domain allowlist are set explicitly so the gate
+    # logic gets exercised (rather than stubbed) on every run.
+    name: visual challenge sample · Python 3.12 + chromium
+    runs-on: ubuntu-latest
+    needs: smoke
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Install chromium for Playwright
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run visual_challenge tests against mock fixture
+        env:
+          QA_VISUAL_CHALLENGE_CONSENT: "true"
+          QA_VISUAL_CHALLENGE_AUTHORIZED_DOMAINS: "localhost,127.0.0.1,test-fixture.local,client-staging.example.com"
+        run: pytest tests/test_visual_challenge.py -v
