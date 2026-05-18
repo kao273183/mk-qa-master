@@ -22,6 +22,19 @@ QA_KNOWLEDGE_PATH = Path(
     os.getenv("QA_KNOWLEDGE_FILE", str(PROJECT_ROOT / "qa-knowledge.md"))
 ).resolve()
 
+# Language for the built-in QA methodology layer served by get_qa_context()
+# when the project has no qa-knowledge.md yet (and used as the starter
+# template body by init_qa_knowledge). v0.6.2 ships English as the
+# default for international reach; existing zh-TW users opt in by setting
+# `QA_LANG=zh-tw`. Aliases (zh / zh_TW / CN) normalize to `zh-tw`;
+# any other value falls back to `en` rather than raising — we'd rather
+# serve the wrong language than crash the server boot.
+QA_LANG = os.getenv("QA_LANG", "en").lower().strip()
+if QA_LANG in ("zh", "zh-cn", "zh_cn", "cn", "zh_tw"):
+    QA_LANG = "zh-tw"
+if QA_LANG not in ("en", "zh-tw"):
+    QA_LANG = "en"
+
 # Optional remote-ADB endpoint (BlueStacks / Genymotion / Nox / LDPlayer /
 # WSA / cloud farms). When set, runners auto-run `adb connect <host>`
 # before invoking Maestro so `adb devices` actually lists the instance.

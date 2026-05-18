@@ -2,8 +2,9 @@
 
 Two-layer model:
   - Universal QA methodology (ISTQB principles, BBT design techniques, test
-    pyramid, regression strategy, mobile checklist, QA metrics) is bundled
-    as the built-in fallback. Applicable to any testing project.
+    pyramid, regression strategy, mobile checklist, QA metrics, API testing
+    methodology, flakiness taxonomy, test doubles, test data management) is
+    bundled as the built-in fallback. Applicable to any testing project.
   - Domain knowledge (business rules, regression points, exact assertion
     strings, user journeys, infra constraints) is per-project — users
     create qa-knowledge.md (via init_qa_knowledge or manually).
@@ -15,16 +16,26 @@ methodology + TODO placeholders pointing at domain sections to fill.
 Convention: the file uses H2 headers (## Section name) to delimit topics.
 The client can fetch a single section by name (case-insensitive, partial
 match) when it needs just one slice.
+
+Bilingual since v0.6.2: the built-in methodology ships in English
+(default, QA_LANG=en) and Traditional Chinese (QA_LANG=zh-tw). Each
+language carries the same 13 H2 sections. Adapted translation, not
+literal — code blocks / tool names / file paths are not translated.
+The user's own qa-knowledge.md is served back unchanged regardless of
+QA_LANG; only the built-in fallback and the starter template body
+respond to the language toggle.
 """
 import re
 
-from ..config import QA_KNOWLEDGE_PATH
+from ..config import QA_KNOWLEDGE_PATH, QA_LANG
 
 
-# Universal QA methodology — distilled from ISTQB / Google / mobile QA
-# standards. Engine-agnostic, domain-agnostic. Bundled so any fresh install
-# carries world-class testing thinking without the user writing anything.
-_UNIVERSAL_METHODOLOGY = """## ISTQB 七大測試原則
+# ---------------------------------------------------------------------------
+# Traditional Chinese methodology (the original v0.6.1 content, verbatim).
+# Hand-written; do NOT re-translate from English. New 4 sections at the end
+# mirror the English-side additions for parity.
+# ---------------------------------------------------------------------------
+_UNIVERSAL_METHODOLOGY_ZH = """## ISTQB 七大測試原則
 | # | 原則 | 說明 | 實際應用 |
 |---|------|------|---------|
 | 1 | **測試證明缺陷的存在** | 測試能發現 Bug，但不能證明沒有 Bug | 不要因為測試通過就假設零缺陷 |
@@ -271,13 +282,559 @@ _UNIVERSAL_METHODOLOGY = """## ISTQB 七大測試原則
 | **回歸通過率** | 回歸 Pass / 回歸 Total | > 98% |
 | **自動化覆蓋** | 自動化 TC / 總 TC | 依層級 |
 | **平均修復時間** | 修復完成 - Bug 提交 | 越短越好 |
+
+## API 測試方法論
+### Schema-driven 測試
+- 以 OpenAPI 3.x / Swagger 2.0 / JSON Schema 作為單一事實來源
+- 自動生成請求參數、邊界值、錯誤路徑、回應結構驗證
+- 工具：Schemathesis（HTTP 端到端、property-based）、Dredd（合約 smoke）
+- 上手最快：把現有 spec 餵給 Schemathesis 直接跑 — 等同自動化的「ISTQB 邊界值 + 等價分割」
+
+### 合約測試 (Consumer-Driven Contracts)
+- **Pact** 是業界事實標準：consumer 寫期望、broker 儲存、provider 驗證
+- 解決微服務「我這邊測了 OK、整合時掛掉」的鴻溝
+- 流程：consumer 跑單元測試 → 產出 pact JSON → 推到 broker → provider CI 拉下來重播驗證
+- 與 schema 測試的分工：schema 驗形狀；contract 驗「兩個服務對形狀的認知一致」
+
+### Property-based 測試
+- 不寫固定範例，描述「對所有合法輸入都應成立的性質」
+- 工具：Python `hypothesis`、JS `fast-check`、HTTP 層 `schemathesis`
+- 範例：對所有合法的 `POST /orders` payload，回應一定有 `id` 且為 UUID
+- 找出邊界 bug 的效率遠高於人工窮舉
+
+### 認證模式 (Auth Patterns)
+| 模式 | 怎麼測 |
+|------|--------|
+| Bearer Token | `Authorization: Bearer <jwt>`；測過期、簽章錯、缺 scope |
+| OAuth2 client_credentials | 先 POST `/oauth/token`、再帶 access_token；測 token 過期自動刷新 |
+| API Key Header | `X-API-Key: <key>`；測 quota 用罄、IP 白名單 |
+| mTLS | 雙向 cert；測 cert 過期、CN 不匹配 |
+
+### 冪等性 Key (Idempotency Keys)
+- 客戶端帶 `Idempotency-Key: <uuid>`，伺服器在 N 分鐘內對同 key 回相同結果
+- 必測：同 key 重送回 200 + 相同 body；不同 key 視為新請求
+- 適用：金流、`POST /payments`、外部 webhook 重送
+
+### 速率限制處理 (Rate Limit Handling)
+- 標準：HTTP 429 + `Retry-After: <seconds>` header
+- 客戶端策略：指數退避（initial 1s、cap 60s、jitter ±20%）
+- 測試重點：連打觸發 429、`Retry-After` 後重試成功、超過 max retries 後正確失敗
+
+### 分頁策略 (Pagination)
+| 策略 | 適用 | 痛點 |
+|------|------|------|
+| Offset/Limit | 小資料、UI 顯示頁碼 | 大 offset 慢、資料變動時跳項 |
+| Cursor | 串流 / feed | 不能跳頁、cursor 失效要處理 |
+| Keyset | 大表時間序 | 需穩定排序鍵、不支援任意排序 |
+
+### 錯誤回應格式 (Error Shape)
+- **RFC 7807 problem+json**：`{ type, title, status, detail, instance }` — REST 業界共識
+- **GraphQL `errors[]`**：每個 error 有 `message` / `path` / `extensions.code`
+- 必測：錯誤路徑回應符合自己訂的形狀（不只 status code 對就算 pass）
+- 反模式：200 OK 內含 `{ "error": "..." }` — 監控、retry、log 全失靈
+
+## Flaky 測試根因分類
+> 大多數「flaky」測試失敗其實不是 flake — 是有根因可循的。Optimizer 的
+> `broken` 分類用在連續三次失敗共用同一錯誤簽章；那是真 bug，不是 flake。
+> 真正 flake 多半落在以下五類：
+
+### 1. 競態條件 (Race Conditions)
+- **Smell**: 同樣的測試重跑會通過、loop 100 次有 1-2 次掛
+- **Fix**: 用顯式 wait（`wait_for_response` / `expect(locator).to_be_visible`），不要用 `sleep(N)`
+- **Example**: 點擊按鈕觸發 AJAX，後面 assert 文字之前沒等回應 → 偶爾在 response 前 assert
+
+### 2. 外部依賴 (External Dependencies)
+- **Smell**: CI 跑會掛、本機跑不會；網路高峰時段失敗率高
+- **Fix**: 對 third-party 用 mock / VCR / contract test；時間用 freeze；網路用 retry-with-backoff
+- **Example**: 整合測試打真實 Stripe sandbox，sandbox 暫時不穩 → 測試紅了但程式沒事
+
+### 3. 順序相依 (Order-Dependent)
+- **Smell**: 單跑某 test 通過、整批跑會掛；換個 -p random seed 結果不同
+- **Fix**: 每個 test 自帶 setup/teardown；不共用 module-level 變數或 DB rows
+- **Example**: test_a 寫了 user record、test_b 假設 DB 空 → test_b 在 test_a 之後跑就掛
+
+### 4. 時間敏感 (Time-Sensitive)
+- **Smell**: 半夜跑會掛、跨日 / 跨時區會掛、DST 切換週末出問題
+- **Fix**: 用 freezegun / jest fake timers 固定時鐘；別用 `datetime.now()` 直接比對
+- **Example**: 訂單建立時 `created_at` 使用 server time，斷言寫「今天」字串 → 跨 0 點的測試掛掉
+
+### 5. 資源洩漏 (Resource Leaks)
+- **Smell**: 測試套件越跑越慢、最後幾個 test 掛在 timeout、CI 機 OOM
+- **Fix**: fixture 用 yield/teardown 確保關 socket / file / process / page
+- **Example**: Playwright 測試沒關 context → 累積 50 個 chromium process 後 CI runner 爆記憶體
+
+## 測試替身 (Test Doubles — Mock / Stub / Fake / Spy)
+> 採用 Martin Fowler 的標準四分類。四者目的不同、適用場景不同 —
+> 不要把它們混為一談、不要全部叫 "mock"。
+
+### Stub — 回傳預設資料
+- **特性**: 提供固定回應，**不驗證如何被呼叫**
+- **用在**: 隔離外部依賴、聚焦在 SUT 行為（state verification）
+- **範例**: stub 一個 `get_exchange_rate()` 永遠回 30.0，測試「換匯計算邏輯」
+
+### Mock — 預設資料 + 驗證呼叫方式
+- **特性**: 回固定資料 + 斷言「該方法被呼叫幾次、用什麼參數」（behavior verification）
+- **用在**: 驗證互動契約，例如「下單後一定要呼叫 audit_log.write()」
+- **範例**: `mock_audit.assert_called_once_with(order_id=42)` — 行為斷言
+
+### Fake — 簡化但可運作的實作
+- **特性**: 真有邏輯、能跑，但比 production 簡單（記憶體 vs DB；本地 vs 雲端）
+- **用在**: 整合測試需要可運作的依賴又不想拉真服務
+- **範例**: SQLite in-memory 取代 Postgres；本地 fakeredis 取代 ElastiCache
+
+### Spy — 包真實物件並記錄呼叫
+- **特性**: 物件**真的執行**，spy 在旁邊記下呼叫次數 / 參數，事後檢查
+- **用在**: 需要真行為 + 觀察用，例如「真的有發 email、且只發了一次」
+- **範例**: spy 包住 `EmailService.send`，斷言 `spy.call_count == 1`
+
+### 反模式
+- **Over-mocking**：每個依賴都 mock → 測試斷言的是 mock 的行為、不是 production 的行為
+- **Mock what you don't own**：mock 第三方 SDK 內部細節 → SDK 升版後測試還是綠的、production 卻爆
+- **Mock everything then test nothing**：層層 mock 後 SUT 的真實邏輯沒測到，覆蓋率高但毫無保護力
+- **Roo決**：state verification 優先（stub + fake），behavior verification 只在「互動本身就是需求」時用（mock）
+
+## 測試資料管理
+### Factories
+- `factory_boy`（Python）、`faker`（多語言）：宣告式生資料、預設亂數 + 可覆寫
+- 比 fixture 檔案彈性：每個 test 微調 `OrderFactory(amount=999)`，其他欄位自動填合理值
+- 適合：物件構造路徑複雜、欄位多
+
+### Fixtures
+- `pytest.fixture` / Jest `beforeEach`：可重用 setup，scope 控制（function / class / session）
+- 適合：每 test 都需相同 setup 的小型靜態資料
+
+### 隔離策略
+- **Per-test transaction rollback**：DB 測試在交易內跑、結束時 rollback → 不留垃圾
+- **Per-test temp dir**：檔案系統測試用 `tmp_path`；測試結束自動清
+- **Per-test namespace**：containers / k8s 整合測試每 case 一個 namespace
+
+### 時間 mocking
+- `freezegun`（Python）：`with freeze_time("2026-05-16"):` 鎖定 `datetime.now()`
+- Jest fake timers：`jest.useFakeTimers()` 鎖 `Date.now()` + `setTimeout`
+- iOS XCTest 用 dependency injection 把 `Clock` 抽象化、測試注入假 clock
+
+### 資料庫 seeding
+- **Per-suite seed**：跑前一次性灌、所有 test 共用 → 快但不隔離（容易順序相依）
+- **Per-test seed**：每 test 自己 setup → 慢但乾淨（首選）
+- 折衷：基礎參考資料 per-suite（國家 / 商品分類 / 角色），交易資料 per-test
+
+### Fresh data vs 共用 fixture 的取捨
+| 共用 fixture（per-suite） | 新鮮資料（per-test） |
+|---|---|
+| 跑得快 | 隔離乾淨 |
+| 容易順序相依 | 不會互相污染 |
+| 適合大、慢的 setup | 適合主要業務 case |
+| 適合：基準參考表 | 適合：交易、變更類 case |
 """
 
 
+# ---------------------------------------------------------------------------
+# English methodology (NEW in v0.6.2 — default served when QA_LANG=en).
+# Adapted translation: idiomatic English, paragraphs reflowed for natural
+# reading. Code blocks / tool names / file paths kept verbatim. Same 13
+# H2 sections as the zh-TW version so the section-name lookup works
+# across languages, modulo translated section titles.
+# ---------------------------------------------------------------------------
+_UNIVERSAL_METHODOLOGY_EN = """## ISTQB Seven Testing Principles
+| # | Principle | What it means | How to apply it |
+|---|------|------|---------|
+| 1 | **Testing shows defects, not their absence** | Tests can find bugs but cannot prove a system is bug-free | Don't assume zero defects just because the suite is green |
+| 2 | **Exhaustive testing is impossible** | You cannot test every combination | Prioritize by risk and impact; stop chasing 100% coverage |
+| 3 | **Early testing saves money** | The earlier you test, the cheaper the fix | Shift-Left: review requirements before code is written |
+| 4 | **Defect clustering** | 80% of bugs live in 20% of modules | Test the high-risk modules first (login, payments, SSO) |
+| 5 | **Pesticide paradox** | The same tests stop finding new bugs over time | Refresh test cases regularly; add exploratory sessions |
+| 6 | **Testing is context-dependent** | Different systems need different strategies | An e-commerce app and a social app have different test priorities |
+| 7 | **Absence-of-errors fallacy** | No bugs ≠ system meets user needs | Correctness ≠ usability — still test the user experience |
+
+## Test Design Techniques — Black-Box
+### Equivalence Partitioning
+- Divide inputs into classes where the system behaves identically; test one representative per class
+- Example: order quantity 1–10
+  - Invalid partition: <= 0 (test 0)
+  - Valid partition: 1–10 (test 5)
+  - Invalid partition: >= 11 (test 11)
+
+### Boundary Value Analysis
+- Bugs cluster at boundaries
+- Test points: min, min+1, middle, max-1, max
+- Example: quantity 1–10 -> test 0, 1, 2, 5, 9, 10, 11
+- Pair with EP: EP picks partition reps; BVA picks the edges
+
+### Decision Table Testing
+- Best for: multiple conditions combining into different outcomes
+- Build: n conditions -> 2^n combinations
+- Example: login (account valid x password valid)
+
+  | Account | Password | Result |
+  |------|------|------|
+  | X | X | Error |
+  | OK | X | Error |
+  | X | OK | Error |
+  | OK | OK | Success |
+
+### State Transition Testing
+- Best for: behavior that depends on prior state
+- Four parts: state, transition, event, action
+- Example: ATM PIN (3 attempts allowed)
+
+  | State | Correct PIN | Wrong PIN |
+  |------|---------|---------|
+  | Initial | Enter | Attempt 2 |
+  | Attempt 2 | Enter | Attempt 3 |
+  | Attempt 3 | Enter | Locked |
+
+## Test Pyramid (Google 70/20/10)
+```
+        /‾‾‾‾‾‾\\
+       / E2E 10% \\      few, slow, brittle, expensive
+      /────────────\\
+     / Integration  \\    moderate, verify module interactions
+    /   20%          \\
+   /──────────────────\\
+  /   Unit Tests 70%   \\  many, fast, stable, cheap
+ /────────────────────────\\
+```
+
+### Anti-patterns
+- **Ice-cream cone** (inverted pyramid): heavy E2E, light unit -> slow, brittle
+- **Hourglass**: many unit + many E2E, few integration -> module interactions not verified
+
+### Layer focus
+| Layer | Speed | Stability | What to test | Tooling |
+|----|------|--------|--------|---------|
+| Unit | ms | high | single logic, edges, error handling | pytest / XCTest / JUnit |
+| Integration | s | medium | module interactions, API, DB | requests-mock / URLProtocol |
+| E2E | min | low | critical business flows | Playwright / Cypress / XCUITest |
+
+### Key principles
+- When a high-layer test catches a bug, add a lower-layer test that would have caught it sooner
+- Push tests down the pyramid whenever possible
+- Only run E2E against flows that "make money or cost money"
+
+## Shift-Left Testing
+### What it is
+Move testing activities earlier in the development lifecycle instead of waiting until after code is "done."
+
+### Four flavors
+| Flavor | Description |
+|------|------|
+| Traditional | V-Model with emphasis on Unit + Integration |
+| Incremental | Module-by-module verification |
+| Agile/DevOps | Continuous testing every sprint |
+| Model-based | Catch bugs during requirements modeling |
+
+### Practices
+1. **Static testing**: requirements review, design review (code review counts)
+2. **Developer self-test**: run tests the moment code is written
+3. **Unified toolchain**: dev and QA share the same tools
+4. **CI automation**: every commit triggers tests
+5. **Continuous feedback**: failures surface to developers immediately
+
+### Cost-of-defect curve
+- Fix during requirements: $1
+- Fix during development: $10
+- Fix during QA: $100
+- Fix in production: $1000
+
+## Regression Test Strategy
+### When to run
+- After integrating a new feature
+- After fixing a bug
+- After a requirement change
+- After a performance optimization
+- After integrating an external system
+
+### Test selection priority
+1. Features with a history of recurring defects
+2. User-visible features
+3. Core business features
+4. Recently modified areas
+5. All integration tests
+6. Complex paths and boundary-value cases
+
+### Types
+| Type | Scope | When to use |
+|------|------|------|
+| Unit | Just the modified piece | Tiny changes |
+| Regional | Modified piece + dependencies | Module-level change |
+| Full | Re-test everything | Major versions / releases |
+| Selective | Subset by impact analysis | Time-constrained |
+
+### Best practices
+- Automate as much as possible
+- Wire into the CI/CD pipeline
+- Run on every code change
+- Keep test environments consistent
+- Use isolated, reproducible test data
+
+## Mobile App Test Checklist
+### Functional
+- [ ] Required fields are visually distinguishable
+- [ ] App start/stop behaves correctly
+- [ ] Incoming calls don't break app state
+- [ ] SMS arrival doesn't interrupt the app
+- [ ] Multitasking switching is clean
+- [ ] Social sharing works
+- [ ] Payment gateways pass (Visa/MC/Apple Pay)
+- [ ] Network failures show actionable error messages
+- [ ] App recovers gracefully from system crash
+- [ ] Install/update flow has no blocking errors
+
+### Performance
+- [ ] Response time stays acceptable under varied load
+- [ ] Network capacity holds at peak user count
+- [ ] Battery life is acceptable under expected load
+- [ ] WiFi <-> 4G/5G switching doesn't break flows
+- [ ] CPU usage is reasonable
+- [ ] No memory leaks
+- [ ] GPS / camera / sensor use is bounded
+- [ ] Long-session stability holds
+
+### Security
+- [ ] Brute-force protection in place
+- [ ] Sensitive content requires authentication
+- [ ] Strong password policy enforced
+- [ ] Session expiry is reasonable
+- [ ] SQL injection defenses verified
+- [ ] SSL/TLS certificate validation enforced
+- [ ] Encrypted storage (Keychain / Encrypted SharedPreferences)
+- [ ] Keyboard cache cleared for sensitive fields
+- [ ] Cookies set with secure flags
+
+### Usability
+- [ ] Touch targets at least 44pt
+- [ ] Button placement is consistent across screens
+- [ ] Icons are intuitive and consistent
+- [ ] Same function uses the same color across screens
+- [ ] Zoom / pinch behavior available
+- [ ] Minimal keyboard input required
+- [ ] Back / cancel always reachable
+- [ ] Text is legible at default size
+- [ ] Large downloads show progress
+- [ ] App state survives backgrounding
+
+### Compatibility / Interrupt / Recovery
+- [ ] UI adapts across screen sizes
+- [ ] Text never truncated unintentionally
+- [ ] Runs on supported OS versions
+- [ ] Keyboard input survives network disruption
+- [ ] Background app performance OK during charging
+- [ ] Low battery + high load combo handled
+- [ ] Data integrity preserved after crash
+- [ ] Data recovers after connection drops
+- [ ] Uninstall leaves no orphan files
+
+## RWD Responsive Testing (Web)
+### Standard breakpoints (typical; adjust to your design system)
+| Tier | Width (px) | Representative devices |
+|------|----------|---------|
+| Mobile XS | 320–374 | iPhone SE 1st gen / early Android |
+| Mobile | 375–413 | iPhone SE 3rd / iPhone 13–16 mini |
+| Mobile L | 414–767 | iPhone Pro Max / Plus |
+| Tablet | 768–1023 | iPad portrait |
+| Tablet L | 1024–1279 | iPad landscape / iPad Pro |
+| Desktop | 1280–1919 | Standard laptop / external monitor |
+| Desktop XL | >= 1920 | Large monitor / 4K |
+
+### Must-test axes
+- **Layout doesn't break**: text doesn't overflow / truncate; nothing overlaps
+- **Interaction switches**: mobile uses hamburger + tap, desktop uses hover + mouse, tablet must support both
+- **Touch targets**: mobile tap area >= 44x44pt (WCAG 2.5.5 / Apple HIG)
+- **Media swapping**: `<picture srcset>` / `image-set()` loads the right resolution per DPR
+- **Readable typography**: base font-size >= 14px; line height 1.4–1.6; use rem/em so user zoom works
+- **Keyboard navigation**: tab order survives responsive reordering
+
+### Common RWD bug patterns (each deserves its own TC)
+- **Hard-coded px**: layout shatters under user font zoom
+- **Hover-only interactions**: mobile has no hover; element stuck in hover state
+- **Hidden but not unmounted**: `display:none` element still in DOM -> selectors mistakenly hit invisible nodes
+- **Missing viewport meta**: phone shows a shrunken desktop view, no reflow
+- **Untested transition zone**: 768–1023 layout broken even when mobile/desktop are fine
+- **No image lazy-load / missing srcset**: mobile downloads desktop hero image, kills bandwidth
+
+### Strategy
+- **E2E**: run core flows at three representative viewports (mobile 375 / tablet 768 / desktop 1280)
+- **Visual regression**: cross-viewport diff with Percy / Chromatic
+- **Boundary thinking**: breakpoint +/- 1px (e.g. 767 vs 768) should switch cleanly, never ambiguously
+- **Real devices**: CSS emulators != real mobile (iOS Safari bottom bar, Android IME height, Dynamic Island)
+
+## Test Type Reference
+| Type | Definition | Automation | Frequency |
+|------|------|--------|------|
+| **Smoke** | Quick post-build validation of core paths | Should automate | Every build |
+| **Regression** | Confirm changes didn't break existing features | Should automate | Every change |
+| **Functional** | Verify business requirements | Partial | Every feature |
+| **Integration** | Verify module interactions | Should automate | Every integration |
+| **E2E** | Full user journeys | Critical paths only | Before release |
+| **Performance** | Load, response time, resource usage | Tool-assisted | Periodic |
+| **Security** | Vulnerabilities, auth, encryption | Partial tooling | Before release |
+| **Exploratory** | Unscripted, experience-driven | Manual | New features |
+| **Acceptance** | Conformance to business criteria | Partial | Before release |
+
+## QA Metrics
+| Metric | Formula | Target |
+|------|------|------|
+| **Execution rate** | (Pass + Fail) / Total | > 95% |
+| **Pass rate** | Pass / (Pass + Fail) | > 95% |
+| **Defect density** | Bugs / KLOC | Lower is better |
+| **Defect removal efficiency** | Pre-release bugs / total bugs | > 90% |
+| **Regression pass rate** | Regression Pass / Regression Total | > 98% |
+| **Automation coverage** | Automated TCs / total TCs | Per pyramid layer |
+| **Mean time to repair** | Fix complete - bug filed | Lower is better |
+
+## API Testing Methodology
+### Schema-driven testing
+- Treat OpenAPI 3.x / Swagger 2.0 / JSON Schema as the single source of truth
+- Auto-generate request params, boundary values, error paths, and response-shape assertions
+- Tools: Schemathesis (HTTP, property-based, end-to-end), Dredd (contract smoke)
+- Fastest start: feed your existing spec to Schemathesis and run it — equivalent to automated "ISTQB boundary + equivalence partitioning"
+
+### Contract testing (consumer-driven)
+- **Pact** is the de-facto standard: consumers describe expectations, the broker stores them, providers verify
+- Closes the microservices "green on my side, breaks on integration" gap
+- Flow: consumer's unit tests -> pact JSON -> broker -> provider CI pulls + replays -> verify
+- Division of labor vs schema testing: schema tests verify shape; contract tests verify that two services agree on that shape
+
+### Property-based testing
+- Don't write fixed examples; describe properties that should hold for all valid inputs
+- Tools: `hypothesis` (Python), `fast-check` (JS), `schemathesis` (HTTP layer)
+- Example: for any valid `POST /orders` payload, the response must include an `id` that is a UUID
+- Catches boundary bugs far faster than hand-enumerated cases
+
+### Authentication patterns
+| Pattern | How to test |
+|------|--------|
+| Bearer token | `Authorization: Bearer <jwt>`; verify expiry, bad signature, missing scope |
+| OAuth2 client_credentials | POST `/oauth/token` first, then attach access_token; verify token refresh on expiry |
+| API key header | `X-API-Key: <key>`; verify quota exhaustion, IP allowlist |
+| mTLS | Mutual cert; verify expired cert, CN mismatch |
+
+### Idempotency keys
+- Client sends `Idempotency-Key: <uuid>`; server returns the same result for the same key within N minutes
+- Must-test: same key replay returns 200 + identical body; different key counts as new request
+- Use cases: payments, `POST /payments`, external webhook redelivery
+
+### Rate-limit handling
+- Convention: HTTP 429 + `Retry-After: <seconds>` header
+- Client strategy: exponential backoff (initial 1s, cap 60s, jitter +/- 20%)
+- Test focus: hammer until 429 fires, retry after `Retry-After` succeeds, exceed max retries fails cleanly
+
+### Pagination strategies
+| Strategy | Use case | Trade-off |
+|------|------|------|
+| Offset/limit | Small datasets, UI page numbers | Slow at deep offsets; items shift when data mutates |
+| Cursor | Streams / feeds | Cannot jump pages; must handle cursor invalidation |
+| Keyset | Large time-series tables | Requires a stable sort key; no arbitrary sort |
+
+### Error response conventions
+- **RFC 7807 problem+json**: `{ type, title, status, detail, instance }` — REST industry consensus
+- **GraphQL `errors[]`**: each error carries `message` / `path` / `extensions.code`
+- Must-test: error paths conform to your chosen shape (not just "status code matches")
+- Anti-pattern: 200 OK with `{ "error": "..." }` in the body — breaks monitoring, retry, and logging
+
+## Flaky Test Root-Cause Taxonomy
+> Most "flaky" test failures aren't flakes — they're root-cause-able. The
+> optimizer's `broken` classification is for when three consecutive failures
+> share an error signature; that's a real bug, not a flake. Genuine flakes
+> almost always fall into one of these five buckets:
+
+### 1. Race conditions
+- **Smell**: re-running passes; looping 100 times fails 1-2 times
+- **Fix**: use explicit waits (`wait_for_response` / `expect(locator).to_be_visible`), never `sleep(N)`
+- **Example**: click triggers AJAX, the next assertion runs before the response arrives -> occasional pre-response assert
+
+### 2. External dependencies
+- **Smell**: fails in CI but not locally; failure rate spikes during peak network hours
+- **Fix**: mock / VCR / contract-test third parties; freeze time; retry-with-backoff for network calls
+- **Example**: integration test hits real Stripe sandbox; sandbox blips -> test red, your code is fine
+
+### 3. Order-dependent tests
+- **Smell**: passes in isolation, fails in the full suite; flipping `-p random` seed changes the result
+- **Fix**: every test owns its setup/teardown; never share module-level state or pre-seeded DB rows
+- **Example**: test_a inserts a user; test_b assumes empty DB -> test_b fails when scheduled after test_a
+
+### 4. Time-sensitive tests
+- **Smell**: fails overnight; fails crossing day / timezone boundaries; broken the weekend DST flips
+- **Fix**: use freezegun / jest fake timers to lock the clock; never assert against `datetime.now()` directly
+- **Example**: order's `created_at` uses server time; assertion checks the word "today" -> test crossing midnight fails
+
+### 5. Resource leaks
+- **Smell**: suite gets slower as it runs; the last tests time out; CI runner OOMs
+- **Fix**: fixtures use yield/teardown to close sockets / files / processes / pages
+- **Example**: Playwright tests forget to close context -> 50 chromium processes accumulate, CI runner runs out of memory
+
+## Test Doubles (Mock / Stub / Fake / Spy)
+> Use Martin Fowler's canonical four-type breakdown. Each has a distinct
+> purpose — don't lump them all under "mock" and don't reach for the
+> heaviest one when the lightest fits.
+
+### Stub — returns canned data
+- **Trait**: provides a fixed response; does **not** verify how it was called
+- **Use when**: isolating an external dependency to test state changes in the SUT (state verification)
+- **Example**: stub `get_exchange_rate()` to always return 30.0 while testing currency conversion logic
+
+### Mock — canned data + call verification
+- **Trait**: returns a fixed response **and** asserts that "this method was called N times with these args" (behavior verification)
+- **Use when**: verifying an interaction contract — e.g. "placing an order must call audit_log.write()"
+- **Example**: `mock_audit.assert_called_once_with(order_id=42)` — behavior assertion
+
+### Fake — working implementation, simplified
+- **Trait**: real logic, runs end-to-end, but simpler than production (in-memory vs DB; local vs cloud)
+- **Use when**: integration tests need a working dependency without spinning up the real service
+- **Example**: SQLite in-memory instead of Postgres; fakeredis instead of ElastiCache
+
+### Spy — wraps a real object and records calls
+- **Trait**: the wrapped object **actually executes**; the spy records call count / args alongside
+- **Use when**: you need real behavior *and* the ability to inspect the interaction afterwards
+- **Example**: spy wraps `EmailService.send`; assert `spy.call_count == 1` after the flow runs
+
+### Anti-patterns
+- **Over-mocking**: mock every dependency -> the test asserts mock behavior, not production behavior
+- **Mocking what you don't own**: mock internals of a third-party SDK -> SDK upgrade slips through, test stays green, production breaks
+- **Mock everything then test nothing**: layers of mocks leave the SUT's real logic unexercised; coverage looks high but provides zero protection
+- **Heuristic**: prefer state verification (stub + fake); reach for behavior verification (mock) only when the interaction itself is the requirement
+
+## Test Data Management
+### Factories
+- `factory_boy` (Python), `faker` (multi-language): declarative data generation with sane defaults + per-test overrides
+- More flexible than static fixture files: each test tweaks `OrderFactory(amount=999)` and other fields auto-fill
+- Best for: complex object construction paths, models with many fields
+
+### Fixtures
+- `pytest.fixture` / Jest `beforeEach`: reusable setup with scope control (function / class / session)
+- Best for: small, static setup shared across many tests
+
+### Isolation strategies
+- **Per-test transaction rollback**: DB tests run inside a transaction that rolls back on teardown -> no residue
+- **Per-test temp dirs**: filesystem tests use `tmp_path`; automatic cleanup
+- **Per-test namespace**: containers / k8s integration tests get a fresh namespace per case
+
+### Time mocking
+- `freezegun` (Python): `with freeze_time("2026-05-16"):` pins `datetime.now()`
+- Jest fake timers: `jest.useFakeTimers()` controls `Date.now()` + `setTimeout`
+- iOS XCTest: dependency-inject a `Clock` abstraction; tests inject a fake clock
+
+### Database seeding
+- **Per-suite seed**: bulk-load once before the suite; all tests share -> fast but couples tests (order-dependence risk)
+- **Per-test seed**: each test owns its setup -> slower but isolated (preferred default)
+- Compromise: load reference data (countries / categories / roles) per-suite; transactional data per-test
+
+### Fresh data vs fixture sharing — the trade-off
+| Shared fixtures (per-suite) | Fresh data (per-test) |
+|---|---|
+| Faster | Cleanly isolated |
+| Risks order-dependence | No cross-test pollution |
+| Good for heavy, slow setup | Good for the main business cases |
+| Best for: reference tables | Best for: transactional / mutation cases |
+"""
+
+
+# ---------------------------------------------------------------------------
 # Per-project knowledge slots — methodology covers the "how to test",
 # these cover the "what's specific about THIS product". Both layers are
-# needed to escape monkey-testing.
-_DOMAIN_TODO_SECTIONS = """## 你的業務規則
+# needed to escape monkey-testing. Same five slot headings translated.
+# ---------------------------------------------------------------------------
+_DOMAIN_TODO_SECTIONS_ZH = """## 你的業務規則
 - TODO: 領域邏輯 / 折扣計算 / 限購規則 / 會員等級 / 優惠券規範 ...
 
 ## 你的歷史 Bug / 回歸點
@@ -294,39 +851,111 @@ _DOMAIN_TODO_SECTIONS = """## 你的業務規則
 """
 
 
-_BUILTIN_DEFAULTS = (
+_DOMAIN_TODO_SECTIONS_EN = """## Your Business Rules
+- TODO: domain logic / discount math / purchase limits / membership tiers / coupon rules ...
+
+## Your Historical Bugs / Regression Points
+- TODO: fixed ticket ID + summary + expected behavior + trigger condition + fix reference
+
+## Your Standard Assertion Strings
+- TODO: exact UI copy / error messages / success toasts / CTA labels
+
+## Your User Journeys
+- TODO: multi-step flows: login -> primary action -> completion -> verify result
+
+## Your Technical Constraints
+- TODO: test env URLs / test users / required headers / deterministic-seed mechanism
+"""
+
+
+def _builtin_for_lang(lang: str) -> str:
+    """Concat universal methodology + domain TODO slots for the chosen language.
+
+    `lang` is expected to already be normalized to `en` or `zh-tw` by
+    config.QA_LANG; we still defensively check for `zh-tw` and fall back
+    to English so a bad runtime override doesn't crash the server.
+    """
+    if lang == "zh-tw":
+        return _UNIVERSAL_METHODOLOGY_ZH + _DOMAIN_TODO_SECTIONS_ZH
+    return _UNIVERSAL_METHODOLOGY_EN + _DOMAIN_TODO_SECTIONS_EN
+
+
+_BUILTIN_HEADER_ZH = (
     "# QA Knowledge — Universal Testing Methodology (built-in fallback)\n\n"
-    "> 這份是 mk-qa-master 內建的通用 QA 方法論，整理自 ISTQB / Google 測試金字塔 / 業界 mobile QA 標準。\n"
+    "> 這份是 mk-qa-master 內建的通用 QA 方法論，整理自 ISTQB / Google 測試金字塔 / 業界 mobile QA 標準\n"
+    "> + API 測試、Flaky 根因分類、測試替身（Fowler 四分類）、測試資料管理。\n"
     "> 任何測試專案都可以套用 — **但缺少你的領域知識**（業務規則 / 回歸點 / 標準文案）\n"
     "> 就還是會偏向 monkey testing。解法：執行 init_qa_knowledge tool，\n"
     "> 在受測專案根產生 qa-knowledge.md、把下面五個「你的 XXX」TODO 區段填上你的領域內容。\n\n"
-    + _UNIVERSAL_METHODOLOGY
-    + "\n"
-    + _DOMAIN_TODO_SECTIONS
 )
 
 
-_STARTER_TEMPLATE = (
+_BUILTIN_HEADER_EN = (
+    "# QA Knowledge — Universal Testing Methodology (built-in fallback)\n\n"
+    "> This is mk-qa-master's built-in universal QA methodology, distilled from\n"
+    "> ISTQB principles, Google's test pyramid, industry mobile QA standards,\n"
+    "> plus API testing, flakiness root-cause taxonomy, test doubles\n"
+    "> (Fowler's four-type breakdown), and test data management.\n"
+    "> Any testing project can apply this — **but without your domain knowledge**\n"
+    "> (business rules, regression points, standard copy), it still drifts toward\n"
+    "> monkey testing. Fix: run the `init_qa_knowledge` tool to scaffold\n"
+    "> `qa-knowledge.md` in your project root, then fill the five `Your XXX`\n"
+    "> TODO sections below with your domain content.\n\n"
+)
+
+
+_STARTER_HEADER_ZH = (
     "# QA Knowledge — {project_name}\n\n"
     "> 給 mk-qa-master 讀的領域知識。get_qa_context() 會把這份內容暴露給 AI，\n"
     "> 用於決定要測什麼 + 把規則印進產出 test 的 `# Business context:` 區段。\n"
     "> **規則**：以 H2 (`##`) 區段為單位、client 可指定 section 拉取單一段（partial match）。\n\n"
     "> ---\n"
-    "> **上半部「通用測試方法論」**（ISTQB / 邊界值 / 測試金字塔 / 回歸策略 / Mobile checklist / QA metrics）\n"
+    "> **上半部「通用測試方法論」**（ISTQB / 邊界值 / 測試金字塔 / 回歸策略 / Mobile checklist / "
+    "QA metrics / API 測試 / Flaky 根因 / 測試替身 / 測試資料）\n"
     "> 由 mk-qa-master 預載。一般不需要動；場景不適用某些方法論可以刪除對應 H2 段落。\n"
     "> \n"
     "> **下半部「你的 XXX」TODO 區段**才是讓測試脫離 monkey 等級的關鍵 — 請填入你的領域業務規則。\n"
     "> ---\n\n"
-    + _UNIVERSAL_METHODOLOGY
-    + "\n"
-    + _DOMAIN_TODO_SECTIONS
 )
+
+
+_STARTER_HEADER_EN = (
+    "# QA Knowledge — {project_name}\n\n"
+    "> Domain knowledge for mk-qa-master to read. `get_qa_context()` exposes this\n"
+    "> file to the AI so it can decide what to test and inject your rules into the\n"
+    "> `# Business context:` block of every generated test.\n"
+    "> **Convention**: split topics with H2 (`##`); clients can pull a single\n"
+    "> section by name (partial match, case-insensitive).\n\n"
+    "> ---\n"
+    "> The **upper half (universal testing methodology)** — ISTQB / boundary values /\n"
+    "> test pyramid / regression strategy / mobile checklist / QA metrics / API\n"
+    "> testing / flakiness taxonomy / test doubles / test data management — ships\n"
+    "> preloaded by mk-qa-master. You usually don't need to touch it; delete any\n"
+    "> H2 sections that don't apply to your context.\n"
+    "> \n"
+    "> The **lower half (`Your XXX` TODO sections)** is what lifts tests above\n"
+    "> monkey level — fill these with your domain business rules.\n"
+    "> ---\n\n"
+)
+
+
+def _builtin_defaults() -> str:
+    if QA_LANG == "zh-tw":
+        return _BUILTIN_HEADER_ZH + _builtin_for_lang("zh-tw")
+    return _BUILTIN_HEADER_EN + _builtin_for_lang("en")
+
+
+def _starter_template() -> str:
+    if QA_LANG == "zh-tw":
+        return _STARTER_HEADER_ZH + _builtin_for_lang("zh-tw")
+    return _STARTER_HEADER_EN + _builtin_for_lang("en")
 
 
 def load_context(section: str | None = None) -> dict:
     if not QA_KNOWLEDGE_PATH.is_file():
         # Fallback: serve universal methodology so a fresh install isn't useless.
-        sections = _parse_sections(_BUILTIN_DEFAULTS)
+        builtin = _builtin_defaults()
+        sections = _parse_sections(builtin)
         if section:
             s_low = section.lower()
             for name, content in sections.items():
@@ -335,28 +964,41 @@ def load_context(section: str | None = None) -> dict:
                         "path": str(QA_KNOWLEDGE_PATH),
                         "exists": False,
                         "using_builtin_defaults": True,
+                        "lang": QA_LANG,
                         "section": name,
                         "content": content,
-                        "hint": "這是內建 fallback。要專案專屬知識請執行 init_qa_knowledge。",
+                        "hint": (
+                            "Built-in fallback. Run init_qa_knowledge for "
+                            "project-specific knowledge."
+                            if QA_LANG == "en"
+                            else "這是內建 fallback。要專案專屬知識請執行 init_qa_knowledge。"
+                        ),
                     }
             return {
                 "path": str(QA_KNOWLEDGE_PATH),
                 "exists": False,
                 "using_builtin_defaults": True,
+                "lang": QA_LANG,
                 "section": section,
                 "content": None,
                 "available_sections": list(sections.keys()),
-                "error": f"找不到 section: {section}（即使在 builtin defaults 中）",
+                "error": f"Section not found: {section} (even in built-in defaults)",
             }
         return {
             "path": str(QA_KNOWLEDGE_PATH),
             "exists": False,
             "using_builtin_defaults": True,
+            "lang": QA_LANG,
             "hint": (
-                f"未找到 {QA_KNOWLEDGE_PATH}，回傳內建通用 QA 方法論。"
-                "若要專案專屬知識，請執行 init_qa_knowledge tool。"
+                f"{QA_KNOWLEDGE_PATH} not found; returning built-in universal QA "
+                "methodology. Run init_qa_knowledge for project-specific knowledge."
+                if QA_LANG == "en"
+                else (
+                    f"未找到 {QA_KNOWLEDGE_PATH}，回傳內建通用 QA 方法論。"
+                    "若要專案專屬知識，請執行 init_qa_knowledge tool。"
+                )
             ),
-            "full_content": _BUILTIN_DEFAULTS,
+            "full_content": builtin,
             "sections": list(sections.keys()),
         }
 
@@ -386,7 +1028,7 @@ def load_context(section: str | None = None) -> dict:
             "section": section,
             "content": None,
             "available_sections": list(sections.keys()),
-            "error": f"找不到 section: {section}",
+            "error": f"Section not found: {section}",
         }
     return {
         "path": str(QA_KNOWLEDGE_PATH),
@@ -402,7 +1044,9 @@ def init_qa_knowledge(overwrite: bool = False) -> dict:
     Idempotent by default: refuses to overwrite an existing file unless
     overwrite=True. The starter bundles the universal methodology plus
     empty TODO domain sections, so the user has reference material and
-    edit targets in one file.
+    edit targets in one file. Methodology language is driven by
+    config.QA_LANG (`en` default; `zh-tw` for the original Traditional
+    Chinese content).
     """
     if QA_KNOWLEDGE_PATH.is_file() and not overwrite:
         try:
@@ -413,11 +1057,15 @@ def init_qa_knowledge(overwrite: bool = False) -> dict:
             "path": str(QA_KNOWLEDGE_PATH),
             "created": False,
             "existing_bytes": existing_size,
-            "reason": "檔已存在；要覆蓋請傳 overwrite=true（建議先備份）",
+            "reason": (
+                "File exists; pass overwrite=true to replace (back it up first)."
+                if QA_LANG == "en"
+                else "檔已存在；要覆蓋請傳 overwrite=true（建議先備份）"
+            ),
         }
     try:
         QA_KNOWLEDGE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        content = _STARTER_TEMPLATE.format(project_name=QA_KNOWLEDGE_PATH.parent.name)
+        content = _starter_template().format(project_name=QA_KNOWLEDGE_PATH.parent.name)
         QA_KNOWLEDGE_PATH.write_text(content, encoding="utf-8")
     except OSError as e:
         return {
@@ -429,16 +1077,24 @@ def init_qa_knowledge(overwrite: bool = False) -> dict:
         "path": str(QA_KNOWLEDGE_PATH),
         "created": True,
         "bytes": len(content),
+        "lang": QA_LANG,
         "next_step": (
-            "編輯這個檔案、把「你的 XXX」TODO 區段換成你的業務規則 / 歷史 Bug / "
-            "標準斷言文字 / User Journeys / 技術約束。"
-            "之後 get_qa_context 會直接讀你的版本（不再回 fallback）。"
+            "Edit this file and replace each `Your XXX` TODO section with your "
+            "domain business rules / historical bugs / standard assertion strings / "
+            "user journeys / technical constraints. From then on, get_qa_context "
+            "reads your version directly (no more fallback)."
+            if QA_LANG == "en"
+            else (
+                "編輯這個檔案、把「你的 XXX」TODO 區段換成你的業務規則 / 歷史 Bug / "
+                "標準斷言文字 / User Journeys / 技術約束。"
+                "之後 get_qa_context 會直接讀你的版本（不再回 fallback）。"
+            )
         ),
     }
 
 
 def _parse_sections(text: str) -> dict[str, str]:
-    """Split markdown by ## H2 headers → {section_name: body_text}.
+    """Split markdown by ## H2 headers -> {section_name: body_text}.
 
     Why H2-only: H1 is reserved for the document title, H3+ are nested
     detail (subsections within a topic). Treating H2 as the natural "topic"
