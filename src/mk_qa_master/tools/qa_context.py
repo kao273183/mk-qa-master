@@ -425,6 +425,53 @@ _UNIVERSAL_METHODOLOGY_ZH = """## ISTQB 七大測試原則
 | 容易順序相依 | 不會互相污染 |
 | 適合大、慢的 setup | 適合主要業務 case |
 | 適合：基準參考表 | 適合：交易、變更類 case |
+
+## 驗證碼 (CAPTCHA) 測試策略
+
+驗證碼 (CAPTCHA / reCAPTCHA / hCaptcha / Cloudflare Turnstile) 是自動化測試最常卡住的點。**90% 的場景都不該「解」驗證碼、該繞過**。
+
+### Tier 1：Bypass — 第一首選
+
+| 方法 | 怎麼做 | 適用情境 |
+|---|---|---|
+| **reCAPTCHA test keys** | Staging 換 Google 官方測試 key (site: `6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI` / secret: `6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe`) — 任何驗證自動 pass | 自家站、有 backend 控制權 |
+| **Feature flag** | Backend 加 `DISABLE_CAPTCHA_IN_STAGING=true`，staging build 直接跳過 | 自家站 |
+| **Test-mode header** | QA 跑測試帶 `X-Test-Mode: <secret>`，backend 驗到就 bypass | 自家站 |
+| **IP allowlist** | QA runner IP 走 allowlist 不過 CAPTCHA | 有固定 QA infra |
+
+**最推 reCAPTCHA test keys** — 零 backend code、Google 官方背書、100% 成功率、零成本。
+
+### Tier 2：Degrade gracefully — 沒 backend 控制權時
+
+- 偵測到 CAPTCHA iframe -> 截圖、標記 test 為 `external_dependency`、跳過後續斷言
+- mk-qa-master 的 optimizer 看到連續因 CAPTCHA 失敗 -> 分類為 `external` 而非 `broken` / `flaky`
+- CI 階段 skip CAPTCHA 後路徑，local dev 走 Tier 3 手動或 AI 視覺判斷
+
+### Tier 3：AI 視覺判斷 (v0.7.0+) — 最後手段
+
+mk-qa-master 計劃中的 `solve_visual_challenge` tool：
+
+1. 偵測 CAPTCHA iframe (reCAPTCHA v2 / hCaptcha 圖片格)
+2. 截圖 challenge + 抓 tile selectors
+3. 把截圖回傳給 AI client (Claude / Cursor — 自帶 vision)
+4. AI 看圖回「點 [0, 4, 7] 號 tile」
+5. Runner 執行 click 鏈、提交、繼續
+
+**限制：**
+
+- 對 reCAPTCHA v2 / hCaptcha 圖片題可行，成功率 60-80%
+- 對 reCAPTCHA v3 / Cloudflare Turnstile **無題目可看** (純行為打分)，只能靠 stealth plugin + 真實滑鼠軌跡 + IP 信譽
+- Google 偵測到自動化會 ban session/IP，**不可在 production 跑**
+- 法律：**自己的站或客戶授權站才能用**，第三方站涉及 TOS 違反
+
+### 決策流程
+
+```
+你的站、有 backend 權限   -> Tier 1 (test keys)
+你的站、沒法改 backend    -> 走代理或 IP allowlist (Tier 1 變體)
+客戶站、有授權            -> Tier 1 -> fallback Tier 3
+不是你的站                -> 不要跑 CAPTCHA bypass / solver
+```
 """
 
 
@@ -826,6 +873,53 @@ Move testing activities earlier in the development lifecycle instead of waiting 
 | Risks order-dependence | No cross-test pollution |
 | Good for heavy, slow setup | Good for the main business cases |
 | Best for: reference tables | Best for: transactional / mutation cases |
+
+## CAPTCHA Testing Strategy
+
+CAPTCHA (reCAPTCHA / hCaptcha / Cloudflare Turnstile) is where automated test runs most often stall. **In 90% of scenarios, the right answer is not to "solve" the CAPTCHA — it's to bypass it.**
+
+### Tier 1: Bypass — first choice
+
+| Method | How | When it fits |
+|---|---|---|
+| **reCAPTCHA test keys** | Swap staging to Google's official test pair (site: `6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI` / secret: `6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe`) — every challenge auto-passes | Your own site, backend control |
+| **Feature flag** | Backend reads `DISABLE_CAPTCHA_IN_STAGING=true`; staging skips the check entirely | Your own site |
+| **Test-mode header** | QA runs send `X-Test-Mode: <shared-secret>`; backend bypasses on match | Your own site |
+| **IP allowlist** | QA runner IPs are whitelisted past CAPTCHA | Fixed QA infrastructure |
+
+**Strongly preferred: reCAPTCHA test keys** — zero backend code, official Google support, 100% pass rate, no cost.
+
+### Tier 2: Degrade gracefully — when you can't change the backend
+
+- Detect the CAPTCHA iframe, screenshot it, mark the test as `external_dependency` and skip downstream assertions
+- mk-qa-master's optimizer classifies consecutive CAPTCHA-caused failures as `external` rather than `broken` or `flaky`
+- Skip CAPTCHA-protected paths in CI; use Tier 3 (manual or AI vision) only on local dev
+
+### Tier 3: AI visual judgment (v0.7.0+) — last resort
+
+The planned `solve_visual_challenge` tool in mk-qa-master:
+
+1. Detect the CAPTCHA iframe (reCAPTCHA v2 / hCaptcha image grid)
+2. Screenshot the challenge + extract tile selectors
+3. Return the screenshot to the AI client (Claude / Cursor — already vision-capable)
+4. AI replies "click tiles [0, 4, 7]"
+5. Runner executes the click chain, submits, continues
+
+**Constraints:**
+
+- Workable on reCAPTCHA v2 / hCaptcha image grids, 60–80% success rate
+- **Not workable** on reCAPTCHA v3 or Cloudflare Turnstile — no visible challenge, only behavior scoring. Mitigation is stealth plugins + realistic mouse movement + IP reputation, not visual solving.
+- Google may ban sessions / IPs that look automated — **do not run against production**
+- Legal: only on your own sites, or client sites with explicit authorization. Third-party sites usually violate TOS.
+
+### Decision flow
+
+```
+Your site, backend access?       -> Tier 1 (test keys)
+Your site, can't touch backend?  -> Tier 1 variant (proxy or IP allowlist)
+Client site, authorized?         -> Tier 1, fallback Tier 3
+Not your site at all?            -> Don't run CAPTCHA bypass or solvers
+```
 """
 
 

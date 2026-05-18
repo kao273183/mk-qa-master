@@ -597,4 +597,16 @@ Locked 2026-05-18:
 
 ---
 
+## 24. v0.6.3 ratified
+
+Locked 2026-05-18:
+
+1. **CAPTCHA Testing Strategy** added to built-in methodology in both EN and zh-TW (14th methodology section).
+2. Section codifies a **Tier 1 / 2 / 3 decision flow**: bypass (Tier 1) -> degrade gracefully (Tier 2) -> AI visual judgment (Tier 3, forward-pointer to v0.7.0 `solve_visual_challenge`).
+3. Cites the official **Google reCAPTCHA test keys** (`6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI` / `6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe`) as the industry-standard Tier 1 fix — explicitly steers users away from solver-as-default.
+4. Calls out the legal / ethical line: solvers acceptable on your own site or with explicit client authorization; never against third-party production sites.
+5. Tool count unchanged (16). Runner count unchanged (7). **Docs-only release.**
+
+---
+
 *End of PRD v0.1 for mk-qa-master v0.6. Discussion in mk-qa-master Issues once a draft is opened.*

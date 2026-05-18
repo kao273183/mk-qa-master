@@ -1,6 +1,6 @@
 [project]
 name = "mk-qa-master"
-version = "0.6.2"
+version = "0.6.3"
 description = "MCP server for running tests across pytest / Jest / Cypress / Go test / Maestro / Schemathesis / Newman (web + mobile + native API via OpenAPI + Postman collections), with self-improvement analytics and a bilingual (EN / zh-TW) built-in QA knowledge layer (AI 測試大師)"
 readme = "README.md"
 requires-python = ">=3.10"
