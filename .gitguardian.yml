@@ -1,0 +1,30 @@
+version: 2
+
+# GitGuardian configuration for mk-qa-master.
+#
+# We document Google's OFFICIAL PUBLIC reCAPTCHA test keys in the
+# knowledge layer / README / PRDs so QA engineers reading the docs
+# land on the industry-standard CAPTCHA bypass (Tier 1 in v0.6.3's
+# CAPTCHA Testing Strategy). These keys are:
+#
+#   site key:   6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI
+#   secret key: 6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe
+#
+# Google publishes them at:
+#   https://developers.google.com/recaptcha/docs/faq#id-like-to-run-automated-tests-with-recaptcha
+#
+# They are deliberately public, auto-pass every challenge, and exist
+# specifically so automation can run in test environments. They are
+# NOT real credentials — there is nothing to revoke, nothing to rotate,
+# and embedding them in docs is the correct and intended pattern
+# (thousands of public repos do the same).
+#
+# This allowlist tells GitGuardian to stop flagging these two known-
+# public strings as secrets across this repository.
+
+secret:
+  ignored-matches:
+    - name: "Google reCAPTCHA public test site key (official docs)"
+      match: "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"
+    - name: "Google reCAPTCHA public test secret key (official docs)"
+      match: "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe"
