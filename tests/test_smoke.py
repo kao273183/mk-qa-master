@@ -258,6 +258,18 @@ def test_captcha_section_present_in_both_languages():
     assert "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI" in zh_built
 
 
+def test_visual_challenge_fingerprint_table_includes_hcaptcha():
+    """v0.7.1: the fingerprint table must list both vendors. Order is
+    load-bearing — reCAPTCHA precedes hCaptcha so v0.7.0 callers seeing
+    a page with both iframes still match reCAPTCHA first (ratified
+    decision #1 in docs/prd-v0.7.1-hcaptcha.md §11)."""
+    from mk_qa_master.tools.visual_challenge import _FINGERPRINTS
+
+    ids = {fp["id"] for fp in _FINGERPRINTS}
+    assert "recaptcha-v2-image" in ids
+    assert "hcaptcha-image" in ids
+
+
 def test_newman_runner_registered():
     """v0.6.1: the newman runner must be discoverable via the REGISTRY
     under both `newman` and `postman` keys (mirrors how schemathesis

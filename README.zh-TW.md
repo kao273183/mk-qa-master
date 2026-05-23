@@ -188,12 +188,14 @@ collection 形式收在
 
 > *當後端 bypass 不可行時：Claude 看 CAPTCHA、mk-qa-master 負責點下去。*
 
+支援 reCAPTCHA v2（v0.7.0 起）與 hCaptcha（v0.7.1 起）。
+
 家族裡第一個 **AI client 視覺能力是必要、不是加分項**的功能。新增兩個
 MCP tool（`inspect_visual_challenge` + `solve_visual_challenge`）——
-偵測當前 Playwright 頁面上的 reCAPTCHA v2 image-grid 挑戰、截圖丟給多
-模態 AI client、接收 AI 回傳的 tile 選擇、執行點擊鏈。Runner 是「眼
-睛跟手」，AI client（Claude / Cursor / Gemini / GPT-4o）才是真正的
-解題者。
+偵測當前 Playwright 頁面上的 reCAPTCHA v2 或 hCaptcha image-grid
+挑戰、截圖丟給多模態 AI client、接收 AI 回傳的 tile 選擇、執行點擊鏈。
+Runner 是「眼睛跟手」，AI client（Claude / Cursor / Gemini / GPT-4o）
+才是真正的解題者。
 
 ### 什麼時候用 — Tier 1 vs Tier 3
 

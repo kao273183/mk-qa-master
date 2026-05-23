@@ -314,3 +314,193 @@ def test_no_active_page(monkeypatch):
     vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
     out = vc.inspect_visual_challenge_tool({})
     assert out["error"] == "no_active_page"
+
+
+# ---------------------------------------------------------------------------
+# v0.7.1 — hCaptcha vendor (added via _FINGERPRINTS table extension)
+# ---------------------------------------------------------------------------
+
+def _make_mock_hcaptcha_page(url: str = "https://test-fixture.local/signup", *,
+                              iframe_box=(100.0, 200.0, 300.0, 300.0),
+                              tile_count: int = 9,
+                              challenge_text: str = "Please click each image containing a bicycle"):
+    """Build a Playwright-shaped mock page that exposes a fake hCaptcha
+    iframe. Mirrors `_make_mock_page` but routes the hCaptcha-specific
+    selectors (`.prompt-text` / `.task-grid .task` / `.button-submit` /
+    `textarea[name="h-captcha-response"]`).
+
+    The top-level `page.locator` returns count=0 for reCAPTCHA selectors
+    and count=1 for the hCaptcha iframe selector — that's what lets
+    `_detect_visual_challenge`'s ordered probe land on the hCaptcha
+    fingerprint entry rather than reCAPTCHA's."""
+    page = MagicMock()
+    page.url = url
+
+    iframe_first = MagicMock()
+    iframe_first.bounding_box.return_value = {
+        "x": iframe_box[0], "y": iframe_box[1],
+        "width": iframe_box[2], "height": iframe_box[3],
+    }
+    iframe_first.screenshot.return_value = b"\x89PNG\r\n\x1a\nmock-hcaptcha"
+
+    hcaptcha_iframe_locator = MagicMock()
+    hcaptcha_iframe_locator.count.return_value = 1
+    hcaptcha_iframe_locator.first = iframe_first
+
+    empty_locator = MagicMock()
+    empty_locator.count.return_value = 0
+
+    def _page_locator(selector: str):
+        s = (selector or "").lower()
+        # reCAPTCHA selectors must miss — otherwise the priority rule
+        # would swallow the hCaptcha mock since reCAPTCHA is probed first.
+        if "recaptcha" in s:
+            return empty_locator
+        if "hcaptcha" in s:
+            return hcaptcha_iframe_locator
+        return empty_locator
+
+    page.locator.side_effect = _page_locator
+
+    # frame_locator → prompt-text + task cells + submit button
+    frame_locator = MagicMock()
+    desc_locator = MagicMock()
+    desc_locator.count.return_value = 1
+    desc_first = MagicMock()
+    desc_first.inner_text.return_value = challenge_text
+    desc_locator.first = desc_first
+
+    cells_locator = MagicMock()
+    cells_locator.count.return_value = tile_count
+
+    verify_locator = MagicMock()
+    verify_locator.count.return_value = 1
+    verify_first = MagicMock()
+    verify_locator.first = verify_first
+
+    def _frame_locator_routing(selector: str):
+        sel = (selector or "").lower()
+        if "prompt-text" in sel:
+            return desc_locator
+        if "task-grid" in sel or ".task" in sel:
+            return cells_locator
+        if "button-submit" in sel:
+            return verify_locator
+        return MagicMock(count=lambda: 0)
+
+    frame_locator.locator.side_effect = _frame_locator_routing
+    page.frame_locator.return_value = frame_locator
+
+    # Solve-path evaluate returns the hCaptcha token shape.
+    page.evaluate.return_value = "fake-hcaptcha-token-xyz789"
+    page.mouse = MagicMock()
+    return page
+
+
+def _make_mock_both_iframes_page(url: str = "https://test-fixture.local/signup"):
+    """Page where BOTH reCAPTCHA and hCaptcha iframes match. The
+    priority rule says reCAPTCHA wins (ratified §11 #1). The simplest
+    encoding: the top-level `page.locator` returns count=1 for any
+    selector — so the first selector probed (reCAPTCHA's
+    `iframe[title*="recaptcha challenge"]`) matches and detection
+    short-circuits before ever asking about hCaptcha."""
+    page = _make_mock_page(url=url)
+    return page
+
+
+def test_inspect_detects_hcaptcha_iframe(monkeypatch):
+    """hCaptcha selectors match; fingerprint reads 'hcaptcha-image-3x3'."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    page = _make_mock_hcaptcha_page()
+    out = vc.inspect_visual_challenge_tool({"_page": page})
+
+    assert "challenge_id" in out, f"expected detection, got: {out}"
+    assert out["fingerprint"] == "hcaptcha-image-3x3"
+    assert out["grid_layout"] == "3x3"
+    assert out["tile_count"] == 9
+    assert "bicycle" in out["challenge_text"]
+
+
+def test_solve_returns_hcaptcha_token(monkeypatch):
+    """h-captcha-response textarea read on Verify success — surfaced
+    under the single `token` field (per ratified decision #5)."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    page = _make_mock_hcaptcha_page()
+
+    inspected = vc.inspect_visual_challenge_tool({"_page": page})
+    cid = inspected["challenge_id"]
+
+    solved = vc.solve_visual_challenge_tool({
+        "challenge_id": cid,
+        "selected_tile_indices": [1, 3, 8],
+        "confirm": True,
+    })
+    assert solved["status"] == "passed"
+    assert solved["token"] == "fake-hcaptcha-token-xyz789"
+
+    # The evaluate call must have queried for the hCaptcha response
+    # textarea — not the reCAPTCHA one. The selector is embedded in the
+    # JavaScript string passed to page.evaluate.
+    eval_calls = [c.args[0] for c in page.evaluate.call_args_list if c.args]
+    assert any("h-captcha-response" in script for script in eval_calls), (
+        f"expected an h-captcha-response query; got scripts: {eval_calls}"
+    )
+    assert not any("g-recaptcha-response" in script for script in eval_calls), (
+        "hCaptcha solve must not poll the reCAPTCHA token selector"
+    )
+
+
+def test_fingerprint_field_reports_vendor(monkeypatch):
+    """Both fingerprint strings are vendor-prefixed (ratified §11 #2)."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+
+    recaptcha_out = vc.inspect_visual_challenge_tool({"_page": _make_mock_page()})
+    hcaptcha_out = vc.inspect_visual_challenge_tool({"_page": _make_mock_hcaptcha_page()})
+
+    assert recaptcha_out["fingerprint"] == "recaptcha-v2-image-3x3"
+    assert hcaptcha_out["fingerprint"] == "hcaptcha-image-3x3"
+    # Both must carry the vendor prefix — never bare 'image-3x3'.
+    assert recaptcha_out["fingerprint"].startswith("recaptcha-")
+    assert hcaptcha_out["fingerprint"].startswith("hcaptcha-")
+
+
+def test_recaptcha_takes_priority_when_both_iframes_present(monkeypatch):
+    """If both iframes are on the page, _detect_visual_challenge returns
+    reCAPTCHA. This preserves v0.7.0 behavior for existing callers
+    (ratified §11 #1)."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    page = _make_mock_both_iframes_page()
+    out = vc.inspect_visual_challenge_tool({"_page": page})
+
+    assert "challenge_id" in out
+    assert out["fingerprint"].startswith("recaptcha-")
+    assert not out["fingerprint"].startswith("hcaptcha-")
+
+
+def test_hcaptcha_4x4_grid_layout(monkeypatch):
+    """Rare but valid: hCaptcha can serve a 4x4 grid (16 cells)."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    page = _make_mock_hcaptcha_page(
+        iframe_box=(80.0, 160.0, 400.0, 400.0),
+        tile_count=16,
+    )
+    out = vc.inspect_visual_challenge_tool({"_page": page})
+
+    assert out["grid_layout"] == "4x4"
+    assert out["tile_count"] == 16
+    assert out["fingerprint"] == "hcaptcha-image-4x4"
+
+
+def test_discord_hard_stops_with_hcaptcha(monkeypatch):
+    """Even with consent + allowlist, discord.com refuses. v0.7.1
+    extension to the hard-stop blacklist (ratified §11 #3)."""
+    vc = _reload_modules_with_env(
+        monkeypatch,
+        QA_VISUAL_CHALLENGE_CONSENT="true",
+        QA_VISUAL_CHALLENGE_AUTHORIZED_DOMAINS="discord.com",  # even allowlisted!
+    )
+    page = _make_mock_hcaptcha_page(url="https://discord.com/register")
+    out = vc.inspect_visual_challenge_tool({"_page": page})
+
+    assert out["error"] == "forbidden_domain"
+    assert "discord.com" in out["hint"]

@@ -218,6 +218,68 @@ stalls indefinitely waiting for a human to click the grid.
 
 ---
 
+## Track 2 — hCaptcha (v0.7.1+)
+
+The same two tools handle hCaptcha. Vendor selection is automatic:
+`inspect_visual_challenge` walks an internal fingerprint table
+(reCAPTCHA first, hCaptcha second) and returns whichever matches the
+page. AI clients consuming these tools need **no code change** — the
+`fingerprint` field on the response tells you which vendor is active.
+
+> **You**: Run the registration tests.
+
+Claude calls `run_tests(filter="signup")`. The failure surfaces an
+hCaptcha gate on the registration form. `get_failure_details` points
+at the same Tier 3 escape hatch.
+
+> **You**: No backend hook for this one — try the visual solver.
+
+Claude calls `inspect_visual_challenge()`. This time the fingerprint
+table matches the hCaptcha iframe (`iframe[src*="hcaptcha.com"]`):
+
+```json
+{
+  "challenge_id": "9c2b1d7e4a83",
+  "screenshot_base64": "data:image/png;base64,iVBORw0KGgo...",
+  "challenge_text": "Please click each image containing a bicycle",
+  "grid_layout": "3x3",
+  "tile_count": 9,
+  "tiles": [{"index": 0, "viewport_x": 240, "viewport_y": 420, "w": 100, "h": 100}, "..."],
+  "expires_at": "2026-05-23T11:14:00Z",
+  "fingerprint": "hcaptcha-image-3x3"
+}
+```
+
+Claude examines the screenshot and returns the bicycle tiles. Submit:
+
+```python
+mk-qa-master.solve_visual_challenge(
+    challenge_id="9c2b1d7e4a83",
+    selected_tile_indices=[1, 3, 8],
+    confirm=True,
+)
+```
+
+The runner clicks each tile, clicks the hCaptcha `.button-submit`
+inside the iframe, then polls the parent page for the
+`h-captcha-response` token. Same `token` field as the reCAPTCHA path
+— the `fingerprint` on the inspect response is what disambiguates.
+
+```json
+{
+  "status": "passed",
+  "challenge_id": "9c2b1d7e4a83",
+  "attempts_remaining": 2,
+  "token": "P0_eyJ...long-opaque...",
+  "hint": "Tiles [1, 3, 8] clicked. CAPTCHA verified. Resume your test."
+}
+```
+
+When both iframes are on the same page (rare but valid), reCAPTCHA
+wins — preserves v0.7.0 behavior for existing callers.
+
+---
+
 ## The two-phase dance, visible
 
 The key architectural decision in v0.7 (ratified in PRD §21 #1) is
@@ -294,8 +356,8 @@ suggest a tier-down to Tier 1 bypass.
 
 ## What this isn't
 
-- **Not a hCaptcha solver** — that's v0.7.1, same architecture,
-  different iframe selectors.
+- **Was not a hCaptcha solver pre-v0.7.1** — now is. Same
+  architecture, vendor-prefixed `fingerprint` distinguishes the two.
 - **Not a reCAPTCHA v3 / Cloudflare Turnstile solver** — those don't
   surface a visible challenge to inspect. They score behavior, not
   pixels. Out of scope permanently.

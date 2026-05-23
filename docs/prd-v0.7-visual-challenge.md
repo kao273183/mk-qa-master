@@ -490,4 +490,14 @@ Locked 2026-05-18 after PRD review:
 
 ---
 
+## 22. v0.7.1 ratified
+
+See `docs/prd-v0.7.1-hcaptcha.md` for the full mini-PRD. Locked 2026-05-23:
+- hCaptcha vendor added to fingerprint table; tool count unchanged (18)
+- Vendor priority: reCAPTCHA first when both present
+- Hard-stop blacklist gains: discord.com, epicgames.com, mailbox.org
+- New CI job: api-hcaptcha (Playwright route mock, no live network)
+
+---
+
 *End of PRD v0.1 for mk-qa-master v0.7. Discussion in mk-qa-master Issues once a draft is opened.*

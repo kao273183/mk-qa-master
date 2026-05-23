@@ -5,14 +5,16 @@ AI tile selection + execute clicks). The AI client (Claude / Cursor /
 Gemini, multimodal) is the actual solver; this module is the eyes
 and hands.
 
-Privacy: NO screenshot retention beyond the active inspect→solve
+Privacy: NO screenshot retention beyond the active inspect->solve
 cycle. Telemetry logs boolean outcome only — never screenshots,
 challenge text, or tile selection.
 
 Consent: gated by QA_VISUAL_CHALLENGE_CONSENT env var (default false).
 Hard-stops on known third-party login domains regardless of consent.
 
-Scope: reCAPTCHA v2 image-grid only in v0.7.0. hCaptcha → v0.7.1.
+Scope:
+  - v0.7.0 — reCAPTCHA v2 image-grid
+  - v0.7.1 — hCaptcha image-select (added via fingerprint table)
 reCAPTCHA v3 / Cloudflare Turnstile — out of scope permanently
 (no visible challenge to inspect).
 """
@@ -34,6 +36,9 @@ from urllib.parse import urlparse
 # for third-party identity providers. Refused regardless of consent flag.
 # Match is by suffix on `host` (so `accounts.google.com.evil` does NOT
 # accidentally match `accounts.google.com`).
+#
+# v0.7.1 additions: discord.com, epicgames.com, mailbox.org — three
+# hCaptcha-protected domains commonly abused for credential stuffing.
 _FORBIDDEN_DOMAINS: frozenset[str] = frozenset({
     "accounts.google.com",
     "login.microsoftonline.com",
@@ -45,6 +50,10 @@ _FORBIDDEN_DOMAINS: frozenset[str] = frozenset({
     "login.yahoo.com",
     "twitter.com/login",
     "x.com/login",
+    # v0.7.1 — hCaptcha-protected high-abuse targets
+    "discord.com",
+    "epicgames.com",
+    "mailbox.org",
 })
 
 
@@ -76,14 +85,51 @@ DISCLAIMER_TEXT = (
 )
 
 
+# ---- Vendor fingerprint table --------------------------------------------
+# v0.7.1 introduces a vendor-neutral fingerprint table. Detection iterates
+# the list in order; first match wins. Order is load-bearing: reCAPTCHA
+# precedes hCaptcha so v0.7.0 behavior is preserved when both iframes are
+# present (ratified decision #1 in docs/prd-v0.7.1-hcaptcha.md §11).
+_FINGERPRINTS: list[dict[str, Any]] = [
+    {
+        "id": "recaptcha-v2-image",
+        "iframe_selectors": [
+            'iframe[title*="recaptcha challenge"]',
+            'iframe[src*="recaptcha/api2/bframe"]',
+        ],
+        "challenge_text_selector": ".rc-imageselect-desc",
+        "tile_table_selector": ".rc-imageselect-table",
+        "tile_cell_selector": "td",
+        "verify_button_selector": "#recaptcha-verify-button",
+        "response_token_selector": 'textarea[name="g-recaptcha-response"]',
+    },
+    {
+        "id": "hcaptcha-image",
+        "iframe_selectors": [
+            'iframe[src*="hcaptcha.com"]',
+            'iframe[title*="hCaptcha"]',
+            'iframe[title*="Main content of the hCaptcha"]',
+        ],
+        "challenge_text_selector": ".prompt-text",
+        "tile_table_selector": ".task-grid",
+        "tile_cell_selector": ".task",
+        "verify_button_selector": ".button-submit",
+        "response_token_selector": 'textarea[name="h-captcha-response"]',
+    },
+]
+
+
 # ---- Cache record ---------------------------------------------------------
 
 @dataclass
 class _ChallengeRecord:
-    """In-memory handle to a live reCAPTCHA challenge.
+    """In-memory handle to a live visual-challenge.
 
     Holds the Playwright references we need to translate AI tile
     selections back into actual mouse clicks. Never persisted to disk.
+    Vendor-neutral: `fingerprint_id` + `fingerprint_config` reference the
+    matched entry in `_FINGERPRINTS` so downstream click + token-read
+    paths can look up the right selectors without hardcoding a vendor.
     """
     challenge_id: str
     expires_at: datetime
@@ -93,6 +139,9 @@ class _ChallengeRecord:
     challenge_text: str
     fingerprint: str
     domain: str
+    # v0.7.1: vendor identity + selector config for the matched vendor.
+    fingerprint_id: str = "recaptcha-v2-image"
+    fingerprint_config: dict[str, Any] = field(default_factory=dict)
     # Playwright handles — typed as Any so this module imports cleanly
     # even when playwright isn't installed (unit tests can build a record
     # with mocks).
@@ -259,11 +308,17 @@ def _telemetry_outcome(passed: bool | None) -> None:
 # ---- Public tool entry points --------------------------------------------
 
 def inspect_visual_challenge_tool(arguments: dict[str, Any]) -> dict[str, Any]:
-    """Detect reCAPTCHA v2 iframe, screenshot, return tile metadata.
+    """Detect a visual CAPTCHA iframe, screenshot, return tile metadata.
+
+    Supports reCAPTCHA v2 (since v0.7.0) and hCaptcha (since v0.7.1).
+    Vendor selection is automatic — the first fingerprint in
+    `_FINGERPRINTS` whose iframe selectors match wins. reCAPTCHA is
+    listed first so existing v0.7.0 behavior is preserved when both
+    iframes are present on the page.
 
     Args (all optional):
       page_id: str | None — reserved for future multi-page sessions;
-        ignored in v0.7.0 (single active page only).
+        ignored in v0.7.x (single active page only).
       selector: str | None — override auto-detect.
       _page: Playwright page object (test hook).
 
@@ -329,7 +384,7 @@ def inspect_visual_challenge_tool(arguments: dict[str, Any]) -> dict[str, Any]:
 
     # Detect + screenshot the challenge -----------------------------------
     try:
-        detection = _detect_recaptcha(page, selector_override=selector)
+        detection = _detect_visual_challenge(page, selector_override=selector)
     except Exception as e:
         _telemetry_outcome(None)
         return {
@@ -356,6 +411,8 @@ def inspect_visual_challenge_tool(arguments: dict[str, Any]) -> dict[str, Any]:
         tiles=detection["tiles"],
         challenge_text=detection["challenge_text"],
         fingerprint=detection["fingerprint"],
+        fingerprint_id=detection["fingerprint_id"],
+        fingerprint_config=detection["fingerprint_config"],
         domain=host,
         page=page,
         frame_locator=detection.get("frame_locator"),
@@ -386,7 +443,12 @@ def solve_visual_challenge_tool(arguments: dict[str, Any]) -> dict[str, Any]:
       selected_tile_indices: list[int] — which tiles to click
       confirm: bool = False — must be True to actually execute
 
-    See PRD §8 / §10 for the full state machine.
+    See PRD §8 / §10 for the full state machine. The single `token`
+    field carries the vendor's response token (reCAPTCHA's
+    `g-recaptcha-response` or hCaptcha's `h-captcha-response`); the
+    `fingerprint` field on the inspect response tells the AI client
+    which vendor is active (ratified decision #5 in
+    docs/prd-v0.7.1-hcaptcha.md §11).
     """
     cfg = _config_snapshot()
     if not cfg["consent"]:
@@ -481,26 +543,39 @@ def solve_visual_challenge_tool(arguments: dict[str, Any]) -> dict[str, Any]:
 
 # ---- Detection ------------------------------------------------------------
 
-# v0.7.0 supports two iframe fingerprints — covers reCAPTCHA v2 in
-# English UIs (title attr) and any locale (URL pattern). hCaptcha lands
-# in v0.7.1 with a third fingerprint added here.
-_RECAPTCHA_TITLE_SELECTOR = 'iframe[title*="recaptcha challenge"]'
-_RECAPTCHA_URL_SELECTOR = 'iframe[src*="recaptcha/api2/bframe"]'
+def _detect_visual_challenge(
+    page: Any, selector_override: str | None = None
+) -> dict[str, Any] | None:
+    """Locate a challenge iframe + screenshot + extract tile geometry.
 
+    Walks `_FINGERPRINTS` in declared order — reCAPTCHA first, then
+    hCaptcha — and returns the first matching vendor's payload. Order
+    is load-bearing: when both iframes are present on the same page,
+    reCAPTCHA wins (ratified v0.7.1 §11 #1). Returns None when no
+    fingerprint matches.
 
-def _detect_recaptcha(page: Any, selector_override: str | None = None) -> dict[str, Any] | None:
-    """Locate the challenge iframe + screenshot + extract tile geometry.
-
-    Returns None when no challenge is present.
+    `selector_override`, when supplied, short-circuits vendor lookup —
+    we treat the override as a hand-picked iframe selector and use the
+    *first* fingerprint as the configuration source (this preserves
+    v0.7.0's escape hatch for callers passing a custom reCAPTCHA
+    selector).
     """
-    candidate_selectors = [selector_override] if selector_override else [
-        _RECAPTCHA_TITLE_SELECTOR,
-        _RECAPTCHA_URL_SELECTOR,
-    ]
+    # Build the list of (selector, fingerprint_config) pairs we'll probe
+    # in order. Selector override path keeps the v0.7.0 contract — the
+    # override is a single selector that resolves against the first
+    # fingerprint's config (reCAPTCHA defaults).
+    candidates: list[tuple[str, dict[str, Any]]] = []
+    if selector_override:
+        candidates.append((selector_override, _FINGERPRINTS[0]))
+    else:
+        for fp in _FINGERPRINTS:
+            for sel in fp["iframe_selectors"]:
+                candidates.append((sel, fp))
 
     iframe_element = None
-    matched_selector = None
-    for sel in candidate_selectors:
+    matched_selector: str | None = None
+    matched_fp: dict[str, Any] | None = None
+    for sel, fp in candidates:
         if not sel:
             continue
         try:
@@ -511,9 +586,10 @@ def _detect_recaptcha(page: Any, selector_override: str | None = None) -> dict[s
         if count and count > 0:
             iframe_element = locator.first
             matched_selector = sel
+            matched_fp = fp
             break
 
-    if iframe_element is None:
+    if iframe_element is None or matched_fp is None:
         return None
 
     # Bounding box of the iframe in viewport coordinates.
@@ -538,6 +614,12 @@ def _detect_recaptcha(page: Any, selector_override: str | None = None) -> dict[s
     )
 
     # Reach inside the cross-origin iframe via Playwright's frame_locator.
+    # Pull challenge text + cell count via the vendor's selectors.
+    challenge_text_selector = matched_fp["challenge_text_selector"]
+    tile_table_selector = matched_fp["tile_table_selector"]
+    tile_cell_selector = matched_fp["tile_cell_selector"]
+    cells_selector = f"{tile_table_selector} {tile_cell_selector}"
+
     frame_locator = None
     challenge_text = ""
     grid_layout = "3x3"
@@ -546,15 +628,15 @@ def _detect_recaptcha(page: Any, selector_override: str | None = None) -> dict[s
         frame_locator = page.frame_locator(matched_selector)
         # Challenge instruction text.
         try:
-            desc = frame_locator.locator(".rc-imageselect-desc, .rc-imageselect-desc-no-canonical")
+            desc = frame_locator.locator(challenge_text_selector)
             if desc.count() > 0:
                 challenge_text = (desc.first.inner_text() or "").strip()
         except Exception:
             challenge_text = ""
 
-        # Grid layout — count td cells.
+        # Grid layout — count cell elements.
         try:
-            cells = frame_locator.locator(".rc-imageselect-table td")
+            cells = frame_locator.locator(cells_selector)
             tile_count = cells.count() or 9
         except Exception:
             tile_count = 9
@@ -580,15 +662,23 @@ def _detect_recaptcha(page: Any, selector_override: str | None = None) -> dict[s
             "h": int(round(cell_h)),
         })
 
+    fingerprint_id = matched_fp["id"]
     return {
         "screenshot_base64": screenshot_b64,
         "challenge_text": challenge_text or "(challenge text unavailable)",
         "grid_layout": grid_layout,
         "tile_count": tile_count,
         "tiles": tiles,
-        "fingerprint": f"recaptcha-v2-image-{grid_layout}",
+        "fingerprint": f"{fingerprint_id}-{grid_layout}",
+        "fingerprint_id": fingerprint_id,
+        "fingerprint_config": matched_fp,
         "frame_locator": frame_locator,
     }
+
+
+# Back-compat alias — keep the v0.7.0 name as a thin shim so any callers
+# still importing `_detect_recaptcha` continue to work.
+_detect_recaptcha = _detect_visual_challenge
 
 
 # ---- Execution ------------------------------------------------------------
@@ -601,15 +691,29 @@ def _execute_solve(
     """Issue the click chain + Verify, then probe for the token.
 
     Returns the same shape as `solve_visual_challenge_tool` — caller is
-    responsible for wrapping in error handling and telemetry.
+    responsible for wrapping in error handling and telemetry. Selectors
+    are sourced from `rec.fingerprint_config` so reCAPTCHA + hCaptcha
+    share this code path verbatim — only the configured selectors and
+    response-token name differ between vendors.
     """
     page = rec.page
     rec.attempts_used += 1
     rec.attempts_remaining = max(0, 3 - rec.attempts_used)
 
+    # Resolve vendor-specific selectors. Fall back to the reCAPTCHA
+    # config when the record was built before fingerprint_config existed
+    # (defensive — shouldn't trip in practice given inspect populates it).
+    fp = rec.fingerprint_config or _FINGERPRINTS[0]
+    verify_button_selector = fp.get(
+        "verify_button_selector", "#recaptcha-verify-button"
+    )
+    response_token_selector = fp.get(
+        "response_token_selector", 'textarea[name="g-recaptcha-response"]'
+    )
+
     # Click each selected tile by viewport coordinate. Small humanized
     # jitter between clicks so a single dispatcher event doesn't tear the
-    # entire grid before reCAPTCHA's internal selection state catches up.
+    # entire grid before the vendor's internal selection state catches up.
     for idx in selected_tile_indices:
         tile = rec.tiles[idx]
         x = tile["viewport_x"] + tile["w"] / 2
@@ -630,7 +734,7 @@ def _execute_solve(
     verify_clicked = False
     if rec.frame_locator is not None:
         try:
-            verify = rec.frame_locator.locator("#recaptcha-verify-button, .rc-button-default")
+            verify = rec.frame_locator.locator(verify_button_selector)
             if verify.count() > 0:
                 verify.first.click()
                 verify_clicked = True
@@ -646,17 +750,22 @@ def _execute_solve(
             "hint": "Verify button not found inside CAPTCHA iframe.",
         }
 
-    # Poll the parent page for the g-recaptcha-response token. reCAPTCHA
-    # writes the JWT into a hidden textarea on success; presence == passed.
+    # Poll the parent page for the vendor's response token. Both
+    # vendors write the JWT into a hidden textarea on success; presence
+    # of a non-empty value == passed. The selector name is the only
+    # difference (reCAPTCHA → g-recaptcha-response,
+    # hCaptcha → h-captcha-response).
+    escaped = response_token_selector.replace("\\", "\\\\").replace("'", "\\'")
+    eval_script = (
+        "() => { const t = document.querySelector('" + escaped + "'); "
+        "return t ? t.value : ''; }"
+    )
+
     deadline = time.monotonic() + min(timeout_seconds, 60)
     token: str | None = None
     while time.monotonic() < deadline:
         try:
-            value = page.evaluate(
-                "() => { const t = document.querySelector("
-                "'textarea[name=\"g-recaptcha-response\"]'); "
-                "return t ? t.value : ''; }"
-            )
+            value = page.evaluate(eval_script)
         except Exception:
             value = ""
         if value:
@@ -683,7 +792,7 @@ def _execute_solve(
         "token": None,
         "hint": (
             "Verify clicked but no token appeared within the budget. "
-            "reCAPTCHA may have surfaced a dynamic follow-up challenge — "
+            "The vendor may have surfaced a dynamic follow-up challenge — "
             "call inspect_visual_challenge again for a fresh challenge_id."
         ),
     }

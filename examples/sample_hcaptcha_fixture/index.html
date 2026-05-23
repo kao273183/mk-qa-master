@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Sample hCaptcha fixture — mk-qa-master v0.7.1</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.4rem; }
+    p  { color: #444; line-height: 1.5; }
+    .frame-host { margin: 1.5rem 0; border: 1px solid #ccc; padding: 0.5rem; background: #fafafa; }
+    code { background: #eee; padding: 1px 4px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <h1>Sample hCaptcha-like fixture</h1>
+  <p>
+    This page exists to dogfood <code>inspect_visual_challenge</code> /
+    <code>solve_visual_challenge</code> against the hCaptcha
+    fingerprint without ever calling hCaptcha's servers. The iframe
+    below mimics hCaptcha's image-grid layout: same iframe title
+    attribute pattern, same outer URL pattern, same internal DOM hooks
+    (<code>.prompt-text</code>, <code>.task-grid</code>,
+    <code>.task</code>, <code>.button-submit</code>). Everything else
+    is static markup — no third-party network call, no real challenge.
+  </p>
+
+  <div class="frame-host" data-mock="hcaptcha">
+    <!-- The iframe `title` and `src` attributes deliberately mirror
+         real hCaptcha selectors so the v0.7.1 detection logic finds
+         it the same way it would find a live challenge. CI tests
+         intercept requests to `hcaptcha.com` URLs via `page.route()`
+         and serve `iframe.html` instead — the `src` below would be
+         rewritten to `https://newassets.hcaptcha.com/captcha/v1/...`
+         in that flow. -->
+    <iframe
+      title="Main content of the hCaptcha challenge"
+      src="./iframe.html?hcaptcha.com/captcha/v1/bframe"
+      width="340" height="500"
+      style="border:0;">
+    </iframe>
+  </div>
+
+  <p>
+    Hidden textarea below — real hCaptcha writes the verification
+    token here on success; our fixture writes a fake token after the
+    Verify click so the solve tool can detect "passed".
+  </p>
+  <textarea
+    name="h-captcha-response"
+    style="opacity:0; position:absolute; left:-9999px; pointer-events:none;"
+    tabindex="-1"
+    aria-hidden="true"></textarea>
+
+  <script>
+    // The iframe posts a message back when its Verify button is
+    // clicked so the outer page can populate the h-captcha-response
+    // textarea. Real hCaptcha uses the same channel (postMessage with
+    // a token). The fake token format mirrors the JWT-ish opaque
+    // string the live API returns.
+    window.addEventListener("message", (ev) => {
+      if (ev && ev.data && ev.data.type === "fixture-hcaptcha-pass") {
+        const t = document.querySelector('textarea[name="h-captcha-response"]');
+        if (t) t.value = "fixture-hcaptcha-token-" + Date.now();
+      }
+    });
+  </script>
+</body>
+</html>
