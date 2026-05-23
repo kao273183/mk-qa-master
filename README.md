@@ -223,14 +223,16 @@ Standard `QA_TIMEOUT_SECONDS` still applies (default 600s).
 
 > *When backend bypass isn't an option: Claude looks at the CAPTCHA, mk-qa-master does the clicks.*
 
+Supports reCAPTCHA v2 (since v0.7.0) and hCaptcha (since v0.7.1).
+
 The first capability in the family where the AI client's vision is
 load-bearing, not optional. Two new MCP tools
 (`inspect_visual_challenge` + `solve_visual_challenge`) detect a
-reCAPTCHA v2 image-grid challenge on the active Playwright page,
-screenshot it for the multimodal AI client, accept the tile-selection
-the AI returns, and execute the click chain. The runner is the eyes
-and hands; the AI client (Claude / Cursor / Gemini / GPT-4o) is the
-actual solver.
+reCAPTCHA v2 or hCaptcha image-grid challenge on the active Playwright
+page, screenshot it for the multimodal AI client, accept the
+tile-selection the AI returns, and execute the click chain. The
+runner is the eyes and hands; the AI client (Claude / Cursor / Gemini
+/ GPT-4o) is the actual solver.
 
 ### When to use this — Tier 1 vs Tier 3
 
