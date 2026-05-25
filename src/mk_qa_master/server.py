@@ -3,7 +3,7 @@ import json
 import time
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent, Resource
+from mcp.types import Tool, TextContent, ImageContent, Resource
 from pydantic import AnyUrl
 
 from .tools import runner, reporter, generator, analyzer, telemetry, optimizer, qa_context, visual_challenge
@@ -837,7 +837,26 @@ async def _dispatch(name: str, args: dict) -> list[TextContent]:
         result = await asyncio.to_thread(
             visual_challenge.inspect_visual_challenge_tool, args or {},
         )
-        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+        # v0.7.3: surface the screenshot as a native MCP ImageContent so
+        # multimodal AI clients (Claude Code, Cursor, etc.) can SEE the
+        # challenge directly — instead of receiving an unreadable base64
+        # string embedded in a JSON response. The metadata (challenge_id,
+        # tile coords, fingerprint, etc.) still rides in the TextContent.
+        b64 = result.pop("screenshot_base64", None) if isinstance(result, dict) else None
+        text_block = TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+        if b64:
+            # Strip the data-URL prefix if present — MCP ImageContent.data
+            # is the raw base64 payload, not a data URL.
+            if isinstance(b64, str) and b64.startswith("data:"):
+                b64 = b64.split(",", 1)[1] if "," in b64 else b64
+            return [
+                ImageContent(type="image", data=b64, mimeType="image/png"),
+                text_block,
+            ]
+        return [text_block]
 
     if name == "solve_visual_challenge":
         result = await asyncio.to_thread(
