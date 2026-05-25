@@ -97,9 +97,23 @@ _FINGERPRINTS: list[dict[str, Any]] = [
             'iframe[title*="recaptcha challenge"]',
             'iframe[src*="recaptcha/api2/bframe"]',
         ],
-        "challenge_text_selector": ".rc-imageselect-desc",
-        "tile_table_selector": ".rc-imageselect-table",
-        "tile_cell_selector": "td",
+        # v0.7.3: chain selectors. Real Google reCAPTCHA uses
+        # `.rc-imageselect-desc-no-canonical` for dynamic-replace mode
+        # ("Click verify once there are none left.") and `.rc-imageselect-desc`
+        # for static mode. Real Google reCAPTCHA's table also has a
+        # grid-size suffix (`rc-imageselect-table-33`, `-44`); the mock
+        # fixture in tests/ uses the unsuffixed legacy class.
+        "challenge_text_selector": (
+            ".rc-imageselect-desc-no-canonical, .rc-imageselect-desc"
+        ),
+        "tile_table_selector": (
+            'table[class*="rc-imageselect-table"], .rc-imageselect-target,'
+            ' .rc-imageselect-table'
+        ),
+        # v0.7.3: real reCAPTCHA tiles are `<div class="rc-image-tile-wrapper">`
+        # with proper 120×120 dimensions. The legacy `<td>` selector matched
+        # nothing in production but kept the mock-fixture tests green.
+        "tile_cell_selector": ".rc-image-tile-wrapper, .rc-imageselect-table td",
         "verify_button_selector": "#recaptcha-verify-button",
         "response_token_selector": 'textarea[name="g-recaptcha-response"]',
     },
@@ -112,7 +126,7 @@ _FINGERPRINTS: list[dict[str, Any]] = [
         ],
         "challenge_text_selector": ".prompt-text",
         "tile_table_selector": ".task-grid",
-        "tile_cell_selector": ".task",
+        "tile_cell_selector": ".task-grid .task, .task",
         "verify_button_selector": ".button-submit",
         "response_token_selector": 'textarea[name="h-captcha-response"]',
     },
@@ -429,6 +443,12 @@ def inspect_visual_challenge_tool(arguments: dict[str, Any]) -> dict[str, Any]:
         "tiles": rec.tiles,
         "expires_at": rec.expires_at.isoformat(),
         "fingerprint": rec.fingerprint,
+        # v0.7.3 — which DOM-probe path produced the tile coordinates.
+        # Useful for debugging silent miss-clicks: `iframe_divide` means
+        # the geometry is approximate (header/footer chrome was included
+        # in the grid math). `per_cell_bbox` / `table_rect_js` mean the
+        # coords came from real DOM measurements.
+        "_coord_method": detection.get("_coord_method", "iframe_divide"),
     }
     if warning:
         response["warning"] = warning
@@ -617,8 +637,12 @@ def _detect_visual_challenge(
     # Pull challenge text + cell count via the vendor's selectors.
     challenge_text_selector = matched_fp["challenge_text_selector"]
     tile_table_selector = matched_fp["tile_table_selector"]
-    tile_cell_selector = matched_fp["tile_cell_selector"]
-    cells_selector = f"{tile_table_selector} {tile_cell_selector}"
+    # v0.7.3: `tile_cell_selector` is now a *complete* CSS selector for
+    # the tile elements (was: a tag name that got concatenated with the
+    # table selector). This lets one fingerprint entry chain multiple
+    # candidate selectors (real-DOM + legacy-mock) via the CSS comma
+    # operator, which the old concat broke.
+    cells_selector = matched_fp["tile_cell_selector"]
 
     frame_locator = None
     challenge_text = ""
@@ -658,6 +682,17 @@ def _detect_visual_challenge(
     # judgment is correct.
     tiles: list[dict[str, Any]] = []
     real_cells_resolved = False
+    coord_method = "iframe_divide"
+
+    # Path 1: per-cell Playwright bounding_box. Works against mock fixtures
+    # (synthetic <td> with real CSS dimensions) but silently fails against
+    # production reCAPTCHA — the real <td> elements have zero intrinsic
+    # size because cell content is absolute-positioned inside them, so
+    # bounding_box() returns None or {0,0,0,0}. Validated against the
+    # Google reCAPTCHA demo in v0.7.2 dogfood: every per-cell probe came
+    # back non-real, so this branch effectively skipped against real
+    # production challenges. Kept as the first attempt because, when it
+    # does work, it gives the most accurate per-tile coords.
     if frame_locator is not None:
         try:
             candidate: list[dict[str, Any]] = []
@@ -688,6 +723,57 @@ def _detect_visual_challenge(
             if len(candidate) == tile_count:
                 tiles = candidate
                 real_cells_resolved = True
+                coord_method = "per_cell_bbox"
+        except Exception:
+            pass
+
+    # Path 2 (v0.7.3): JS-evaluate getBoundingClientRect on the table
+    # element. Playwright's bounding_box() applies actionability /
+    # visibility checks that reCAPTCHA's container fails (children are
+    # absolute-positioned, table itself reports 0×0 to Playwright). Raw
+    # getBoundingClientRect bypasses those checks and always returns
+    # numbers as long as the element exists in the DOM. The returned
+    # rect is iframe-window-relative, so we offset by the iframe's
+    # page-relative position to get viewport coords that page.mouse.click
+    # can use directly.
+    #
+    # Dividing the table's rect uniformly into rows × cols is accurate
+    # for reCAPTCHA + hCaptcha grids because both vendors render fixed-
+    # size square tiles inside the table (no padding between cells).
+    if not real_cells_resolved and frame_locator is not None:
+        try:
+            js_rect = (
+                "el => {"
+                "  const r = el.getBoundingClientRect();"
+                "  return {x: r.left, y: r.top, width: r.width, height: r.height};"
+                "}"
+            )
+            table_rect = frame_locator.locator(tile_table_selector).evaluate(js_rect)
+            if (
+                isinstance(table_rect, dict)
+                and isinstance(table_rect.get("x"), (int, float))
+                and isinstance(table_rect.get("y"), (int, float))
+                and isinstance(table_rect.get("width"), (int, float))
+                and isinstance(table_rect.get("height"), (int, float))
+                and table_rect["width"] > 0
+                and table_rect["height"] > 0
+            ):
+                t_x = iframe_x + float(table_rect["x"])
+                t_y = iframe_y + float(table_rect["y"])
+                t_w = float(table_rect["width"]) / cols if cols else 0
+                t_h = float(table_rect["height"]) / rows if rows else 0
+                tiles = [
+                    {
+                        "index": i,
+                        "viewport_x": int(round(t_x + (i % cols) * t_w)),
+                        "viewport_y": int(round(t_y + (i // cols) * t_h)),
+                        "w": int(round(t_w)),
+                        "h": int(round(t_h)),
+                    }
+                    for i in range(tile_count)
+                ]
+                real_cells_resolved = True
+                coord_method = "table_rect_js"
         except Exception:
             pass
 
@@ -719,6 +805,7 @@ def _detect_visual_challenge(
         "fingerprint_id": fingerprint_id,
         "fingerprint_config": matched_fp,
         "frame_locator": frame_locator,
+        "_coord_method": coord_method,
     }
 
 
