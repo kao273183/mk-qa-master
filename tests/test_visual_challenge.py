@@ -236,6 +236,132 @@ def test_tile_coordinate_math(monkeypatch):
     assert (250.0, 350.0) in called_args, f"expected center click; got {called_args}"
 
 
+def test_tile_coords_prefer_real_cell_bbox_when_dom_resolves(monkeypatch):
+    """Regression for the v0.7.0/v0.7.1 production bug: tile geometry was
+    computed by dividing the iframe bbox uniformly, but real CAPTCHA
+    iframes carry a header (prompt text) + table + footer (Verify button)
+    around the table. The naive division misplaces row 2 of a 3x3 by
+    ~80px (lands in the footer / Verify-button band) and causes silent
+    miss-clicks on real reCAPTCHA / hCaptcha challenges — even when the
+    AI client's tile judgment is correct.
+
+    Fix: when frame_locator can enumerate the cells AND each
+    `cells.nth(i).bounding_box()` returns a real numeric dict, use those
+    cell-level bboxes directly. Fall back to the old iframe-divided math
+    only when the DOM probe can't yield valid numbers (test mocks that
+    don't wire up per-cell bbox returns hit the fallback — see
+    `test_tile_coordinate_math` above which intentionally exercises that
+    path).
+    """
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+
+    # Build a mock page where the iframe is at (49, 228) with 320×450
+    # outer dimensions — BUT the table inside starts at iframe_y + 40
+    # (header), each cell is 97×97, with 5px gutters between rows.
+    # If the buggy iframe-divided math were used, tile 7 (row 2, col 1)
+    # would land at viewport_y = 228 + 2*(450/3) = 528 — well below the
+    # actual cell. With the fix, it should land on the *real* row 2
+    # which starts at iframe_y + 40 + 2*97 = 462.
+    iframe_x, iframe_y, iframe_w, iframe_h = 49.0, 228.0, 320.0, 450.0
+    header_h = 40.0
+    cell_size = 97.0
+    cell_bboxes = []
+    for row in range(3):
+        for col in range(3):
+            cell_bboxes.append({
+                "x": iframe_x + 5.0 + col * cell_size,
+                "y": iframe_y + header_h + row * cell_size,
+                "width": cell_size,
+                "height": cell_size,
+            })
+
+    page = MagicMock()
+    page.url = "https://test-fixture.local/signup"
+
+    iframe_loc = MagicMock()
+    iframe_loc.count.return_value = 1
+    iframe_first = MagicMock()
+    iframe_first.bounding_box.return_value = {
+        "x": iframe_x, "y": iframe_y, "width": iframe_w, "height": iframe_h,
+    }
+    iframe_first.screenshot.return_value = b"\x89PNG\r\nmock"
+    iframe_loc.first = iframe_first
+    page.locator.return_value = iframe_loc
+
+    # Build cells locator that returns REAL bboxes per cell.
+    cells_loc = MagicMock()
+    cells_loc.count.return_value = 9
+    cell_handles = []
+    for bb in cell_bboxes:
+        c = MagicMock()
+        c.bounding_box.return_value = bb
+        cell_handles.append(c)
+    cells_loc.nth.side_effect = lambda i: cell_handles[i]
+
+    desc_loc = MagicMock()
+    desc_loc.count.return_value = 1
+    desc_first = MagicMock()
+    desc_first.inner_text.return_value = "Select all images with traffic lights"
+    desc_loc.first = desc_first
+
+    verify_loc = MagicMock()
+    verify_loc.count.return_value = 1
+    verify_loc.first = MagicMock()
+
+    def _route(selector: str):
+        sel = (selector or "").lower()
+        if "rc-imageselect-desc" in sel:
+            return desc_loc
+        if "td" in sel or "table" in sel:
+            return cells_loc
+        if "verify" in sel or "rc-button" in sel:
+            return verify_loc
+        return MagicMock(count=lambda: 0)
+
+    fl = MagicMock()
+    fl.locator.side_effect = _route
+    page.frame_locator.return_value = fl
+
+    page.evaluate.return_value = "fake-recaptcha-token-xyz"
+    page.mouse = MagicMock()
+
+    out = vc.inspect_visual_challenge_tool({"_page": page})
+    assert out["grid_layout"] == "3x3"
+    assert out["tile_count"] == 9
+
+    # tile 7 = row 2, col 1 — DOM bbox is (49+5+97, 228+40+194, 97, 97)
+    #                      = (151, 462, 97, 97). Center = (199.5, 510.5).
+    tile7 = out["tiles"][7]
+    assert tile7["viewport_x"] == 151, (
+        f"row-2 click should land in the real table, not in the footer; "
+        f"got viewport_x={tile7['viewport_x']} (buggy=210)"
+    )
+    assert tile7["viewport_y"] == 462, (
+        f"row-2 click should land in the real table, not in the footer; "
+        f"got viewport_y={tile7['viewport_y']} (buggy=528)"
+    )
+    assert tile7["w"] == 97
+    assert tile7["h"] == 97
+
+    # Now exercise solve and check the click landed at the *real* cell
+    # center (151+48, 462+48) ≈ (199.5, 510.5) — not the buggy
+    # iframe-divided center (262, 603).
+    cid = out["challenge_id"]
+    solved = vc.solve_visual_challenge_tool({
+        "challenge_id": cid,
+        "selected_tile_indices": [7],
+        "confirm": True,
+    })
+    assert solved["status"] == "passed"
+
+    clicks = [c.args for c in page.mouse.click.call_args_list]
+    assert (199.5, 510.5) in clicks, (
+        f"tile-7 click should land at real cell center (199.5, 510.5); "
+        f"got {clicks} — falling back to iframe-divided coords means "
+        f"row-2 misclicks on real CAPTCHAs"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Cache TTL + LRU
 # ---------------------------------------------------------------------------

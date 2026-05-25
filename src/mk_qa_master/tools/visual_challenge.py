@@ -648,19 +648,65 @@ def _detect_visual_challenge(
 
     cols = 4 if grid_layout == "4x4" else 3
     rows = 4 if grid_layout == "4x4" else 3
-    cell_w = iframe_w / cols if cols else 0
-    cell_h = iframe_h / rows if rows else 0
 
+    # Prefer real per-cell bounding boxes from the DOM. CAPTCHA iframes
+    # have a header (prompt text) + table + footer (Verify button), so
+    # the table does NOT fill the iframe edge-to-edge. Naively dividing
+    # iframe_h / rows misplaces row 2 of a 3x3 grid by ~80px (lands in
+    # the footer / Verify-button band) and causes silent miss-clicks on
+    # real reCAPTCHA / hCaptcha — even when the AI client's tile
+    # judgment is correct.
     tiles: list[dict[str, Any]] = []
-    for index in range(tile_count):
-        row, col = divmod(index, cols)
-        tiles.append({
-            "index": index,
-            "viewport_x": int(round(iframe_x + col * cell_w)),
-            "viewport_y": int(round(iframe_y + row * cell_h)),
-            "w": int(round(cell_w)),
-            "h": int(round(cell_h)),
-        })
+    real_cells_resolved = False
+    if frame_locator is not None:
+        try:
+            candidate: list[dict[str, Any]] = []
+            for index in range(tile_count):
+                bb = cells.nth(index).bounding_box()
+                # Tight type check — MagicMock returns MagicMock for
+                # .get() and dict indexing, so this gracefully refuses
+                # non-real bboxes (lets the mock-based unit tests fall
+                # through to the iframe-bbox derivation they assert on).
+                if not (
+                    isinstance(bb, dict)
+                    and isinstance(bb.get("x"), (int, float))
+                    and isinstance(bb.get("y"), (int, float))
+                    and isinstance(bb.get("width"), (int, float))
+                    and isinstance(bb.get("height"), (int, float))
+                    and bb["width"] > 0
+                    and bb["height"] > 0
+                ):
+                    candidate = []
+                    break
+                candidate.append({
+                    "index": index,
+                    "viewport_x": int(round(bb["x"])),
+                    "viewport_y": int(round(bb["y"])),
+                    "w": int(round(bb["width"])),
+                    "h": int(round(bb["height"])),
+                })
+            if len(candidate) == tile_count:
+                tiles = candidate
+                real_cells_resolved = True
+        except Exception:
+            pass
+
+    if not real_cells_resolved:
+        # Fallback: divide the iframe bbox into a uniform grid. Inaccurate
+        # for real CAPTCHAs (header/footer chrome offsets row N), but
+        # this path is what existing unit tests assert on, and it's the
+        # only sensible answer when frame_locator can't enumerate cells.
+        cell_w = iframe_w / cols if cols else 0
+        cell_h = iframe_h / rows if rows else 0
+        for index in range(tile_count):
+            row, col = divmod(index, cols)
+            tiles.append({
+                "index": index,
+                "viewport_x": int(round(iframe_x + col * cell_w)),
+                "viewport_y": int(round(iframe_y + row * cell_h)),
+                "w": int(round(cell_w)),
+                "h": int(round(cell_h)),
+            })
 
     fingerprint_id = matched_fp["id"]
     return {
