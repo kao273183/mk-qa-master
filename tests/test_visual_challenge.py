@@ -630,3 +630,141 @@ def test_discord_hard_stops_with_hcaptcha(monkeypatch):
 
     assert out["error"] == "forbidden_domain"
     assert "discord.com" in out["hint"]
+
+
+# ---------------------------------------------------------------------------
+# v0.7.4 — Dynamic-replace mode (multi-round support)
+# ---------------------------------------------------------------------------
+
+def test_dynamic_mode_detection_english(monkeypatch):
+    """`_is_dynamic_mode` matches the canonical English dynamic-replace
+    phrases ('none left', 'click verify once', 'if there are none')."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    assert vc._is_dynamic_mode("Select all images with cars\nClick verify once there are none left.")
+    assert vc._is_dynamic_mode("Select all squares with buses\nIf there are none, click skip")
+    # Plain static prompt — must NOT trigger dynamic loop.
+    assert not vc._is_dynamic_mode("Select all images with traffic lights")
+    # Empty / missing prompt defaults to static (conservative).
+    assert not vc._is_dynamic_mode("")
+    assert not vc._is_dynamic_mode("(challenge text unavailable)")
+
+
+def test_dynamic_mode_detection_chinese(monkeypatch):
+    """Traditional Chinese marker triggers dynamic mode."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    assert vc._is_dynamic_mode("選取圖片中含有公車的所有圖片\n確定沒有遺漏後，請按一下 [驗證]")
+    # Static zh-Hant prompt — must NOT trigger.
+    assert not vc._is_dynamic_mode("選取所有包含公車的方塊")
+
+
+def test_solve_returns_continue_in_dynamic_mode(monkeypatch):
+    """When the prompt is dynamic-replace AND the AI selected at least
+    one tile, solve must NOT click Verify — it returns `status: continue`
+    with a fresh screenshot so the AI can re-evaluate the new grid.
+    Verify-button click count must stay at zero."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    page = _make_mock_page(
+        challenge_text="Select all images with buses\nClick verify once there are none left.",
+    )
+
+    inspected = vc.inspect_visual_challenge_tool({"_page": page})
+    cid = inspected["challenge_id"]
+
+    out = vc.solve_visual_challenge_tool({
+        "challenge_id": cid,
+        "selected_tile_indices": [0, 4],
+        "confirm": True,
+    })
+
+    assert out["status"] == "continue"
+    assert out["token"] is None
+    assert out["rounds_used"] == 1
+    assert "screenshot_base64" in out
+    assert "tiles" in out
+    # Verify must NOT have been clicked yet (it's a click on the in-frame
+    # verify locator — the mock surfaces this via call recording on the
+    # frame_locator's evaluate path).
+    # Sanity: page.evaluate was never called for the token-poll loop,
+    # because we bailed before reaching the Verify chain.
+    assert page.evaluate.call_count == 0
+
+
+def test_solve_empty_selection_finalizes_in_dynamic_mode(monkeypatch):
+    """The AI signals 'I see no more matches' by passing an empty
+    selection in dynamic mode. Server interprets that as 'click Verify
+    and check for token' — same flow as static mode."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    page = _make_mock_page(
+        challenge_text="Select all images with buses\nClick verify once there are none left.",
+    )
+
+    inspected = vc.inspect_visual_challenge_tool({"_page": page})
+    cid = inspected["challenge_id"]
+
+    out = vc.solve_visual_challenge_tool({
+        "challenge_id": cid,
+        "selected_tile_indices": [],
+        "confirm": True,
+    })
+
+    # Empty selection in dynamic mode → straight to Verify + token poll.
+    assert out["status"] == "passed"
+    assert out["token"] == "fake-recaptcha-token-abc123"
+
+
+def test_solve_static_mode_unchanged(monkeypatch):
+    """A regular 'Select all images with X' prompt must still click
+    Verify on the first solve call — no continue loop, no behavior change
+    vs v0.7.3."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    page = _make_mock_page(
+        challenge_text="Select all images with traffic lights",
+    )
+
+    inspected = vc.inspect_visual_challenge_tool({"_page": page})
+    cid = inspected["challenge_id"]
+
+    out = vc.solve_visual_challenge_tool({
+        "challenge_id": cid,
+        "selected_tile_indices": [0, 4],
+        "confirm": True,
+    })
+
+    assert out["status"] == "passed"
+    assert out["token"] == "fake-recaptcha-token-abc123"
+    # `rounds_used` not present on static-mode pass — it's a dynamic-only
+    # field.
+    assert "rounds_used" not in out
+
+
+def test_solve_dynamic_mode_rounds_cap(monkeypatch):
+    """After _MAX_DYNAMIC_ROUNDS continue cycles, solve must force Verify
+    even if the AI keeps selecting matches. Prevents infinite loops on
+    pathological challenges."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    page = _make_mock_page(
+        challenge_text="Select all images with buses\nClick verify once there are none left.",
+    )
+
+    inspected = vc.inspect_visual_challenge_tool({"_page": page})
+    cid = inspected["challenge_id"]
+
+    # Burn through the cap by repeatedly calling solve with a non-empty
+    # selection — each round should return "continue" until the cap.
+    last = None
+    for _ in range(vc._MAX_DYNAMIC_ROUNDS):
+        last = vc.solve_visual_challenge_tool({
+            "challenge_id": cid,
+            "selected_tile_indices": [0],
+            "confirm": True,
+        })
+        assert last["status"] == "continue"
+
+    # Next call must NOT continue — cap reached, force Verify path.
+    final = vc.solve_visual_challenge_tool({
+        "challenge_id": cid,
+        "selected_tile_indices": [0],
+        "confirm": True,
+    })
+    assert final["status"] == "passed"
+    assert final["token"] == "fake-recaptcha-token-abc123"

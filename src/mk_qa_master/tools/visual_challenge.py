@@ -85,6 +85,47 @@ DISCLAIMER_TEXT = (
 )
 
 
+# ---- Dynamic-replace mode markers ----------------------------------------
+# v0.7.4: reCAPTCHA + hCaptcha both have a "dynamic-replace" mode where
+# clicking a matching tile replaces it with a new image, and the user
+# must keep selecting until no matches remain. The prompt's language is
+# the signal: "Click verify once there are none left" (en),
+# "確定沒有遺漏" (zh-Hant), etc. Static mode prompts have none of these
+# phrases — the user clicks all matches once, then Verify.
+#
+# Detection is a substring match against the lowercased challenge_text.
+# Adding a new language? Append the lowercased marker phrase here.
+_DYNAMIC_MODE_MARKERS: tuple[str, ...] = (
+    "none left",            # English: "Click verify once there are none left"
+    "click verify once",    # English variant
+    "if there are none",    # English: "If there are none, click skip"
+    "確定沒有遺漏",          # Traditional Chinese
+    "確認沒有遺漏",          # Traditional Chinese variant
+    "请确认",                # Simplified Chinese
+    "もう一度",              # Japanese: "もう一度残っているか確認"
+    "残っていない",           # Japanese: "残っていない場合"
+)
+
+
+def _is_dynamic_mode(challenge_text: str) -> bool:
+    """True iff the prompt indicates dynamic-replace mode (multi-round).
+
+    Conservative default: returns False when challenge_text is missing
+    or the marker phrases don't appear. False means solve will click
+    Verify immediately after the tile clicks (legacy static flow).
+    """
+    if not challenge_text:
+        return False
+    lower = challenge_text.lower()
+    return any(marker.lower() in lower for marker in _DYNAMIC_MODE_MARKERS)
+
+
+# Hard cap on how many continue-rounds solve will accept before forcing
+# Verify. Even a real captcha rarely needs more than 3-4 rounds; the cap
+# is a safety net against AI clients getting stuck in a click loop.
+_MAX_DYNAMIC_ROUNDS = 5
+
+
 # ---- Vendor fingerprint table --------------------------------------------
 # v0.7.1 introduces a vendor-neutral fingerprint table. Detection iterates
 # the list in order; first match wins. Order is load-bearing: reCAPTCHA
@@ -166,6 +207,11 @@ class _ChallengeRecord:
     # The 0-3 attempts the user has burned so far. reCAPTCHA locks out
     # the verify button after 3 consecutive misses.
     attempts_used: int = 0
+    # v0.7.4: count of `solve(continue)` cycles taken in dynamic-replace
+    # mode. Capped at _MAX_DYNAMIC_ROUNDS to prevent runaway loops when
+    # the AI client keeps finding matches that never resolve. Distinct
+    # from attempts_used (which counts Verify-button presses).
+    rounds_used: int = 0
 
 
 # ---- LRU + TTL cache -------------------------------------------------------
@@ -862,6 +908,60 @@ def _execute_solve(
                 "hint": f"mouse.click({x},{y}) failed: {type(e).__name__}: {e}",
             }
         time.sleep(0.1)
+
+    # v0.7.4: dynamic-replace mode. When the prompt indicates the user
+    # must keep selecting until no matches remain (reCAPTCHA's "Click
+    # verify once there are none left" pattern), do NOT click Verify
+    # after this round — clicked tiles get replaced with new images and
+    # the AI client needs another inspect/judge cycle. Re-screenshot the
+    # iframe, refresh tile coords, and return `status: "continue"` so
+    # the client knows to call solve again with the next selection.
+    # Empty `selected_tile_indices` is the finalize signal: AI looked at
+    # the latest grid and found no more matches → fall through to Verify.
+    if (
+        selected_tile_indices
+        and _is_dynamic_mode(rec.challenge_text)
+        and rec.rounds_used < _MAX_DYNAMIC_ROUNDS
+    ):
+        # Let new images load + selection animations settle.
+        try:
+            page.wait_for_timeout(1500)
+        except Exception:
+            time.sleep(1.5)
+        # Re-detect from the same page. The iframe is still mounted; we
+        # just need a fresh screenshot + updated tile geometry (clicked
+        # tiles often shift slightly after the replacement animation).
+        try:
+            fresh = _detect_visual_challenge(page)
+        except Exception:
+            fresh = None
+        if fresh is not None:
+            rec.rounds_used += 1
+            rec.tiles = fresh["tiles"]
+            rec.challenge_text = fresh.get(
+                "challenge_text", rec.challenge_text
+            ) or rec.challenge_text
+            rec.frame_locator = fresh.get("frame_locator", rec.frame_locator)
+            return {
+                "status": "continue",
+                "challenge_id": rec.challenge_id,
+                "attempts_remaining": rec.attempts_remaining,
+                "rounds_used": rec.rounds_used,
+                "token": None,
+                "screenshot_base64": fresh.get("screenshot_base64", ""),
+                "challenge_text": rec.challenge_text,
+                "tiles": rec.tiles,
+                "tile_count": fresh.get("tile_count", len(rec.tiles)),
+                "grid_layout": fresh.get("grid_layout", rec.grid_layout),
+                "fingerprint": fresh.get("fingerprint", rec.fingerprint),
+                "hint": (
+                    f"Dynamic-replace round {rec.rounds_used}/"
+                    f"{_MAX_DYNAMIC_ROUNDS}. Look at the new screenshot "
+                    "and call solve_visual_challenge again with the next "
+                    "set of matching tile indices. Pass an empty list to "
+                    "finalize (click Verify)."
+                ),
+            }
 
     # Click the Verify button inside the iframe.
     verify_clicked = False

@@ -570,11 +570,19 @@ async def list_tools() -> list[Tool]:
                 "Requires `confirm: true` as a safety latch — an accidental call without confirm "
                 "returns `confirm_required` without clicking anything. Also requires "
                 "QA_VISUAL_CHALLENGE_CONSENT=true at the server level.\n\n"
-                "Returns: {status: 'passed' | 'failed' | 'expired' | 'consent_required' | "
-                "'confirm_required' | 'challenge_not_found' | 'error', challenge_id, "
-                "attempts_remaining, token (only on passed), hint}. Telemetry logs the boolean "
-                "outcome only — no screenshots, no challenge text, no tile selection are ever "
-                "persisted."
+                "DYNAMIC-REPLACE MODE (v0.7.4): when the challenge prompt says 'Click verify "
+                "once there are none left' (en) / '確定沒有遺漏' (zh), clicked tiles get "
+                "replaced with new images. solve detects this and returns `status: 'continue'` "
+                "with a FRESH screenshot + tile grid instead of clicking Verify. The AI should "
+                "look at the new screenshot and call solve again with the next matches. To "
+                "finalize (click Verify and check for a token), pass an empty "
+                "`selected_tile_indices: []`.\n\n"
+                "Returns: {status: 'passed' | 'continue' | 'failed' | 'expired' | "
+                "'consent_required' | 'confirm_required' | 'challenge_not_found' | 'error', "
+                "challenge_id, attempts_remaining, token (only on passed), hint, plus on "
+                "'continue': screenshot_base64, tiles, tile_count, grid_layout, rounds_used}. "
+                "Telemetry logs the boolean outcome only — no screenshots, no challenge text, "
+                "no tile selection are ever persisted."
             ),
             inputSchema={
                 "type": "object",
@@ -862,7 +870,26 @@ async def _dispatch(name: str, args: dict) -> list[TextContent]:
         result = await asyncio.to_thread(
             visual_challenge.solve_visual_challenge_tool, args or {},
         )
-        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+        # v0.7.4: in dynamic-replace mode solve returns `status: continue`
+        # with a fresh screenshot of the updated grid — surface it as
+        # native MCP ImageContent so the AI client can see the new tiles
+        # without having to decode embedded base64.
+        b64 = (
+            result.pop("screenshot_base64", None)
+            if isinstance(result, dict) else None
+        )
+        text_block = TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+        if b64:
+            if isinstance(b64, str) and b64.startswith("data:"):
+                b64 = b64.split(",", 1)[1] if "," in b64 else b64
+            return [
+                ImageContent(type="image", data=b64, mimeType="image/png"),
+                text_block,
+            ]
+        return [text_block]
 
     return [TextContent(type="text", text=f"未知的 tool: {name}")]
 
