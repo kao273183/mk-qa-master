@@ -1,0 +1,102 @@
+name: Dogfood · Real reCAPTCHA
+
+# Weekly regression check against Google's official reCAPTCHA v2 demo
+# at https://www.google.com/recaptcha/api2/demo. Catches the v0.7.2-era
+# silent failure mode where unit tests passed (mock fixture matched
+# hardcoded selectors) but production silently fell back to inaccurate
+# iframe-divide coordinate math against the real DOM.
+#
+# Cadence: weekly (Sundays 02:00 UTC). Conservative on purpose — Google
+# may rate-limit / shadow-ban CI IPs that hammer the demo. Manual runs
+# via workflow_dispatch are always allowed for debugging.
+#
+# Failure mode: if real reCAPTCHA's DOM shifts and our selectors stop
+# matching, the assertion in `verify` fails the job → the maintainer
+# investigates → fingerprint table gets updated → ship a patch release.
+#
+# What this CANNOT validate: full solve (would require AI vision in the
+# loop, which CI doesn't have). Only the inspect path is verified.
+
+on:
+  schedule:
+    - cron: "0 2 * * 0"   # Sunday 02:00 UTC
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: inspect-only against real reCAPTCHA
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package + playwright + chromium
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Run inspect-only dogfood
+        id: dogfood
+        env:
+          QA_VISUAL_CHALLENGE_CONSENT: "true"
+          QA_VISUAL_CHALLENGE_AUTHORIZED_DOMAINS: "google.com"
+        run: |
+          python scripts/dogfood-inspect-only.py > /tmp/dogfood.log 2>&1 || true
+          cat /tmp/dogfood.log
+
+      - name: Assert coord_method is NOT iframe_divide (silent fallback)
+        run: |
+          python - <<'PY'
+          import json
+          import re
+          import sys
+          from pathlib import Path
+
+          log = Path("/tmp/dogfood.log").read_text(encoding="utf-8")
+
+          # Pluck the JSON payload that inspect prints. It's the only
+          # `{...}` block in the log; everything else is bracketed step
+          # markers like `[3/4]`.
+          m = re.search(r"\{[\s\S]*\}", log)
+          if m is None:
+              print("FAIL: no JSON found in dogfood log")
+              print(log)
+              sys.exit(1)
+          payload = json.loads(m.group(0))
+
+          coord = payload.get("_coord_method")
+          if coord == "iframe_divide":
+              print(
+                  "FAIL: real reCAPTCHA fell back to iframe_divide — "
+                  "the per-cell bbox / table-rect-js path no longer "
+                  "matches Google's DOM. Inspect the fingerprint "
+                  "selectors and patch src/mk_qa_master/tools/"
+                  "visual_challenge.py::_FINGERPRINTS."
+              )
+              sys.exit(1)
+
+          tiles = payload.get("tiles") or []
+          if not tiles:
+              print("FAIL: no tiles in inspect output")
+              sys.exit(1)
+          t0 = tiles[0]
+          if abs(t0["w"] - t0["h"]) > 10:
+              print(
+                  f"FAIL: tile 0 is not roughly square "
+                  f"(w={t0['w']}, h={t0['h']}) — coords are likely "
+                  "computed from a distorted bbox source."
+              )
+              sys.exit(1)
+
+          print(f"PASS: _coord_method={coord}, tile 0 = "
+                f"({t0['viewport_x']}, {t0['viewport_y']}, "
+                f"{t0['w']}x{t0['h']})")
+          PY
