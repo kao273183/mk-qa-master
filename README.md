@@ -312,6 +312,126 @@ v0.7.1. reCAPTCHA v3 / Cloudflare Turnstile are permanently out of
 scope — they don't surface a visible challenge to inspect.
 
 
+## OWASP API Security scanning (v0.8.0)
+
+> *Schemathesis catches correctness drift. v0.8.0 adds the layer that
+> catches the security drift hiding behind a passing schema.*
+
+v0.8.0 ships an **OWASP API Security Top 10 (2023) rule-based scanner**
+as a new MCP tool: `run_api_security_scan`. It loads an OpenAPI 3.x
+spec, walks each (path × method), and dispatches five purely-HTTP-
+observable rules:
+
+| OWASP # | Rule | Severity when triggered |
+|---|---|---|
+| API1 | **BOLA / IDOR** — alice's token reads bob's object via path-id tampering | CRITICAL |
+| API2 | **Broken Authentication** — server accepts `alg:none`, malformed, or wrong-signature JWTs | MEDIUM / HIGH / CRITICAL by probe |
+| API3 | **Mass Assignment** — server persists dangerous extra fields like `role: admin`, `is_verified: true` | HIGH |
+| API5 | **Function-Level Authz** — non-admin user accesses admin-shaped endpoints | HIGH |
+| API8 | **Security Misconfiguration** — missing HSTS/CSP/X-Frame headers, wildcard CORS with credentials | LOW / MEDIUM / HIGH |
+
+API4 (rate limit DoS risk), API6 (business flow modeling), API7
+(SSRF callback infra), API9 (prod recon), API10 (upstream APIs) are
+**deferred** — see [`docs/prd-v0.8-api-security.md`](docs/prd-v0.8-api-security.md) §3.
+
+### Consent + authorization gates
+
+Mirrors the v0.7 visual-challenge consent model:
+
+| Variable | Required | What it does |
+|---|---|---|
+| `QA_API_SECURITY_CONSENT` | yes | Must be `true`. Without it, returns `consent_required`. |
+| `QA_API_SECURITY_AUTHORIZED_DOMAINS` | yes for external hosts | Comma-separated allowlist. Localhost / 127.0.0.1 are implicitly authorized. |
+
+The `mass_assignment` rule mutates server state — it's **excluded from
+default categories**. Callers must opt in:
+`categories=["headers", "broken_auth", "bola", "function_authz", "mass_assignment"]`.
+
+### Quick start
+
+```jsonc
+"env": {
+  "QA_RUNNER": "pytest",
+  "QA_PROJECT_ROOT": "/path/to/project",
+  "QA_API_SECURITY_CONSENT": "true",
+  "QA_API_SECURITY_AUTHORIZED_DOMAINS": "api.staging.example.com"
+}
+```
+
+Then ask the AI client to scan:
+
+```
+mk-qa-master.run_api_security_scan(
+    spec_url="https://api.staging.example.com/openapi.yaml",
+    auth={
+        "token": "alice's bearer token",
+        "alt_user_token": "bob's bearer token",
+        "bola_test_ids": {"user_a": [101, 103], "user_b": [202]}
+    },
+    severity_threshold="medium"
+)
+```
+
+Returns the v0.8 security report block:
+
+```jsonc
+{
+  "scan_id": "a3f8d1c9b7e2",
+  "spec_url": "...",
+  "base_url": "https://api.staging.example.com",
+  "categories_run": ["headers", "broken_auth", "bola", "function_authz"],
+  "rules_ran": ["OWASP-API8-Headers", "OWASP-API2-BrokenAuth", ...],
+  "ops_scanned": 23,
+  "severity_threshold": "medium",
+  "findings": [
+    {
+      "rule_id": "OWASP-API1-BOLA-CrossUserDataExposure",
+      "severity": "critical",
+      "endpoint": "GET /orders/{id}",
+      "title": "user_a can read user_b's object id=202 — missing object-level authorization check",
+      "evidence": {"actor": "user_a", "target_owner": "user_b", "target_id": 202, "probed_path": "/orders/202", "status_code": 200, ...},
+      "remediation_hint": "Compare the caller's identity to the object's owner before returning..."
+    },
+    ...
+  ],
+  "summary": {"total": 7, "by_severity": {"critical": 2, "high": 4, "medium": 1, "low": 0, "info": 0}}
+}
+```
+
+### The Tier 1 ground truth
+
+`examples/sample_vulnerable_api/` ships a deliberately-vulnerable
+Flask app where every in-scope OWASP category has a vuln/safe
+endpoint pair. Run it locally to see what each rule looks like in
+action:
+
+```bash
+cd examples/sample_vulnerable_api
+pip install -r requirements.txt
+python app.py  # binds 127.0.0.1:5099
+# Then from another shell, point run_api_security_scan at
+# http://127.0.0.1:5099 + the bundled openapi.yaml
+```
+
+The scanner finds all 5 categories on `/vuln/*` and produces zero
+false positives on `/safe/*`. That property is enforced by the
+[Tier 1 dogfood tests](examples/sample_vulnerable_api/tests/) on
+every PR.
+
+### Security note
+
+The scanner runs adversarial test cases. Do not point it at
+production systems you don't own, and do not point it at any system
+where you don't have authorization. The two env vars above are the
+contract.
+
+PRD: [`docs/prd-v0.8-api-security.md`](docs/prd-v0.8-api-security.md).
+The earlier v0.8 mobile attempt was parked — see
+[`docs/v0.8-mobile-postmortem.md`](docs/v0.8-mobile-postmortem.md) for
+what we learned and how it shaped the API-security PRD's testing
+gates.
+
+
 ## Wire into Claude Desktop
 
 Copy `examples/configs/claude_desktop_config.example.json` to:
@@ -444,6 +564,7 @@ Shared across all runners (some tools degrade gracefully on non-pytest runners):
 | `init_qa_knowledge` / `get_qa_context` | Scaffold + read the project's QA knowledge layer (methodology + domain). **Bilingual since v0.6.2** — methodology ships in English by default (`QA_LANG=en`) or Traditional Chinese (`QA_LANG=zh-tw`); same 13 sections in both, the four newest cover API testing methodology, flakiness root-cause taxonomy, test doubles (mock / stub / fake / spy), and test data management. Domain example: [`docs/qa-knowledge-en.example.md`](docs/qa-knowledge-en.example.md) (zh-TW: [`docs/qa-knowledge.example.md`](docs/qa-knowledge.example.md)). |
 | `get_optimization_plan` | Three-layer self-improvement coach (suite / MCP / AI strategy) |
 | `inspect_visual_challenge` / `solve_visual_challenge` | **v0.7.0** AI Visual Challenge Solver — detect a reCAPTCHA v2 image-grid challenge, screenshot it, accept the AI client's tile selection, execute the click chain. Gated by `QA_VISUAL_CHALLENGE_CONSENT=true` + per-call `confirm=true`. See the dedicated section above. |
+| `run_api_security_scan` | **v0.8.0** OWASP API Security Top 10 (2023) rule-based scanner — load an OpenAPI 3.x spec, walk path × method, dispatch 5 in-scope rules (API1 BOLA, API2 Broken Auth, API3 Mass Assignment, API5 Function-Level Authz, API8 Misconfig). Gated by `QA_API_SECURITY_CONSENT=true` + `QA_API_SECURITY_AUTHORIZED_DOMAINS`. See the dedicated section above. |
 
 ### Resources
 

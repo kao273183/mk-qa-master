@@ -664,6 +664,81 @@ async def list_tools() -> list[Tool]:
                 "required": ["url"],
             },
         ),
+        Tool(
+            name="run_api_security_scan",
+            description=(
+                "v0.8.0: OWASP API Security Top 10 (2023) rule-based scanner. Loads an "
+                "OpenAPI 3.x spec, walks each path × method, and dispatches v0.8's 5 in-scope "
+                "rules — BOLA (API1), Broken Authentication (API2), Mass Assignment (API3, "
+                "opt-in), Function-Level Authz (API5), Security Misconfiguration (API8). "
+                "Returns a v0.8 security report block with per-finding rule_id, severity "
+                "(critical/high/medium/low/info), endpoint, evidence dict, and remediation_hint.\n\n"
+                "Requires QA_API_SECURITY_CONSENT=true at the server level. Non-localhost "
+                "hosts must be in QA_API_SECURITY_AUTHORIZED_DOMAINS (comma-separated). "
+                "mass_assignment mutates server state — opt in by passing it in `categories`. "
+                "Tier 1 fixture (`examples/sample_vulnerable_api/`) ships with the package "
+                "for self-tests.\n\n"
+                "Returns: {scan_id, spec_url, base_url, categories_run, rules_ran, "
+                "ops_scanned, severity_threshold, findings[...], summary{total, by_severity}, "
+                "findings_below_threshold_count}.\n\n"
+                "Error shapes: consent_required / unauthorized_domain / spec_load_failed / "
+                "no_base_url / unknown_categories / bad_severity_threshold."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "spec_url": {
+                        "type": "string",
+                        "description": (
+                            "OpenAPI 3.x URL (http:// or https://) or local path "
+                            "(file:// or bare). YAML and JSON both accepted."
+                        ),
+                    },
+                    "auth": {
+                        "type": "object",
+                        "description": (
+                            "Auth config. `token` enables single-user rules (headers + "
+                            "broken_auth). Add `alt_user_token` to enable two-user rules "
+                            "(bola + function_authz). For BOLA: also provide `bola_test_ids: "
+                            "{user_a: [...], user_b: [...]}` listing the ids of objects "
+                            "each user owns."
+                        ),
+                        "properties": {
+                            "token": {"type": "string", "description": "Primary user bearer token."},
+                            "alt_user_token": {"type": "string", "description": "Second user's bearer token (enables BOLA + FLA)."},
+                            "bola_test_ids": {"type": "object", "description": "{user_a: [ids], user_b: [ids]}"},
+                            "fla_admin_paths": {"type": "array", "items": {"type": "string"}, "description": "Substrings marking elevated-priv paths. Default: ['/admin/', '/admin']."},
+                            "fla_low_priv_user": {"type": "string", "enum": ["user_a", "user_b"], "default": "user_a"},
+                        },
+                    },
+                    "categories": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": ["headers", "broken_auth", "bola", "function_authz", "mass_assignment"]},
+                        "description": (
+                            "Rules to run. Default: headers + broken_auth + bola + "
+                            "function_authz (mass_assignment excluded — it mutates server "
+                            "state, opt in explicitly)."
+                        ),
+                    },
+                    "severity_threshold": {
+                        "type": "string",
+                        "enum": ["critical", "high", "medium", "low", "info"],
+                        "default": "medium",
+                        "description": "Minimum severity to include in `findings`. Lower-severity findings counted in `findings_below_threshold_count`.",
+                    },
+                    "base_url": {
+                        "type": "string",
+                        "description": "Override spec's `servers[0].url`. Use when the spec is hosted separately from the API.",
+                    },
+                    "timeout_s": {
+                        "type": "integer",
+                        "default": 30,
+                        "description": "Per-request timeout. Default 30s.",
+                    },
+                },
+                "required": ["spec_url"],
+            },
+        ),
     ]
 
 
@@ -890,6 +965,26 @@ async def _dispatch(name: str, args: dict) -> list[TextContent]:
                 text_block,
             ]
         return [text_block]
+
+    if name == "run_api_security_scan":
+        # v0.8.0: OWASP API Top 10 rule-based scan. The runner does
+        # synchronous I/O (requests.* and urllib for spec load) so we
+        # punt it to a thread the same way visual_challenge does.
+        from .runners.api_security import run_scan
+        args = args or {}
+        result = await asyncio.to_thread(
+            run_scan,
+            args.get("spec_url", ""),
+            auth=args.get("auth"),
+            categories=args.get("categories"),
+            severity_threshold=args.get("severity_threshold", "medium"),
+            base_url=args.get("base_url"),
+            timeout_s=args.get("timeout_s", 30),
+        )
+        return [TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )]
 
     return [TextContent(type="text", text=f"未知的 tool: {name}")]
 

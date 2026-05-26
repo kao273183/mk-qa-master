@@ -4,7 +4,7 @@ Catches the "easy" regressions that an MCP catalog or first-time user will
 hit before they get to a real test run:
 - package imports cleanly
 - the MCP Server() is instantiable
-- list_tools() returns the full advertised surface (currently 18 tools)
+- list_tools() returns the full advertised surface (currently 19 tools)
 - dispatch table covers every declared tool (no name typos / unwired tools)
 
 Per issue #35: the QA / testing MCP should have a CI smoke test of its
@@ -34,6 +34,8 @@ EXPECTED_TOOLS = {
     # v0.7.0 — AI Visual Challenge Solver (reCAPTCHA v2 image-grid)
     "inspect_visual_challenge",
     "solve_visual_challenge",
+    # v0.8.0 — OWASP API Security Top 10 rule-based scanner
+    "run_api_security_scan",
 }
 
 
@@ -57,15 +59,16 @@ def test_list_tools_returns_advertised_surface():
     assert not missing, f"Expected tools missing from list_tools(): {missing}"
 
 
-def test_list_tools_count_matches_advertised_18():
-    """If the count drifts, README and the family-site claim of '18 tools'
-    is stale. Catch that here before users do. v0.7.0 brought the count
-    from 16 to 18 by adding inspect_visual_challenge + solve_visual_challenge.
+def test_list_tools_count_matches_advertised_19():
+    """If the count drifts, README and the family-site claim of '19 tools'
+    is stale. Catch that here before users do.
+    v0.7.0 brought the count from 16 to 18 (visual challenge solver).
+    v0.8.0 brought it from 18 to 19 (run_api_security_scan).
     """
     from mk_qa_master.server import list_tools
 
     declared = {t.name for t in asyncio.run(list_tools())}
-    assert len(declared) == 18, f"Expected 18 tools, got {len(declared)}: {sorted(declared)}"
+    assert len(declared) == 19, f"Expected 19 tools, got {len(declared)}: {sorted(declared)}"
 
 
 def test_visual_challenge_tools_registered():
