@@ -1,10 +1,15 @@
 # Sample mobile CAPTCHA app — `examples/sample_captcha_mobile_app/`
 
+> ⚠️ **v0.8 Maestro-driver mobile work was parked.** See
+> [`docs/v0.8-mobile-postmortem.md`](../../docs/v0.8-mobile-postmortem.md)
+> for why. This app still builds and runs correctly as a WKWebView
+> reference and is the natural starting point for any future Appium
+> pivot or in-app bridge experiment.
+
 A minimal SwiftUI iOS app that loads the v0.7 reCAPTCHA-shaped fixture
-(`examples/sample_captcha_fixture/`) in a `WKWebView`. Used by the
-v0.8 Tier 1 dogfood pipeline so Maestro can drive an **actual iOS
-Simulator** through the full inspect → judge → solve cycle without
-ever calling Google.
+(`examples/sample_captcha_fixture/`) in a `WKWebView`. Originally
+shipped as the Tier 1 target for the v0.8 Maestro mobile dogfood (now
+parked).
 
 The fixture HTML is unchanged from the Playwright desktop dogfood —
 this app is just the iOS-side container that gives Maestro a WebView

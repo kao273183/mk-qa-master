@@ -1,5 +1,15 @@
 """v0.8 spike — measure real Maestro CLI wall-clock cost.
 
+⚠️  HISTORICAL — v0.8.0 mobile work was parked 2026-05-26. See
+    docs/v0.8-mobile-postmortem.md for the architectural blocker
+    that ended the effort. Specifically: this script's `runScript`
+    flow only asserts rc == 0; it never reads `output.dpr` back.
+    The JS errored silently in Maestro's GraalJS sandbox (no
+    `window` available), but rc stayed 0, so the spike reported
+    success. The **latency findings remain valid**; the inferred
+    "runScript reads WebView DOM" capability does NOT — runScript
+    runs in a Kotlin-side sandbox, not in the device WebView.
+
 The v0.8 PRD assumes each tap / runScript / screenshot is a separate
 `maestro test` subprocess invocation, since the CLI primitives we want
 (tap-at-coords, eval-JS) only exist as YAML flow commands — not as

@@ -212,11 +212,6 @@ class _ChallengeRecord:
     # the AI client keeps finding matches that never resolve. Distinct
     # from attempts_used (which counts Verify-button presses).
     rounds_used: int = 0
-    # v0.8.0 PR 5 — maestro-specific bookkeeping. Both default to safe
-    # no-op values for the Playwright path; populated by the inspect
-    # tool when _driver="maestro".
-    _maestro_device_id: str | None = None
-    _maestro_verify_xy: tuple[int, int] | None = None
 
 
 # ---- LRU + TTL cache -------------------------------------------------------
@@ -429,101 +424,10 @@ def inspect_visual_challenge_tool(arguments: dict[str, Any]) -> dict[str, Any]:
 
     arguments = arguments or {}
     driver_name = (arguments.get("_driver") or "playwright").lower()
-    if driver_name not in ("playwright", "maestro"):
+    if driver_name != "playwright":
         return _driver_not_implemented_response(driver_name)
     page = arguments.get("_page")
     selector = arguments.get("selector")
-
-    # v0.8.0 PR 4: maestro driver lands for inspect_challenge.
-    # Construct it from the maestro-specific args and short-circuit the
-    # Playwright-page check below. solve_visual_challenge_tool still
-    # routes maestro to driver_not_implemented until PR 5.
-    if driver_name == "maestro":
-        app_id = arguments.get("_maestro_app_id")
-        device_id = arguments.get("_maestro_device_id")
-        if not app_id:
-            return {
-                "error": "no_maestro_app_id",
-                "retryable": False,
-                "hint": (
-                    "_driver=maestro requires _maestro_app_id (the foreground "
-                    "app's bundle id / package name)."
-                ),
-            }
-        from .visual_challenge_driver import MaestroDriver, _maestro_cli_available
-
-        if not _maestro_cli_available():
-            return {
-                "error": "no_maestro_cli",
-                "retryable": False,
-                "hint": (
-                    "_driver=maestro requires the Maestro CLI on PATH. "
-                    "Install: curl -Ls https://get.maestro.mobile.dev | bash"
-                ),
-            }
-
-        try:
-            driver = MaestroDriver(
-                app_id=app_id,
-                device_id=device_id,
-                fingerprints=_FINGERPRINTS,
-            )
-            detection = driver.detect_challenge(selector_override=selector)
-        except RuntimeError as e:
-            return {"error": "maestro_setup_failed", "retryable": False, "hint": str(e)}
-        except Exception as e:
-            _telemetry_outcome(None)
-            return {
-                "error": "detection_failed",
-                "retryable": True,
-                "hint": f"{type(e).__name__}: {e}",
-            }
-
-        if detection is None:
-            return {
-                "error": "no_challenge_present",
-                "retryable": False,
-                "hint": (
-                    "No CAPTCHA iframe matched on the active WebView. "
-                    "Confirm the app is in the foreground and the page "
-                    "with the CAPTCHA is loaded."
-                ),
-            }
-
-        challenge_id = uuid.uuid4().hex[:12]
-        expires_at = _now() + timedelta(seconds=_CACHE_TTL_SECONDS)
-        rec = _ChallengeRecord(
-            challenge_id=challenge_id,
-            expires_at=expires_at,
-            grid_layout=detection["grid_layout"],
-            tile_count=detection["tile_count"],
-            tiles=detection["tiles"],
-            challenge_text=detection["challenge_text"],
-            fingerprint=detection["fingerprint"],
-            fingerprint_id=detection["fingerprint_id"],
-            fingerprint_config=detection["fingerprint_config"],
-            domain=app_id,  # for maestro path, "domain" stores the app id
-            page=None,
-            frame_locator=detection.get("frame_locator"),
-            # v0.8.0 PR 5: stash maestro-specific state on the record so
-            # solve_visual_challenge_tool can reconstruct a MaestroDriver
-            # without re-asking the AI client.
-            _maestro_device_id=device_id,
-            _maestro_verify_xy=detection.get("_maestro_verify_xy"),
-        )
-        _store_challenge(rec)
-        return {
-            "challenge_id": challenge_id,
-            "screenshot_base64": detection["screenshot_base64"],
-            "challenge_text": rec.challenge_text,
-            "grid_layout": rec.grid_layout,
-            "tile_count": rec.tile_count,
-            "tiles": rec.tiles,
-            "expires_at": rec.expires_at.isoformat(),
-            "fingerprint": rec.fingerprint,
-            "_coord_method": detection.get("_coord_method", "maestro_runscript"),
-            "_driver": "maestro",
-        }
 
     if page is None:
         # v0.7.0 does not yet broker its own Playwright session; the
@@ -663,7 +567,7 @@ def solve_visual_challenge_tool(arguments: dict[str, Any]) -> dict[str, Any]:
 
     arguments = arguments or {}
     driver_name = (arguments.get("_driver") or "playwright").lower()
-    if driver_name not in ("playwright", "maestro"):
+    if driver_name != "playwright":
         return _driver_not_implemented_response(driver_name)
     challenge_id = arguments.get("challenge_id")
     selected = arguments.get("selected_tile_indices") or []
@@ -728,45 +632,12 @@ def solve_visual_challenge_tool(arguments: dict[str, Any]) -> dict[str, Any]:
         }
 
     # Execute the click chain — route through the v0.8.0 driver layer
-    # (PRD §4). For maestro path, reconstruct a MaestroDriver from the
-    # record's stashed app_id (in `domain`) + device_id; otherwise use
-    # PlaywrightDriver as before.
-    if driver_name == "maestro":
-        from .visual_challenge_driver import MaestroDriver, _maestro_cli_available
+    # (PRD §4). Same caveat as inspect: PlaywrightDriver.execute_solve()
+    # is a thin facade over the legacy `_execute_solve()` for v0.7
+    # behavior parity. MaestroDriver (v0.8.0 step 3) will swap in.
+    from .visual_challenge_driver import PlaywrightDriver
 
-        if not _maestro_cli_available():
-            return {
-                "status": "error",
-                "challenge_id": challenge_id,
-                "attempts_remaining": rec.attempts_remaining,
-                "token": None,
-                "hint": (
-                    "_driver=maestro requires the Maestro CLI on PATH. "
-                    "Install: curl -Ls https://get.maestro.mobile.dev | bash"
-                ),
-            }
-        try:
-            driver = MaestroDriver(
-                app_id=rec.domain,
-                device_id=rec._maestro_device_id,
-                fingerprints=_FINGERPRINTS,
-            )
-        except ValueError as e:
-            return {
-                "status": "error",
-                "challenge_id": challenge_id,
-                "attempts_remaining": rec.attempts_remaining,
-                "token": None,
-                "hint": (
-                    "Cannot reconstruct MaestroDriver from challenge record: "
-                    f"{e}. The record may have been inspected via _driver=playwright."
-                ),
-            }
-    else:
-        from .visual_challenge_driver import PlaywrightDriver
-
-        driver = PlaywrightDriver(rec.page)
-
+    driver = PlaywrightDriver(rec.page)
     try:
         result = driver.execute_solve(
             rec, selected, timeout_seconds=cfg["timeout"]
