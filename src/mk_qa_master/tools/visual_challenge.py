@@ -475,8 +475,17 @@ def inspect_visual_challenge_tool(arguments: dict[str, Any]) -> dict[str, Any]:
         }
 
     # Detect + screenshot the challenge -----------------------------------
+    # v0.8.0 step 1: route through the driver layer (PRD §4). For
+    # `_driver="playwright"` (the only supported driver in this release),
+    # `PlaywrightDriver.detect_challenge()` is a thin facade over the
+    # legacy `_detect_visual_challenge()` — zero behavior change. Once
+    # `_driver="maestro"` ships, the same call site will pick up the
+    # mega-YAML detection path with no further changes here.
+    from .visual_challenge_driver import PlaywrightDriver
+
+    driver = PlaywrightDriver(page)
     try:
-        detection = _detect_visual_challenge(page, selector_override=selector)
+        detection = driver.detect_challenge(selector_override=selector)
     except Exception as e:
         _telemetry_outcome(None)
         return {
@@ -622,9 +631,17 @@ def solve_visual_challenge_tool(arguments: dict[str, Any]) -> dict[str, Any]:
             "hint": f"tile indices out of range: {bad} (valid: 0..{rec.tile_count - 1})",
         }
 
-    # Execute the click chain.
+    # Execute the click chain — route through the v0.8.0 driver layer
+    # (PRD §4). Same caveat as inspect: PlaywrightDriver.execute_solve()
+    # is a thin facade over the legacy `_execute_solve()` for v0.7
+    # behavior parity. MaestroDriver (v0.8.0 step 3) will swap in.
+    from .visual_challenge_driver import PlaywrightDriver
+
+    driver = PlaywrightDriver(rec.page)
     try:
-        result = _execute_solve(rec, selected, timeout_seconds=cfg["timeout"])
+        result = driver.execute_solve(
+            rec, selected, timeout_seconds=cfg["timeout"]
+        )
     except Exception as e:
         _telemetry_outcome(False)
         return {
