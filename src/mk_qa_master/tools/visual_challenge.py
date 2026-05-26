@@ -424,10 +424,96 @@ def inspect_visual_challenge_tool(arguments: dict[str, Any]) -> dict[str, Any]:
 
     arguments = arguments or {}
     driver_name = (arguments.get("_driver") or "playwright").lower()
-    if driver_name != "playwright":
+    if driver_name not in ("playwright", "maestro"):
         return _driver_not_implemented_response(driver_name)
     page = arguments.get("_page")
     selector = arguments.get("selector")
+
+    # v0.8.0 PR 4: maestro driver lands for inspect_challenge.
+    # Construct it from the maestro-specific args and short-circuit the
+    # Playwright-page check below. solve_visual_challenge_tool still
+    # routes maestro to driver_not_implemented until PR 5.
+    if driver_name == "maestro":
+        app_id = arguments.get("_maestro_app_id")
+        device_id = arguments.get("_maestro_device_id")
+        if not app_id:
+            return {
+                "error": "no_maestro_app_id",
+                "retryable": False,
+                "hint": (
+                    "_driver=maestro requires _maestro_app_id (the foreground "
+                    "app's bundle id / package name)."
+                ),
+            }
+        from .visual_challenge_driver import MaestroDriver, _maestro_cli_available
+
+        if not _maestro_cli_available():
+            return {
+                "error": "no_maestro_cli",
+                "retryable": False,
+                "hint": (
+                    "_driver=maestro requires the Maestro CLI on PATH. "
+                    "Install: curl -Ls https://get.maestro.mobile.dev | bash"
+                ),
+            }
+
+        try:
+            driver = MaestroDriver(
+                app_id=app_id,
+                device_id=device_id,
+                fingerprints=_FINGERPRINTS,
+            )
+            detection = driver.detect_challenge(selector_override=selector)
+        except RuntimeError as e:
+            return {"error": "maestro_setup_failed", "retryable": False, "hint": str(e)}
+        except Exception as e:
+            _telemetry_outcome(None)
+            return {
+                "error": "detection_failed",
+                "retryable": True,
+                "hint": f"{type(e).__name__}: {e}",
+            }
+
+        if detection is None:
+            return {
+                "error": "no_challenge_present",
+                "retryable": False,
+                "hint": (
+                    "No CAPTCHA iframe matched on the active WebView. "
+                    "Confirm the app is in the foreground and the page "
+                    "with the CAPTCHA is loaded."
+                ),
+            }
+
+        challenge_id = uuid.uuid4().hex[:12]
+        expires_at = _now() + timedelta(seconds=_CACHE_TTL_SECONDS)
+        rec = _ChallengeRecord(
+            challenge_id=challenge_id,
+            expires_at=expires_at,
+            grid_layout=detection["grid_layout"],
+            tile_count=detection["tile_count"],
+            tiles=detection["tiles"],
+            challenge_text=detection["challenge_text"],
+            fingerprint=detection["fingerprint"],
+            fingerprint_id=detection["fingerprint_id"],
+            fingerprint_config=detection["fingerprint_config"],
+            domain=app_id,  # for maestro path, "domain" stores the app id
+            page=None,
+            frame_locator=detection.get("frame_locator"),
+        )
+        _store_challenge(rec)
+        return {
+            "challenge_id": challenge_id,
+            "screenshot_base64": detection["screenshot_base64"],
+            "challenge_text": rec.challenge_text,
+            "grid_layout": rec.grid_layout,
+            "tile_count": rec.tile_count,
+            "tiles": rec.tiles,
+            "expires_at": rec.expires_at.isoformat(),
+            "fingerprint": rec.fingerprint,
+            "_coord_method": detection.get("_coord_method", "maestro_runscript"),
+            "_driver": "maestro",
+        }
 
     if page is None:
         # v0.7.0 does not yet broker its own Playwright session; the
