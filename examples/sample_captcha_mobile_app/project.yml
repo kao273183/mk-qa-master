@@ -1,0 +1,57 @@
+# XcodeGen spec — minimal iOS app that loads the v0.7 reCAPTCHA-shaped
+# fixture (examples/sample_captcha_fixture/) in a WKWebView. Used by the
+# v0.8 Tier 1 dogfood pipeline: Maestro drives this app on an iOS
+# Simulator to exercise the full inspect→solve cycle without touching
+# Google's network.
+#
+# Generate the .xcodeproj:
+#   xcodegen generate          # from this directory
+#
+# See README.md for build / install / launch.
+
+name: SampleCaptchaApp
+options:
+  bundleIdPrefix: dev.mkqa
+  deploymentTarget:
+    iOS: "16.4"
+  developmentLanguage: en
+  generateEmptyDirectories: true
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    # Sample app is unsigned — meant for booted simulator only.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: ""
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGNING_ALLOWED: NO
+
+targets:
+  SampleCaptchaApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+        excludes:
+          - "Info.plist"
+      # Folder reference — preserves the directory structure so that
+      # `iframe.html` sits alongside `index.html` in the bundle under
+      # FixtureHTML/. Matches the `subdirectory: "FixtureHTML"` lookup
+      # in FixtureWebView.swift.
+      #
+      # The Resources/FixtureHTML directory is populated by build.sh
+      # (rsync from ../sample_captcha_fixture) before `xcodegen
+      # generate` runs, so we keep a single source of truth for the
+      # fixture HTML while still giving Xcode a stable local path.
+      - path: Resources/FixtureHTML
+        type: folder
+        buildPhase: resources
+    info:
+      path: Sources/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.mkqa.SampleCaptchaApp
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_FILE: Sources/Info.plist
