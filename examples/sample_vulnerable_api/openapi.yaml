@@ -1,0 +1,212 @@
+openapi: 3.0.3
+info:
+  title: Sample Vulnerable API (mk-qa-master v0.8 fixture)
+  version: 0.1.0
+  description: |
+    Deliberately-vulnerable endpoints used as ground truth for the
+    v0.8.0 API security testing suite. Each OWASP API Top 10 category
+    in scope has a vulnerable (`/vuln/...`) and a safe (`/safe/...`)
+    counterpart so the scanner can be evaluated for both true-positive
+    and false-positive behavior.
+    DO NOT deploy this app to any reachable network.
+
+servers:
+  - url: http://127.0.0.1:5099
+    description: Local-only dev server
+
+# Two declared security schemes:
+#  - `bearerAuth`: HS256 JWT obtained from /login
+#  - none for endpoints that don't require auth
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: {type: string}
+        password: {type: string}
+    LoginResponse:
+      type: object
+      properties:
+        token: {type: string}
+    Order:
+      type: object
+      properties:
+        id: {type: integer}
+        owner_id: {type: integer}
+        item: {type: string}
+        total: {type: number}
+    Profile:
+      type: object
+      properties:
+        username: {type: string}
+        role: {type: string}
+        sub: {type: integer}
+    SignupRequest:
+      type: object
+      required: [username, password]
+      additionalProperties: false
+      properties:
+        username: {type: string}
+        password: {type: string}
+    User:
+      type: object
+      properties:
+        id: {type: integer}
+        role: {type: string}
+    DataResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: {type: integer}
+
+paths:
+  /login:
+    post:
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LoginRequest'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LoginResponse'}
+        '401':
+          description: Invalid credentials
+
+  /health:
+    get:
+      operationId: health
+      responses:
+        '200':
+          description: OK
+
+  # ── OWASP API1 (BOLA / IDOR) ─────────────────────────────────────────
+  /vuln/orders/{order_id}:
+    get:
+      operationId: vulnGetOrder
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: path
+          name: order_id
+          required: true
+          schema: {type: integer}
+      x-vulnerable: API1-BOLA
+      responses:
+        '200':
+          description: Returns ANY order to ANY authenticated user (vulnerable)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order'}
+        '401': {description: Unauthorized}
+        '404': {description: Not found}
+
+  /safe/me/orders:
+    get:
+      operationId: safeMyOrders
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Returns only orders owned by the caller
+        '401': {description: Unauthorized}
+
+  # ── OWASP API2 (Broken Authentication) ───────────────────────────────
+  /vuln/profile:
+    get:
+      operationId: vulnGetProfile
+      security: [{bearerAuth: []}]
+      x-vulnerable: API2-BrokenAuth
+      responses:
+        '200': {description: Accepts alg:none / ignores exp (vulnerable)}
+        '401': {description: Unauthorized}
+
+  /safe/profile:
+    get:
+      operationId: safeGetProfile
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Strict JWT validation}
+        '401': {description: Unauthorized}
+
+  # ── OWASP API3 (Mass Assignment) ─────────────────────────────────────
+  /vuln/signup:
+    post:
+      operationId: vulnSignup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            # NB: schema declares only username+password but the
+            # implementation persists every field — that mismatch is
+            # exactly what the mass-assignment scanner catches.
+            schema: {$ref: '#/components/schemas/SignupRequest'}
+      x-vulnerable: API3-MassAssignment
+      responses:
+        '201': {description: Created (with EVERY submitted field persisted)}
+
+  /safe/signup:
+    post:
+      operationId: safeSignup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SignupRequest'}
+      responses:
+        '201': {description: Created (only whitelisted fields persisted)}
+
+  # ── OWASP API5 (Broken Function Level Authz) ─────────────────────────
+  /vuln/admin/users:
+    get:
+      operationId: vulnAdminUsers
+      security: [{bearerAuth: []}]
+      x-vulnerable: API5-FunctionAuthz
+      responses:
+        '200': {description: Accessible by any authenticated user (vulnerable)}
+        '401': {description: Unauthorized}
+
+  /safe/admin/users:
+    get:
+      operationId: safeAdminUsers
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Admin-only}
+        '401': {description: Unauthorized}
+        '403': {description: Forbidden (non-admin)}
+
+  # ── OWASP API8 (Security Misconfiguration) ───────────────────────────
+  /vuln/data:
+    get:
+      operationId: vulnData
+      x-vulnerable: API8-Misconfig
+      parameters:
+        - in: query
+          name: crash
+          schema: {type: string, enum: ["1"]}
+          required: false
+          description: Pass crash=1 to trigger a verbose stack-trace 500
+      responses:
+        '200': {description: Loose CORS + missing security headers}
+        '500': {description: Verbose stack-trace error (vulnerable)}
+
+  /safe/data:
+    get:
+      operationId: safeData
+      parameters:
+        - in: query
+          name: crash
+          schema: {type: string, enum: ["1"]}
+          required: false
+      responses:
+        '200': {description: Strict CORS + full security headers}
+        '500': {description: Generic error}
