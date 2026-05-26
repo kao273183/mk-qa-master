@@ -325,6 +325,8 @@ output.tile_count = 0;
 output.cells_json = "[]";
 output.viewport_w = window.innerWidth;
 output.viewport_h = window.innerHeight;
+output.verify_x = 0;
+output.verify_y = 0;
 try {{
   const ifr = document.querySelector('{iframe_selector_css}');
   if (ifr) {{
@@ -348,6 +350,17 @@ try {{
         }});
       }}
       output.cells_json = JSON.stringify(arr);
+      // v0.8.0 PR 5: capture verify button center for downstream solve
+      // mega-YAML. Maestro's tapOn can't reach CSS selectors inside a
+      // WebView — we tap at coordinates, so we need to know where the
+      // button is right now. Re-probed every inspect; cached on the
+      // ChallengeRecord until the next inspect or expiry.
+      const vbtn = frame.querySelector('{verify_button_selector}');
+      if (vbtn) {{
+        const vr = vbtn.getBoundingClientRect();
+        output.verify_x = Math.round(ifrRect.left + vr.left + vr.width / 2);
+        output.verify_y = Math.round(ifrRect.top + vr.top + vr.height / 2);
+      }}
     }}
   }}
 }} catch (e) {{
@@ -372,6 +385,56 @@ def _build_inspect_yaml(
         f"- takeScreenshot: {screenshot_name}\n"
         f"- runScript: {probe_js_path}\n"
     )
+
+
+# Token-read JS — runs after Verify tap. Synchronous: just reads the
+# textarea value and returns it. Maestro's runScript is sync-only, so
+# we can't poll within JS; callers handle "token not ready yet" by
+# retrying the whole solve cycle.
+_READ_TOKEN_JS_TEMPLATE = """\
+output.token = "";
+try {{
+  const t = document.querySelector('{response_token_selector}');
+  if (t) output.token = t.value || "";
+}} catch (e) {{
+  output.error = String(e && e.message || e);
+}}
+"""
+
+
+def _build_solve_yaml(
+    app_id: str,
+    tile_taps: list[tuple[int, int]],
+    verify_xy: tuple[int, int],
+    read_token_js_path: str,
+    screenshot_name: str,
+    settle_ms: int = 5000,
+) -> str:
+    """Compose the solve-phase mega-YAML:
+      1. tapOn each tile center (point: "x, y")
+      2. tapOn the Verify button center
+      3. waitForAnimationToEnd — let vendor JS settle + write the token
+      4. takeScreenshot — for the HTML reporter / debug trail
+      5. runScript: read_token.js — output.token populated if success
+
+    All inlined into one `maestro test` subprocess; per-spike data, total
+    cost ~37 s for a 5-tile round vs ~5×30 s = 2.5 min if split per-op.
+    """
+    lines: list[str] = [
+        f"appId: {app_id}",
+        "---",
+    ]
+    for x, y in tile_taps:
+        lines.append("- tapOn:")
+        lines.append(f'    point: "{x}, {y}"')
+    vx, vy = verify_xy
+    lines.append("- tapOn:")
+    lines.append(f'    point: "{vx}, {vy}"')
+    lines.append("- waitForAnimationToEnd:")
+    lines.append(f"    timeout: {settle_ms}")
+    lines.append(f"- takeScreenshot: {screenshot_name}")
+    lines.append(f"- runScript: {read_token_js_path}")
+    return "\n".join(lines) + "\n"
 
 
 # Regex grabs `output.foo = bar` lines from `maestro test` stdout.
@@ -498,14 +561,145 @@ class MaestroDriver:
     ) -> dict[str, Any]:
         """Click tiles + Verify + read token via one solve mega-YAML.
 
-        PR 5 implements this. PR 4 (this commit) raises so callers see
-        a clear error rather than a silent skip.
+        Records `attempts_used` / `attempts_remaining` like the
+        Playwright path. Returns the same shape as the v0.7
+        `_execute_solve()` function — `{status, challenge_id,
+        attempts_remaining, token, hint, ...}` — so the caller in
+        visual_challenge.py can treat both drivers uniformly.
         """
-        raise NotImplementedError(
-            "MaestroDriver.execute_solve is implemented in v0.8.0 PR 5. "
-            "Detect_challenge works (PR 4); solve mega-YAML generation "
-            "lands in the next PR per docs/prd-v0.8-mobile-webview-captcha.md §8."
+        if not _maestro_cli_available():
+            raise RuntimeError(
+                "Maestro CLI is not on PATH. "
+                "Install: brew install maestro"
+            )
+
+        record.attempts_used += 1
+        record.attempts_remaining = max(0, 3 - record.attempts_used)
+
+        fp = record.fingerprint_config or {}
+        response_token_selector = fp.get(
+            "response_token_selector", 'textarea[name="g-recaptcha-response"]'
         )
+
+        # Tile tap targets — center of each selected tile in device
+        # logical pixels. The record's `tiles` array carries the
+        # absolute coords (origin = device top-left) captured by the
+        # inspect probe; assumes the WebView fills the visible area.
+        # PR 6+ refines this with explicit WebView offset for
+        # non-full-screen WebViews.
+        tile_taps: list[tuple[int, int]] = []
+        for idx in selected_tile_indices:
+            if idx < 0 or idx >= len(record.tiles):
+                return {
+                    "status": "error",
+                    "challenge_id": record.challenge_id,
+                    "attempts_remaining": record.attempts_remaining,
+                    "token": None,
+                    "hint": f"tile index {idx} out of range (0..{len(record.tiles) - 1})",
+                }
+            tile = record.tiles[idx]
+            cx = int(tile["viewport_x"] + tile["w"] / 2)
+            cy = int(tile["viewport_y"] + tile["h"] / 2)
+            tile_taps.append((cx, cy))
+
+        verify_xy = getattr(record, "_maestro_verify_xy", None) or (0, 0)
+        if verify_xy == (0, 0):
+            return {
+                "status": "failed",
+                "challenge_id": record.challenge_id,
+                "attempts_remaining": record.attempts_remaining,
+                "token": None,
+                "hint": (
+                    "Verify button coords not captured during inspect — the "
+                    "vendor-specific selector found no match. Re-inspect or "
+                    "check that the verify_button_selector in the fingerprint "
+                    "table still matches the rendered DOM."
+                ),
+            }
+
+        wd = self._workdir_path()
+        read_token_path = wd / "read_token.js"
+        read_token_path.write_text(
+            _READ_TOKEN_JS_TEMPLATE.format(
+                response_token_selector=response_token_selector.replace("'", "\\'"),
+            ),
+            encoding="utf-8",
+        )
+
+        screenshot_name = f"solve_{os.getpid()}_{record.attempts_used}"
+        yaml_body = _build_solve_yaml(
+            app_id=self._app_id,
+            tile_taps=tile_taps,
+            verify_xy=verify_xy,
+            read_token_js_path=str(read_token_path),
+            screenshot_name=screenshot_name,
+        )
+        yaml_path = wd / "solve.yaml"
+        yaml_path.write_text(yaml_body, encoding="utf-8")
+
+        try:
+            proc = self._maestro_test(yaml_path)
+        except subprocess.TimeoutExpired:
+            return {
+                "status": "error",
+                "challenge_id": record.challenge_id,
+                "attempts_remaining": record.attempts_remaining,
+                "token": None,
+                "hint": (
+                    f"Maestro solve subprocess exceeded {self._timeout_s}s. "
+                    "Increase QA_TIMEOUT_SECONDS or check device responsiveness."
+                ),
+            }
+        except OSError as e:
+            return {
+                "status": "error",
+                "challenge_id": record.challenge_id,
+                "attempts_remaining": record.attempts_remaining,
+                "token": None,
+                "hint": f"Maestro subprocess failed: {type(e).__name__}: {e}",
+            }
+
+        if proc.returncode != 0:
+            return {
+                "status": "failed",
+                "challenge_id": record.challenge_id,
+                "attempts_remaining": record.attempts_remaining,
+                "token": None,
+                "hint": (
+                    f"Maestro solve flow exit_code={proc.returncode}. "
+                    f"stderr_tail: {(proc.stderr or '')[-400:]}"
+                ),
+            }
+
+        fields = _parse_runscript_output(proc.stdout or "")
+        token = fields.get("token", "") or ""
+
+        if token:
+            return {
+                "status": "passed",
+                "challenge_id": record.challenge_id,
+                "attempts_remaining": record.attempts_remaining,
+                "token": token,
+                "hint": (
+                    f"Tiles {selected_tile_indices} clicked via Maestro. "
+                    "CAPTCHA verified. Resume your test."
+                ),
+            }
+
+        # No token in textarea — solve failed. Caller can retry the
+        # whole inspect/judge/solve cycle, capped by attempts_remaining.
+        return {
+            "status": "failed",
+            "challenge_id": record.challenge_id,
+            "attempts_remaining": record.attempts_remaining,
+            "token": None,
+            "hint": (
+                "Verify tap succeeded but the response textarea is still "
+                "empty. The vendor may have rejected the selection (try "
+                "another round) or the response_token_selector is wrong "
+                "for this vendor variant."
+            ),
+        }
 
     # ---- Internals ------------------------------------------------------
 
@@ -526,6 +720,7 @@ class MaestroDriver:
                 fingerprint_id=fingerprint["id"],
                 challenge_text_selector=fingerprint["challenge_text_selector"].replace("'", "\\'"),
                 tile_cell_selector=fingerprint["tile_cell_selector"].replace("'", "\\'"),
+                verify_button_selector=fingerprint["verify_button_selector"].replace("'", "\\'"),
             ),
             encoding="utf-8",
         )
@@ -585,6 +780,16 @@ class MaestroDriver:
             for i, cell in enumerate(cells[:tile_count])
         ]
 
+        # v0.8.0 PR 5: the probe also captures the verify button center
+        # so execute_solve can tap there without re-probing. 0,0 means
+        # the button wasn't found this round; the record carries this
+        # forward to solve which surfaces a clear failure.
+        try:
+            verify_x = int(float(fields.get("verify_x", "0") or "0"))
+            verify_y = int(float(fields.get("verify_y", "0") or "0"))
+        except ValueError:
+            verify_x, verify_y = 0, 0
+
         return {
             "screenshot_base64": screenshot_b64,
             "challenge_text": fields.get("challenge_text", "") or "(challenge text unavailable)",
@@ -599,6 +804,12 @@ class MaestroDriver:
             # frame_locator here. Caller treats this as opaque.
             "frame_locator": iframe_selector_css,
             "_coord_method": "maestro_runscript",
+            # v0.8.0 PR 5 — maestro-specific: tap target for Verify.
+            # PlaywrightDriver doesn't set this (it taps via CSS
+            # selector in the frame). The visual_challenge layer
+            # passes this through to the record so execute_solve can
+            # consume it.
+            "_maestro_verify_xy": (verify_x, verify_y),
         }
 
     def _maestro_test(self, yaml_path: Path) -> subprocess.CompletedProcess:
