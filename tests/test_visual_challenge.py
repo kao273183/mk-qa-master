@@ -768,3 +768,81 @@ def test_solve_dynamic_mode_rounds_cap(monkeypatch):
     })
     assert final["status"] == "passed"
     assert final["token"] == "fake-recaptcha-token-abc123"
+
+
+# ---------------------------------------------------------------------------
+# v0.8 driver-argument surface (forward-compatible — actual maestro
+# implementation lands in v0.8.0; see docs/prd-v0.8-mobile-webview-captcha.md)
+# ---------------------------------------------------------------------------
+
+def test_inspect_default_driver_is_playwright(monkeypatch):
+    """Omitting `_driver` must preserve v0.7 behavior — playwright path runs."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    page = _make_mock_page()
+    out = vc.inspect_visual_challenge_tool({"_page": page})
+    # v0.7 happy path returns a challenge_id; surfacing the new arg must
+    # not regress that.
+    assert "challenge_id" in out
+    assert out.get("error") != "driver_not_implemented"
+
+
+def test_inspect_explicit_playwright_driver_works(monkeypatch):
+    """Explicitly passing `_driver='playwright'` is also accepted."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    page = _make_mock_page()
+    out = vc.inspect_visual_challenge_tool({"_page": page, "_driver": "playwright"})
+    assert "challenge_id" in out
+    assert out.get("error") != "driver_not_implemented"
+
+
+def test_inspect_maestro_driver_returns_not_implemented(monkeypatch):
+    """`_driver='maestro'` is on the v0.8 roadmap — surfacing the arg now
+    keeps API shape stable, but actual execution must refuse cleanly so
+    AI clients get a clear 'not yet' signal."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    page = _make_mock_page()
+    out = vc.inspect_visual_challenge_tool({"_page": page, "_driver": "maestro"})
+    assert out["error"] == "driver_not_implemented"
+    assert "supported_drivers" in out
+    assert out["supported_drivers"] == ["playwright"]
+    assert "v0.8" in out["hint"].lower() or "maestro" in out["hint"].lower()
+
+
+def test_inspect_driver_name_is_case_insensitive(monkeypatch):
+    """Case shouldn't matter — `_driver='MAESTRO'` still routes to the
+    not-implemented response, not silently fall through to playwright."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    page = _make_mock_page()
+    out = vc.inspect_visual_challenge_tool({"_page": page, "_driver": "Maestro"})
+    assert out["error"] == "driver_not_implemented"
+
+
+def test_solve_maestro_driver_returns_not_implemented(monkeypatch):
+    """Solve must also refuse `_driver='maestro'` for symmetry — otherwise
+    you could inspect with the default and solve with a future driver,
+    which doesn't make sense."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    page = _make_mock_page()
+    inspected = vc.inspect_visual_challenge_tool({"_page": page})
+    out = vc.solve_visual_challenge_tool({
+        "challenge_id": inspected["challenge_id"],
+        "selected_tile_indices": [0],
+        "confirm": True,
+        "_driver": "maestro",
+    })
+    assert out["error"] == "driver_not_implemented"
+
+
+def test_solve_default_driver_still_works(monkeypatch):
+    """Sanity: omitting `_driver` on solve must preserve v0.7 behavior end-to-end."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    page = _make_mock_page()
+    inspected = vc.inspect_visual_challenge_tool({"_page": page})
+    out = vc.solve_visual_challenge_tool({
+        "challenge_id": inspected["challenge_id"],
+        "selected_tile_indices": [0, 4],
+        "confirm": True,
+    })
+    # v0.7 happy path; the new arg must not regress it.
+    assert out["status"] == "passed"
+    assert out.get("error") != "driver_not_implemented"

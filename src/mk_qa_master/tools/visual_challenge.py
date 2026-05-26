@@ -279,6 +279,27 @@ def _consent_required_response() -> dict[str, Any]:
     }
 
 
+def _driver_not_implemented_response(driver_name: str) -> dict[str, Any]:
+    """Reserved for the v0.8 `_driver=maestro` path. Until v0.8 ships, any
+    non-default driver name returns this error rather than silently falling
+    back to playwright — so AI clients targeting future drivers see a clear
+    "not yet" signal instead of getting a desktop solve they didn't ask for.
+
+    See docs/prd-v0.8-mobile-webview-captcha.md for the roadmap.
+    """
+    return {
+        "error": "driver_not_implemented",
+        "retryable": False,
+        "hint": (
+            f"Driver {driver_name!r} is not yet implemented. "
+            "v0.7.x ships 'playwright' only. The 'maestro' driver "
+            "(mobile WebView CAPTCHA solving) is tracked in "
+            "docs/prd-v0.8-mobile-webview-captcha.md and will ship in v0.8.0."
+        ),
+        "supported_drivers": ["playwright"],
+    }
+
+
 def _domain_of(url: str) -> str:
     """Lowercase hostname (no port, no path). Empty string if unparseable."""
     if not url:
@@ -380,6 +401,13 @@ def inspect_visual_challenge_tool(arguments: dict[str, Any]) -> dict[str, Any]:
       page_id: str | None — reserved for future multi-page sessions;
         ignored in v0.7.x (single active page only).
       selector: str | None — override auto-detect.
+      _driver: str = "playwright" — driver layer to use. Currently only
+        "playwright" is implemented; "maestro" (mobile WebView) is on
+        the v0.8.0 roadmap (`docs/prd-v0.8-mobile-webview-captcha.md`).
+        Surfacing the arg now keeps the MCP tool surface stable across
+        v0.7 → v0.8.
+      _maestro_device_id: str | None — reserved for the v0.8 Maestro
+        driver. Ignored when `_driver != "maestro"`.
       _page: Playwright page object (test hook).
 
     Returns the structured payload documented in PRD §8. Error shapes:
@@ -388,12 +416,16 @@ def inspect_visual_challenge_tool(arguments: dict[str, Any]) -> dict[str, Any]:
       - {"error": "forbidden_domain", ...}
       - {"error": "no_challenge_present", ...}
       - {"error": "no_active_page", ...}
+      - {"error": "driver_not_implemented", ...}  (when _driver requests a future driver)
     """
     cfg = _config_snapshot()
     if not cfg["consent"]:
         return _consent_required_response()
 
     arguments = arguments or {}
+    driver_name = (arguments.get("_driver") or "playwright").lower()
+    if driver_name != "playwright":
+        return _driver_not_implemented_response(driver_name)
     page = arguments.get("_page")
     selector = arguments.get("selector")
 
@@ -515,12 +547,19 @@ def solve_visual_challenge_tool(arguments: dict[str, Any]) -> dict[str, Any]:
     `fingerprint` field on the inspect response tells the AI client
     which vendor is active (ratified decision #5 in
     docs/prd-v0.7.1-hcaptcha.md §11).
+
+    `_driver` arg accepted for symmetry with `inspect_visual_challenge`.
+    Currently only "playwright" is implemented; "maestro" returns
+    `driver_not_implemented` (v0.8.0 roadmap).
     """
     cfg = _config_snapshot()
     if not cfg["consent"]:
         return _consent_required_response()
 
     arguments = arguments or {}
+    driver_name = (arguments.get("_driver") or "playwright").lower()
+    if driver_name != "playwright":
+        return _driver_not_implemented_response(driver_name)
     challenge_id = arguments.get("challenge_id")
     selected = arguments.get("selected_tile_indices") or []
     confirm = bool(arguments.get("confirm", False))
