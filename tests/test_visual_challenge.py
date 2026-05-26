@@ -846,3 +846,94 @@ def test_solve_default_driver_still_works(monkeypatch):
     # v0.7 happy path; the new arg must not regress it.
     assert out["status"] == "passed"
     assert out.get("error") != "driver_not_implemented"
+
+
+# ---------------------------------------------------------------------------
+# v0.8 PR 2: PlaywrightDriver — Protocol + facade behaviour
+# ---------------------------------------------------------------------------
+
+def test_playwright_driver_satisfies_protocol(monkeypatch):
+    """PlaywrightDriver instances should isinstance-check positive against
+    the runtime-checkable VisualChallengeDriver Protocol. This locks down
+    the public method surface so PR 3+'s deeper refactor can't accidentally
+    rename a method out from under MaestroDriver."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    from mk_qa_master.tools.visual_challenge_driver import (
+        PlaywrightDriver,
+        VisualChallengeDriver,
+    )
+
+    driver = PlaywrightDriver(page=MagicMock())
+    assert isinstance(driver, VisualChallengeDriver)
+
+
+def test_playwright_driver_detect_delegates_to_legacy_function(monkeypatch):
+    """In PR 2 the PlaywrightDriver.detect_challenge() is a thin facade —
+    it forwards to the existing _detect_visual_challenge() module function.
+    This test pins that contract so PR 3 can replace the body confidently."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    from mk_qa_master.tools.visual_challenge_driver import PlaywrightDriver
+
+    page = _make_mock_page()
+    driver = PlaywrightDriver(page=page)
+
+    direct = vc._detect_visual_challenge(page, selector_override=None)
+    via_driver = driver.detect_challenge(selector_override=None)
+
+    # The shape must match exactly — same keys, same primitive values.
+    # `frame_locator` is a MagicMock identity that varies per call, so
+    # we compare the rest.
+    assert set(direct.keys()) == set(via_driver.keys())
+    for k in ("screenshot_base64", "challenge_text", "grid_layout",
+              "tile_count", "fingerprint", "fingerprint_id", "_coord_method"):
+        assert direct[k] == via_driver[k], f"driver disagreed on {k!r}"
+
+
+def test_inspect_tool_uses_playwright_driver(monkeypatch):
+    """End-to-end smoke that inspect_visual_challenge_tool routes through
+    PlaywrightDriver. Validates by patching the driver class and asserting
+    the patched instance saw the call."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    from mk_qa_master.tools import visual_challenge_driver as vcd
+
+    calls = []
+    real_detect = vcd.PlaywrightDriver.detect_challenge
+
+    def spy_detect(self, selector_override=None):
+        calls.append(("detect_challenge", selector_override))
+        return real_detect(self, selector_override=selector_override)
+
+    monkeypatch.setattr(vcd.PlaywrightDriver, "detect_challenge", spy_detect)
+
+    page = _make_mock_page()
+    out = vc.inspect_visual_challenge_tool({"_page": page})
+    assert "challenge_id" in out
+    assert calls == [("detect_challenge", None)]
+
+
+def test_solve_tool_uses_playwright_driver(monkeypatch):
+    """Same smoke for solve_visual_challenge_tool."""
+    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
+    from mk_qa_master.tools import visual_challenge_driver as vcd
+
+    calls = []
+    real_execute = vcd.PlaywrightDriver.execute_solve
+
+    def spy_execute(self, record, selected_tile_indices, timeout_seconds):
+        calls.append(("execute_solve", list(selected_tile_indices)))
+        return real_execute(
+            self, record, selected_tile_indices,
+            timeout_seconds=timeout_seconds,
+        )
+
+    monkeypatch.setattr(vcd.PlaywrightDriver, "execute_solve", spy_execute)
+
+    page = _make_mock_page()
+    inspected = vc.inspect_visual_challenge_tool({"_page": page})
+    vc.solve_visual_challenge_tool({
+        "challenge_id": inspected["challenge_id"],
+        "selected_tile_indices": [0, 2],
+        "confirm": True,
+    })
+
+    assert calls == [("execute_solve", [0, 2])]
