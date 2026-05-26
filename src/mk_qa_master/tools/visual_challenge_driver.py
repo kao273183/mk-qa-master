@@ -136,12 +136,14 @@ class PlaywrightDriver:
     ) -> dict[str, Any] | None:
         # Local import dodges the circular dependency: visual_challenge.py
         # imports this module for the Driver protocol, and we delegate
-        # back to its legacy detection function. Once PR 3 extracts the
-        # detection logic into this class, this import goes away.
+        # back to its detection function. The function now (v0.8.0 PR 3)
+        # takes the driver itself rather than a page, so each inline
+        # Playwright call from v0.7.x routes through the per-op methods
+        # below.
         from . import visual_challenge as _vc
 
         return _vc._detect_visual_challenge(
-            self._page, selector_override=selector_override
+            self, selector_override=selector_override
         )
 
     def execute_solve(
@@ -153,16 +155,124 @@ class PlaywrightDriver:
         from . import visual_challenge as _vc
 
         return _vc._execute_solve(
+            self,
             record,
             selected_tile_indices,
             timeout_seconds=timeout_seconds,
         )
 
-    # PR 3+ will add finer-grained methods here, e.g.:
+    # ---- Per-operation methods (PR 3 — replaces inline Playwright calls
+    # in _detect_visual_challenge / _execute_solve)
     #
-    #     def find_iframe(self, selector: str) -> Any | None: ...
-    #     def iframe_bbox(self, handle: Any) -> dict | None: ...
-    #     def iframe_screenshot_png(self, handle: Any) -> bytes: ...
-    #     def click_at(self, x: float, y: float) -> None: ...
+    # Each method is intentionally defensive: catches the broad Playwright
+    # exception space and returns a sentinel (None / "" / 0 / False / b"")
+    # so callers in visual_challenge.py can write straight-line code
+    # without try/except scaffolding around every locator call. The
+    # legacy functions already swallowed these exceptions; the methods
+    # below preserve that behavior verbatim.
     #
-    # then refactor _detect_visual_challenge() to drive through them.
+    # MaestroDriver (v0.8.0 step 3) will implement the same methods,
+    # accumulating ops in a YAML buffer and committing them on a
+    # subsequent commit_batch() call (added then).
+
+    # --- Iframe-level (page scope) ----------------------------------------
+
+    def find_iframe(self, selector: str) -> Any | None:
+        """Return first iframe element matching `selector`, or None."""
+        try:
+            locator = self._page.locator(selector)
+            count = locator.count() if hasattr(locator, "count") else 0
+        except Exception:
+            return None
+        if count and count > 0:
+            return locator.first
+        return None
+
+    def element_bbox(self, element: Any) -> dict | None:
+        """Return `{x, y, width, height}` of `element`, or None."""
+        try:
+            return element.bounding_box() or None
+        except Exception:
+            return None
+
+    def element_screenshot_png(self, element: Any) -> bytes:
+        """Return PNG bytes of `element`'s screenshot, or empty bytes."""
+        try:
+            return element.screenshot() or b""
+        except Exception:
+            return b""
+
+    def frame_locator_for(self, iframe_selector: str) -> Any | None:
+        """Return Playwright frame_locator for the iframe at `iframe_selector`."""
+        try:
+            return self._page.frame_locator(iframe_selector)
+        except Exception:
+            return None
+
+    # --- Frame-level (inside iframe scope) -------------------------------
+
+    def frame_count(self, frame: Any, selector: str) -> int:
+        """Count of elements matching `selector` inside `frame`."""
+        try:
+            return frame.locator(selector).count() or 0
+        except Exception:
+            return 0
+
+    def frame_inner_text(self, frame: Any, selector: str) -> str:
+        """Stripped `inner_text()` of first match inside `frame`. Empty
+        string when no match or on error."""
+        try:
+            loc = frame.locator(selector)
+            if loc.count() > 0:
+                return (loc.first.inner_text() or "").strip()
+        except Exception:
+            pass
+        return ""
+
+    def frame_cell_bbox(
+        self, frame: Any, selector: str, index: int
+    ) -> dict | None:
+        """Return `{x, y, width, height}` of the `index`-th element
+        matching `selector` inside `frame`, or None."""
+        try:
+            return frame.locator(selector).nth(index).bounding_box() or None
+        except Exception:
+            return None
+
+    def frame_evaluate_on_selector(
+        self, frame: Any, selector: str, script: str
+    ) -> Any:
+        """Run `script` (a JS expression bound to the first matching
+        element) inside `frame`. Returns whatever the script returns,
+        or None on error."""
+        try:
+            return frame.locator(selector).evaluate(script)
+        except Exception:
+            return None
+
+    def frame_click_element(self, frame: Any, selector: str) -> bool:
+        """Click the first element matching `selector` inside `frame`.
+        Returns True iff a click was actually issued."""
+        try:
+            loc = frame.locator(selector)
+            if loc.count() > 0:
+                loc.first.click()
+                return True
+        except Exception:
+            pass
+        return False
+
+    # --- Page-level interactions ------------------------------------------
+
+    def click_at(self, x: float, y: float) -> None:
+        """Click at page viewport coords `(x, y)`. Re-raises on failure
+        so the caller can surface a precise error message — distinct
+        from the swallow-and-return semantics on the locator helpers
+        because a missed coordinate click is a hard failure, not a
+        no-op."""
+        self._page.mouse.click(x, y)
+
+    def page_evaluate(self, script: str) -> Any:
+        """Run `script` in the page context (NOT inside an iframe).
+        Returns the script's return value."""
+        return self._page.evaluate(script)

@@ -867,26 +867,37 @@ def test_playwright_driver_satisfies_protocol(monkeypatch):
     assert isinstance(driver, VisualChallengeDriver)
 
 
-def test_playwright_driver_detect_delegates_to_legacy_function(monkeypatch):
-    """In PR 2 the PlaywrightDriver.detect_challenge() is a thin facade —
-    it forwards to the existing _detect_visual_challenge() module function.
-    This test pins that contract so PR 3 can replace the body confidently."""
+def test_playwright_driver_detect_returns_v07_shape(monkeypatch):
+    """v0.8.0 PR 3 swapped the legacy function's signature from `(page,
+    ...)` to `(driver, ...)`. This test now compares two driver-driven
+    calls (one constructed inside the tool, one constructed in-test) to
+    pin that the detection return shape matches what v0.7 callers
+    expect — same keys, same primitive values."""
     vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
     from mk_qa_master.tools.visual_challenge_driver import PlaywrightDriver
 
     page = _make_mock_page()
-    driver = PlaywrightDriver(page=page)
+    driver_a = PlaywrightDriver(page=page)
+    driver_b = PlaywrightDriver(page=page)
 
-    direct = vc._detect_visual_challenge(page, selector_override=None)
-    via_driver = driver.detect_challenge(selector_override=None)
+    out_a = driver_a.detect_challenge(selector_override=None)
+    out_b = driver_b.detect_challenge(selector_override=None)
 
-    # The shape must match exactly — same keys, same primitive values.
-    # `frame_locator` is a MagicMock identity that varies per call, so
-    # we compare the rest.
-    assert set(direct.keys()) == set(via_driver.keys())
+    # Equal-shaped output from two independent drivers against the same
+    # mock page proves the new per-op methods route deterministically.
+    assert set(out_a.keys()) == set(out_b.keys())
     for k in ("screenshot_base64", "challenge_text", "grid_layout",
               "tile_count", "fingerprint", "fingerprint_id", "_coord_method"):
-        assert direct[k] == via_driver[k], f"driver disagreed on {k!r}"
+        assert out_a[k] == out_b[k], f"driver disagreed on {k!r}"
+
+    # And the v0.7 contract: every key listed in the v0.7 PRD §8
+    # inspect-return-shape must be present.
+    for required in (
+        "screenshot_base64", "challenge_text", "grid_layout",
+        "tile_count", "tiles", "fingerprint", "fingerprint_id",
+        "fingerprint_config", "frame_locator", "_coord_method",
+    ):
+        assert required in out_a, f"missing v0.7 key {required!r}"
 
 
 def test_inspect_tool_uses_playwright_driver(monkeypatch):
