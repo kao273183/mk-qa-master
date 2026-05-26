@@ -1,0 +1,39 @@
+# GitGuardian configuration for mk-qa-master.
+# See https://docs.gitguardian.com/ggshield-docs/reference/config-file for full schema.
+
+# Why this file exists
+# ---------------------
+# v0.8.0 introduced `examples/sample_vulnerable_api/` — a deliberately-
+# vulnerable Flask app used as the Tier 1 ground truth for the OWASP
+# API Security Top 10 rule scanner. It ships with pre-seeded users
+# (alice / bob / admin) carrying static passwords, plus a fixed HS256
+# JWT secret. Those credentials are NOT real — they exist solely so
+# the scanner has known-positive auth state to forge tokens against.
+#
+# Safety notes (mirrored from the fixture's README + module docstring):
+#   - The Flask app binds to 127.0.0.1:5099 only; never reachable beyond
+#     the host that runs it.
+#   - The JWT secret string is literally
+#     "vulnerable-api-test-secret-do-not-deploy" — it self-documents.
+#   - The OpenAPI spec marks every vulnerable endpoint with
+#     `x-vulnerable: API#-name`.
+#
+# Without these test-fixture credentials, the v0.8.0 rule suite has
+# no ground truth to scan against — the same trap the v0.8 mobile
+# postmortem identified ("don't trust capability claims that aren't
+# end-to-end validated"). So we don't redact them; we tell scanners
+# to skip the directory instead.
+
+version: 2
+
+secret:
+  ignored-paths:
+    - "examples/sample_vulnerable_api/**"
+    # PRs 3-5 will also pre-seed test users for auth-pair scenarios
+    # (broken_auth, bola, mass_assignment). Same fixture pattern.
+    - "tests/test_security_rules_*.py"
+    - "examples/sample_vulnerable_api/tests/**"
+
+  # Per-finding ignores would also work, but path-based is cleaner
+  # since the entire fixture directory is purpose-built and won't
+  # ever hold a real credential.
