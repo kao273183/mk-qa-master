@@ -795,43 +795,32 @@ def test_inspect_explicit_playwright_driver_works(monkeypatch):
     assert out.get("error") != "driver_not_implemented"
 
 
-def test_inspect_maestro_driver_routes_to_maestro_path(monkeypatch):
-    """v0.8 PR 4 wires `_driver='maestro'` to construct a MaestroDriver.
-    Without the required _maestro_app_id, the tool now errors with the
-    maestro-specific message (was: driver_not_implemented in PR 1)."""
+def test_inspect_maestro_driver_returns_not_implemented(monkeypatch):
+    """`_driver='maestro'` is on the v0.8 roadmap — surfacing the arg now
+    keeps API shape stable, but actual execution must refuse cleanly so
+    AI clients get a clear 'not yet' signal."""
     vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
     page = _make_mock_page()
     out = vc.inspect_visual_challenge_tool({"_page": page, "_driver": "maestro"})
-    # PR 4 routes to the maestro path, which requires _maestro_app_id.
-    assert out["error"] == "no_maestro_app_id"
-    assert "_maestro_app_id" in out["hint"]
+    assert out["error"] == "driver_not_implemented"
+    assert "supported_drivers" in out
+    assert out["supported_drivers"] == ["playwright"]
+    assert "v0.8" in out["hint"].lower() or "maestro" in out["hint"].lower()
 
 
-def test_inspect_driver_name_is_case_insensitive_for_maestro(monkeypatch):
+def test_inspect_driver_name_is_case_insensitive(monkeypatch):
     """Case shouldn't matter — `_driver='MAESTRO'` still routes to the
-    maestro path, not silently fall through to playwright."""
+    not-implemented response, not silently fall through to playwright."""
     vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
     page = _make_mock_page()
     out = vc.inspect_visual_challenge_tool({"_page": page, "_driver": "Maestro"})
-    # Should hit the maestro path (no_maestro_app_id), not playwright nor
-    # driver_not_implemented.
-    assert out["error"] == "no_maestro_app_id"
-
-
-def test_inspect_unknown_driver_still_returns_not_implemented(monkeypatch):
-    """Any driver name other than 'playwright' / 'maestro' must still
-    return driver_not_implemented — e.g., a future 'appium' that hasn't
-    landed yet shouldn't accidentally fall through to playwright."""
-    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
-    page = _make_mock_page()
-    out = vc.inspect_visual_challenge_tool({"_page": page, "_driver": "appium"})
     assert out["error"] == "driver_not_implemented"
-    assert "appium" in out["hint"].lower() or "supported_drivers" in out
 
 
-def test_solve_unknown_driver_returns_not_implemented(monkeypatch):
-    """`_driver='appium'` (or any unsupported name) on solve must error
-    cleanly — not silently fall through to playwright."""
+def test_solve_maestro_driver_returns_not_implemented(monkeypatch):
+    """Solve must also refuse `_driver='maestro'` for symmetry — otherwise
+    you could inspect with the default and solve with a future driver,
+    which doesn't make sense."""
     vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
     page = _make_mock_page()
     inspected = vc.inspect_visual_challenge_tool({"_page": page})
@@ -839,7 +828,7 @@ def test_solve_unknown_driver_returns_not_implemented(monkeypatch):
         "challenge_id": inspected["challenge_id"],
         "selected_tile_indices": [0],
         "confirm": True,
-        "_driver": "appium",
+        "_driver": "maestro",
     })
     assert out["error"] == "driver_not_implemented"
 
@@ -959,372 +948,3 @@ def test_solve_tool_uses_playwright_driver(monkeypatch):
     })
 
     assert calls == [("execute_solve", [0, 2])]
-
-
-# ---------------------------------------------------------------------------
-# v0.8 PR 4: MaestroDriver — detect_challenge mega-YAML mode
-# ---------------------------------------------------------------------------
-
-def _make_maestro_stdout(*, fingerprint_id="recaptcha-v2-image",
-                        challenge_text="Select all images with traffic lights",
-                        tile_count=9, viewport_w=393, viewport_h=852,
-                        verify_x=200, verify_y=800, cells=None):
-    """Construct a fake `maestro test` stdout matching the `output.*`
-    assignment format our probe writes."""
-    if cells is None:
-        cells = [{"x": (i % 3) * 100, "y": 100 + (i // 3) * 100, "w": 97, "h": 97}
-                 for i in range(tile_count)]
-    cells_json = __import__("json").dumps(cells)
-    return (
-        f"output.fingerprint_id = {fingerprint_id}\n"
-        f"output.challenge_text = {challenge_text}\n"
-        f"output.tile_count = {tile_count}\n"
-        f"output.cells_json = {cells_json}\n"
-        f"output.viewport_w = {viewport_w}\n"
-        f"output.viewport_h = {viewport_h}\n"
-        f"output.verify_x = {verify_x}\n"
-        f"output.verify_y = {verify_y}\n"
-    )
-
-
-def test_maestro_driver_satisfies_protocol(monkeypatch):
-    """MaestroDriver should isinstance-check positive against the
-    @runtime_checkable VisualChallengeDriver Protocol."""
-    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
-    from mk_qa_master.tools.visual_challenge_driver import (
-        MaestroDriver, VisualChallengeDriver,
-    )
-    driver = MaestroDriver(app_id="com.example.app")
-    assert isinstance(driver, VisualChallengeDriver)
-
-
-def test_maestro_driver_requires_app_id(monkeypatch):
-    """Constructing without app_id is a programmer error — raise early."""
-    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
-    from mk_qa_master.tools.visual_challenge_driver import MaestroDriver
-    import pytest as _pytest
-    with _pytest.raises(ValueError, match="app_id"):
-        MaestroDriver(app_id="")
-
-
-def test_maestro_driver_detect_returns_v07_shape(monkeypatch):
-    """Happy path: mocked subprocess returns probe output; driver builds
-    the v0.7-shape detection dict."""
-    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
-    from mk_qa_master.tools import visual_challenge_driver as vcd
-    from unittest.mock import MagicMock as _MM
-
-    fingerprint = {
-        "id": "recaptcha-v2-image",
-        "iframe_selectors": ["iframe[title*='recaptcha']"],
-        "challenge_text_selector": ".rc-imageselect-desc",
-        "tile_table_selector": ".rc-imageselect-table",
-        "tile_cell_selector": ".rc-imageselect-table td",
-        "verify_button_selector": "#recaptcha-verify-button",
-        "response_token_selector": 'textarea[name="g-recaptcha-response"]',
-    }
-
-    driver = vcd.MaestroDriver(
-        app_id="com.example.app", fingerprints=[fingerprint]
-    )
-
-    # Mock subprocess so we don't actually shell out to maestro.
-    fake_proc = _MM()
-    fake_proc.returncode = 0
-    fake_proc.stdout = _make_maestro_stdout()
-    fake_proc.stderr = ""
-    monkeypatch.setattr(
-        vcd, "_maestro_cli_available", lambda: True,
-    )
-    monkeypatch.setattr(
-        vcd.MaestroDriver, "_maestro_test", lambda self, p: fake_proc,
-    )
-
-    result = driver.detect_challenge()
-    assert result is not None
-    assert result["fingerprint_id"] == "recaptcha-v2-image"
-    assert result["grid_layout"] == "3x3"
-    assert result["tile_count"] == 9
-    assert result["challenge_text"] == "Select all images with traffic lights"
-    assert len(result["tiles"]) == 9
-    assert result["_coord_method"] == "maestro_runscript"
-    # v0.7 contract — every required key present
-    for k in ("screenshot_base64", "challenge_text", "grid_layout",
-              "tile_count", "tiles", "fingerprint", "fingerprint_id",
-              "fingerprint_config", "frame_locator", "_coord_method"):
-        assert k in result
-
-
-def test_maestro_driver_returns_none_when_no_match(monkeypatch):
-    """Probe runs cleanly but iframe not on screen → fingerprint_id empty
-    → driver moves to next candidate. With only one fingerprint, returns None."""
-    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
-    from mk_qa_master.tools import visual_challenge_driver as vcd
-    from unittest.mock import MagicMock as _MM
-
-    fingerprint = {
-        "id": "recaptcha-v2-image",
-        "iframe_selectors": ["iframe[title*='recaptcha']"],
-        "challenge_text_selector": ".desc",
-        "tile_table_selector": ".table",
-        "tile_cell_selector": ".cell",
-        "verify_button_selector": "#verify",
-        "response_token_selector": "textarea",
-    }
-    driver = vcd.MaestroDriver(
-        app_id="com.example.app", fingerprints=[fingerprint]
-    )
-
-    fake_proc = _MM()
-    fake_proc.returncode = 0
-    fake_proc.stdout = "output.fingerprint_id = \noutput.tile_count = 0\n"
-    fake_proc.stderr = ""
-    monkeypatch.setattr(vcd, "_maestro_cli_available", lambda: True)
-    monkeypatch.setattr(
-        vcd.MaestroDriver, "_maestro_test", lambda self, p: fake_proc,
-    )
-
-    assert driver.detect_challenge() is None
-
-
-def test_maestro_driver_raises_when_cli_missing(monkeypatch):
-    """No `maestro` on PATH → detect_challenge raises so the tool boundary
-    can return `no_maestro_cli`."""
-    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
-    from mk_qa_master.tools import visual_challenge_driver as vcd
-    monkeypatch.setattr(vcd, "_maestro_cli_available", lambda: False)
-    driver = vcd.MaestroDriver(app_id="com.example.app", fingerprints=[])
-    import pytest as _pytest
-    with _pytest.raises(RuntimeError, match="Maestro CLI"):
-        driver.detect_challenge()
-
-
-def _make_maestro_solve_stdout(*, token="hcaptcha-fake-token-abc123"):
-    """Construct a fake `maestro test` stdout for the solve mega-YAML —
-    includes the token assignment the read_token.js probe writes."""
-    return f"output.token = {token}\n"
-
-
-def test_maestro_driver_execute_solve_happy_path(monkeypatch):
-    """End-to-end mocked: inspect then solve via MaestroDriver. Solve
-    mega-YAML runs; mocked subprocess returns a token; driver wraps it
-    into a v0.7-shape passed status."""
-    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
-    from mk_qa_master.tools import visual_challenge_driver as vcd
-    from unittest.mock import MagicMock as _MM
-
-    fingerprint = {
-        "id": "recaptcha-v2-image",
-        "iframe_selectors": ["iframe[title*='recaptcha']"],
-        "challenge_text_selector": ".rc-imageselect-desc",
-        "tile_table_selector": ".rc-imageselect-table",
-        "tile_cell_selector": ".rc-imageselect-table td",
-        "verify_button_selector": "#recaptcha-verify-button",
-        "response_token_selector": 'textarea[name="g-recaptcha-response"]',
-    }
-
-    driver = vcd.MaestroDriver(
-        app_id="com.example.app", fingerprints=[fingerprint]
-    )
-
-    # Fake subprocess: first call returns inspect output; second returns solve.
-    call_count = [0]
-
-    def fake_test(self, yaml_path):
-        call_count[0] += 1
-        proc = _MM()
-        proc.returncode = 0
-        proc.stderr = ""
-        if call_count[0] == 1:
-            proc.stdout = _make_maestro_stdout()
-        else:
-            proc.stdout = _make_maestro_solve_stdout()
-        return proc
-
-    monkeypatch.setattr(vcd, "_maestro_cli_available", lambda: True)
-    monkeypatch.setattr(vcd.MaestroDriver, "_maestro_test", fake_test)
-
-    # Step 1: inspect (to build a populated record)
-    inspect_result = driver.detect_challenge()
-    assert inspect_result is not None
-
-    # Build a fake record mirroring what visual_challenge.py would build
-    rec = _MM()
-    rec.challenge_id = "test123"
-    rec.attempts_used = 0
-    rec.attempts_remaining = 3
-    rec.fingerprint_config = fingerprint
-    rec.tiles = inspect_result["tiles"]
-    rec._maestro_verify_xy = inspect_result["_maestro_verify_xy"] or (200, 800)
-
-    # Step 2: solve
-    solved = driver.execute_solve(
-        record=rec, selected_tile_indices=[0, 4], timeout_seconds=60
-    )
-    assert solved["status"] == "passed"
-    assert solved["token"] == "hcaptcha-fake-token-abc123"
-    assert solved["attempts_remaining"] == 2
-    assert "Tiles [0, 4] clicked via Maestro" in solved["hint"]
-
-
-def test_maestro_driver_execute_solve_no_verify_xy_fails(monkeypatch):
-    """If inspect didn't capture verify-button coords (e.g., button
-    selector didn't match), solve must surface that cleanly — not try to
-    tap at (0, 0)."""
-    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
-    from mk_qa_master.tools import visual_challenge_driver as vcd
-    from unittest.mock import MagicMock as _MM
-
-    fingerprint = {
-        "id": "recaptcha-v2-image",
-        "iframe_selectors": [],
-        "challenge_text_selector": ".d",
-        "tile_table_selector": ".t",
-        "tile_cell_selector": ".c",
-        "verify_button_selector": "#v",
-        "response_token_selector": "textarea",
-    }
-    driver = vcd.MaestroDriver(app_id="com.example.app", fingerprints=[fingerprint])
-    monkeypatch.setattr(vcd, "_maestro_cli_available", lambda: True)
-
-    rec = _MM()
-    rec.challenge_id = "test123"
-    rec.attempts_used = 0
-    rec.attempts_remaining = 3
-    rec.fingerprint_config = fingerprint
-    rec.tiles = [{"viewport_x": 100, "viewport_y": 100, "w": 50, "h": 50}]
-    rec._maestro_verify_xy = (0, 0)  # not captured
-
-    out = driver.execute_solve(record=rec, selected_tile_indices=[0], timeout_seconds=60)
-    assert out["status"] == "failed"
-    assert "verify_button" in out["hint"].lower() or "Verify button" in out["hint"]
-
-
-def test_maestro_driver_execute_solve_no_token_returned(monkeypatch):
-    """Solve mega-YAML runs but read_token.js returns empty — vendor
-    rejected the selection. Driver surfaces failed (not passed) so caller
-    can retry the inspect/judge cycle."""
-    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
-    from mk_qa_master.tools import visual_challenge_driver as vcd
-    from unittest.mock import MagicMock as _MM
-
-    fingerprint = {
-        "id": "recaptcha-v2-image",
-        "iframe_selectors": [],
-        "challenge_text_selector": ".d",
-        "tile_table_selector": ".t",
-        "tile_cell_selector": ".c",
-        "verify_button_selector": "#v",
-        "response_token_selector": 'textarea[name="g-recaptcha-response"]',
-    }
-    driver = vcd.MaestroDriver(app_id="com.example.app", fingerprints=[fingerprint])
-
-    fake_proc = _MM()
-    fake_proc.returncode = 0
-    fake_proc.stderr = ""
-    fake_proc.stdout = "output.token = \n"  # empty
-    monkeypatch.setattr(vcd, "_maestro_cli_available", lambda: True)
-    monkeypatch.setattr(vcd.MaestroDriver, "_maestro_test", lambda self, p: fake_proc)
-
-    rec = _MM()
-    rec.challenge_id = "test123"
-    rec.attempts_used = 0
-    rec.attempts_remaining = 3
-    rec.fingerprint_config = fingerprint
-    rec.tiles = [{"viewport_x": 100, "viewport_y": 100, "w": 50, "h": 50}]
-    rec._maestro_verify_xy = (200, 800)
-
-    out = driver.execute_solve(record=rec, selected_tile_indices=[0], timeout_seconds=60)
-    assert out["status"] == "failed"
-    assert "textarea is still empty" in out["hint"] or "vendor may have rejected" in out["hint"]
-
-
-def test_solve_tool_routes_maestro_when_record_was_inspected_via_maestro(monkeypatch):
-    """End-to-end: inspect via maestro builds a record with maestro
-    bookkeeping; solve with `_driver=maestro` reconstructs a MaestroDriver
-    from the record's stashed app_id + device_id and executes."""
-    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
-    from mk_qa_master.tools import visual_challenge_driver as vcd
-    from unittest.mock import MagicMock as _MM
-
-    call_count = [0]
-
-    def fake_test(self, yaml_path):
-        call_count[0] += 1
-        proc = _MM()
-        proc.returncode = 0
-        proc.stderr = ""
-        if call_count[0] == 1:
-            proc.stdout = _make_maestro_stdout()
-        else:
-            proc.stdout = _make_maestro_solve_stdout(token="g-fake-token-xyz")
-        return proc
-
-    monkeypatch.setattr(vcd, "_maestro_cli_available", lambda: True)
-    monkeypatch.setattr(vcd.MaestroDriver, "_maestro_test", fake_test)
-
-    inspected = vc.inspect_visual_challenge_tool({
-        "_driver": "maestro",
-        "_maestro_app_id": "com.example.app",
-    })
-    assert "challenge_id" in inspected
-
-    out = vc.solve_visual_challenge_tool({
-        "challenge_id": inspected["challenge_id"],
-        "selected_tile_indices": [0, 4],
-        "confirm": True,
-        "_driver": "maestro",
-    })
-    assert out["status"] == "passed"
-    assert out["token"] == "g-fake-token-xyz"
-
-
-def test_inspect_tool_maestro_without_app_id_errors(monkeypatch):
-    """_driver=maestro requires _maestro_app_id — surface a clear error
-    when missing."""
-    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
-    out = vc.inspect_visual_challenge_tool({"_driver": "maestro"})
-    assert out["error"] == "no_maestro_app_id"
-    assert "_maestro_app_id" in out["hint"]
-
-
-def test_inspect_tool_maestro_without_cli_errors(monkeypatch):
-    """When Maestro CLI isn't installed, return no_maestro_cli at the tool
-    boundary instead of raising or silently falling through."""
-    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
-    from mk_qa_master.tools import visual_challenge_driver as vcd
-    monkeypatch.setattr(vcd, "_maestro_cli_available", lambda: False)
-    out = vc.inspect_visual_challenge_tool({
-        "_driver": "maestro",
-        "_maestro_app_id": "com.example.app",
-    })
-    assert out["error"] == "no_maestro_cli"
-
-
-def test_inspect_tool_maestro_happy_path(monkeypatch):
-    """End-to-end mocked: _driver=maestro + _maestro_app_id with subprocess
-    stubbed → tool returns a challenge_id with the same shape as the
-    playwright path."""
-    vc = _reload_modules_with_env(monkeypatch, QA_VISUAL_CHALLENGE_CONSENT="true")
-    from mk_qa_master.tools import visual_challenge_driver as vcd
-    from unittest.mock import MagicMock as _MM
-
-    fake_proc = _MM()
-    fake_proc.returncode = 0
-    fake_proc.stdout = _make_maestro_stdout()
-    fake_proc.stderr = ""
-    monkeypatch.setattr(vcd, "_maestro_cli_available", lambda: True)
-    monkeypatch.setattr(
-        vcd.MaestroDriver, "_maestro_test", lambda self, p: fake_proc,
-    )
-
-    out = vc.inspect_visual_challenge_tool({
-        "_driver": "maestro",
-        "_maestro_app_id": "com.example.app",
-    })
-
-    assert "challenge_id" in out
-    assert out["grid_layout"] == "3x3"
-    assert out["tile_count"] == 9
-    assert out["_driver"] == "maestro"
-    assert out["_coord_method"] == "maestro_runscript"

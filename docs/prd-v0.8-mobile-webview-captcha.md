@@ -1,6 +1,9 @@
 # mk-qa-master v0.8.0 — Mobile WebView CAPTCHA Solver (mini-PRD)
 
-**Status:** Draft v0.3 — post-spike, mega-YAML architecture locked · **Author:** Jack Kao (kao273183) · **Last updated:** 2026-05-25 · **Target ship:** v0.8.0 within 2 weeks of go-decision
+> ⚠️ **PARKED — read [`docs/v0.8-mobile-postmortem.md`](v0.8-mobile-postmortem.md) before acting on this document.**
+> The mega-YAML architecture below was built on a false assumption about Maestro's `runScript:` directive (it runs in a GraalJS sandbox, not in the device WebView). The Maestro-driver PRs (#54, #55) have been reverted. The Driver Protocol (#52–53) and sample app (#56) are kept. This PRD is preserved as a historical artifact — do not implement against it.
+
+**Status:** ~~Draft v0.3 — post-spike, mega-YAML architecture locked~~ · **PARKED 2026-05-26** · **Author:** Jack Kao (kao273183) · **Last updated:** 2026-05-25
 
 This is a **mini-PRD**, not the full 21-section format. v0.8.0 extends v0.7.x's AI Visual Challenge Solver (reCAPTCHA + hCaptcha + multi-round dynamic-replace) from desktop browser to mobile WebView. Same fingerprint table, same consent model, same multi-round loop — different driver layer.
 
