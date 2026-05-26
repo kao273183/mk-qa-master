@@ -666,7 +666,7 @@ def solve_visual_challenge_tool(arguments: dict[str, Any]) -> dict[str, Any]:
 # ---- Detection ------------------------------------------------------------
 
 def _detect_visual_challenge(
-    page: Any, selector_override: str | None = None
+    driver: Any, selector_override: str | None = None
 ) -> dict[str, Any] | None:
     """Locate a challenge iframe + screenshot + extract tile geometry.
 
@@ -681,6 +681,11 @@ def _detect_visual_challenge(
     *first* fingerprint as the configuration source (this preserves
     v0.7.0's escape hatch for callers passing a custom reCAPTCHA
     selector).
+
+    v0.8.0 PR 3: signature changed from `page` to `driver` — the
+    function now drives a `VisualChallengeDriver` (PlaywrightDriver for
+    v0.7 behavior; MaestroDriver coming in PR 4). Every Playwright API
+    call previously inlined here is now a driver method call.
     """
     # Build the list of (selector, fingerprint_config) pairs we'll probe
     # in order. Selector override path keeps the v0.7.0 contract — the
@@ -700,13 +705,8 @@ def _detect_visual_challenge(
     for sel, fp in candidates:
         if not sel:
             continue
-        try:
-            locator = page.locator(sel)
-            count = locator.count() if hasattr(locator, "count") else 0
-        except Exception:
-            continue
-        if count and count > 0:
-            iframe_element = locator.first
+        iframe_element = driver.find_iframe(sel)
+        if iframe_element is not None:
             matched_selector = sel
             matched_fp = fp
             break
@@ -715,27 +715,20 @@ def _detect_visual_challenge(
         return None
 
     # Bounding box of the iframe in viewport coordinates.
-    try:
-        box = iframe_element.bounding_box() or {}
-    except Exception:
-        box = {}
-
+    box = driver.element_bbox(iframe_element) or {}
     iframe_x = float(box.get("x") or 0)
     iframe_y = float(box.get("y") or 0)
     iframe_w = float(box.get("width") or 0)
     iframe_h = float(box.get("height") or 0)
 
-    # Screenshot — Playwright returns PNG bytes when path is unset.
-    try:
-        png_bytes = iframe_element.screenshot()
-    except Exception:
-        png_bytes = b""
+    # Screenshot — driver returns PNG bytes (empty on failure).
+    png_bytes = driver.element_screenshot_png(iframe_element)
     screenshot_b64 = (
         "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
         if png_bytes else ""
     )
 
-    # Reach inside the cross-origin iframe via Playwright's frame_locator.
+    # Reach inside the cross-origin iframe via the driver's frame_locator.
     # Pull challenge text + cell count via the vendor's selectors.
     challenge_text_selector = matched_fp["challenge_text_selector"]
     tile_table_selector = matched_fp["tile_table_selector"]
@@ -746,31 +739,16 @@ def _detect_visual_challenge(
     # operator, which the old concat broke.
     cells_selector = matched_fp["tile_cell_selector"]
 
-    frame_locator = None
+    frame_locator = driver.frame_locator_for(matched_selector)
     challenge_text = ""
     grid_layout = "3x3"
     tile_count = 9
-    try:
-        frame_locator = page.frame_locator(matched_selector)
-        # Challenge instruction text.
-        try:
-            desc = frame_locator.locator(challenge_text_selector)
-            if desc.count() > 0:
-                challenge_text = (desc.first.inner_text() or "").strip()
-        except Exception:
-            challenge_text = ""
-
-        # Grid layout — count cell elements.
-        try:
-            cells = frame_locator.locator(cells_selector)
-            tile_count = cells.count() or 9
-        except Exception:
-            tile_count = 9
+    if frame_locator is not None:
+        # Challenge instruction text (defensive: empty if missing).
+        challenge_text = driver.frame_inner_text(frame_locator, challenge_text_selector)
+        # Grid layout — count cell elements, default 9 (3x3) when unknown.
+        tile_count = driver.frame_count(frame_locator, cells_selector) or 9
         grid_layout = "4x4" if tile_count == 16 else "3x3"
-    except Exception:
-        # Frame locator failed — fall back to a default 3x3 layout
-        # derived from the bounding box. Useful for test mocks.
-        pass
 
     cols = 4 if grid_layout == "4x4" else 3
     rows = 4 if grid_layout == "4x4" else 3
@@ -796,38 +774,35 @@ def _detect_visual_challenge(
     # production challenges. Kept as the first attempt because, when it
     # does work, it gives the most accurate per-tile coords.
     if frame_locator is not None:
-        try:
-            candidate: list[dict[str, Any]] = []
-            for index in range(tile_count):
-                bb = cells.nth(index).bounding_box()
-                # Tight type check — MagicMock returns MagicMock for
-                # .get() and dict indexing, so this gracefully refuses
-                # non-real bboxes (lets the mock-based unit tests fall
-                # through to the iframe-bbox derivation they assert on).
-                if not (
-                    isinstance(bb, dict)
-                    and isinstance(bb.get("x"), (int, float))
-                    and isinstance(bb.get("y"), (int, float))
-                    and isinstance(bb.get("width"), (int, float))
-                    and isinstance(bb.get("height"), (int, float))
-                    and bb["width"] > 0
-                    and bb["height"] > 0
-                ):
-                    candidate = []
-                    break
-                candidate.append({
-                    "index": index,
-                    "viewport_x": int(round(bb["x"])),
-                    "viewport_y": int(round(bb["y"])),
-                    "w": int(round(bb["width"])),
-                    "h": int(round(bb["height"])),
-                })
-            if len(candidate) == tile_count:
-                tiles = candidate
-                real_cells_resolved = True
-                coord_method = "per_cell_bbox"
-        except Exception:
-            pass
+        candidate: list[dict[str, Any]] = []
+        for index in range(tile_count):
+            bb = driver.frame_cell_bbox(frame_locator, cells_selector, index)
+            # Tight type check — MagicMock returns MagicMock for
+            # .get() and dict indexing, so this gracefully refuses
+            # non-real bboxes (lets the mock-based unit tests fall
+            # through to the iframe-bbox derivation they assert on).
+            if not (
+                isinstance(bb, dict)
+                and isinstance(bb.get("x"), (int, float))
+                and isinstance(bb.get("y"), (int, float))
+                and isinstance(bb.get("width"), (int, float))
+                and isinstance(bb.get("height"), (int, float))
+                and bb["width"] > 0
+                and bb["height"] > 0
+            ):
+                candidate = []
+                break
+            candidate.append({
+                "index": index,
+                "viewport_x": int(round(bb["x"])),
+                "viewport_y": int(round(bb["y"])),
+                "w": int(round(bb["width"])),
+                "h": int(round(bb["height"])),
+            })
+        if len(candidate) == tile_count:
+            tiles = candidate
+            real_cells_resolved = True
+            coord_method = "per_cell_bbox"
 
     # Path 2 (v0.7.3): JS-evaluate getBoundingClientRect on the table
     # element. Playwright's bounding_box() applies actionability /
@@ -843,41 +818,40 @@ def _detect_visual_challenge(
     # for reCAPTCHA + hCaptcha grids because both vendors render fixed-
     # size square tiles inside the table (no padding between cells).
     if not real_cells_resolved and frame_locator is not None:
-        try:
-            js_rect = (
-                "el => {"
-                "  const r = el.getBoundingClientRect();"
-                "  return {x: r.left, y: r.top, width: r.width, height: r.height};"
-                "}"
-            )
-            table_rect = frame_locator.locator(tile_table_selector).evaluate(js_rect)
-            if (
-                isinstance(table_rect, dict)
-                and isinstance(table_rect.get("x"), (int, float))
-                and isinstance(table_rect.get("y"), (int, float))
-                and isinstance(table_rect.get("width"), (int, float))
-                and isinstance(table_rect.get("height"), (int, float))
-                and table_rect["width"] > 0
-                and table_rect["height"] > 0
-            ):
-                t_x = iframe_x + float(table_rect["x"])
-                t_y = iframe_y + float(table_rect["y"])
-                t_w = float(table_rect["width"]) / cols if cols else 0
-                t_h = float(table_rect["height"]) / rows if rows else 0
-                tiles = [
-                    {
-                        "index": i,
-                        "viewport_x": int(round(t_x + (i % cols) * t_w)),
-                        "viewport_y": int(round(t_y + (i // cols) * t_h)),
-                        "w": int(round(t_w)),
-                        "h": int(round(t_h)),
-                    }
-                    for i in range(tile_count)
-                ]
-                real_cells_resolved = True
-                coord_method = "table_rect_js"
-        except Exception:
-            pass
+        js_rect = (
+            "el => {"
+            "  const r = el.getBoundingClientRect();"
+            "  return {x: r.left, y: r.top, width: r.width, height: r.height};"
+            "}"
+        )
+        table_rect = driver.frame_evaluate_on_selector(
+            frame_locator, tile_table_selector, js_rect
+        )
+        if (
+            isinstance(table_rect, dict)
+            and isinstance(table_rect.get("x"), (int, float))
+            and isinstance(table_rect.get("y"), (int, float))
+            and isinstance(table_rect.get("width"), (int, float))
+            and isinstance(table_rect.get("height"), (int, float))
+            and table_rect["width"] > 0
+            and table_rect["height"] > 0
+        ):
+            t_x = iframe_x + float(table_rect["x"])
+            t_y = iframe_y + float(table_rect["y"])
+            t_w = float(table_rect["width"]) / cols if cols else 0
+            t_h = float(table_rect["height"]) / rows if rows else 0
+            tiles = [
+                {
+                    "index": i,
+                    "viewport_x": int(round(t_x + (i % cols) * t_w)),
+                    "viewport_y": int(round(t_y + (i // cols) * t_h)),
+                    "w": int(round(t_w)),
+                    "h": int(round(t_h)),
+                }
+                for i in range(tile_count)
+            ]
+            real_cells_resolved = True
+            coord_method = "table_rect_js"
 
     if not real_cells_resolved:
         # Fallback: divide the iframe bbox into a uniform grid. Inaccurate
@@ -919,6 +893,7 @@ _detect_recaptcha = _detect_visual_challenge
 # ---- Execution ------------------------------------------------------------
 
 def _execute_solve(
+    driver: Any,
     rec: _ChallengeRecord,
     selected_tile_indices: list[int],
     timeout_seconds: int,
@@ -930,8 +905,13 @@ def _execute_solve(
     are sourced from `rec.fingerprint_config` so reCAPTCHA + hCaptcha
     share this code path verbatim — only the configured selectors and
     response-token name differ between vendors.
+
+    v0.8.0 PR 3: signature changed from `(rec, ...)` to `(driver, rec, ...)`.
+    The function now drives a `VisualChallengeDriver` instead of touching
+    `rec.page` directly. `rec.page` is retained on the record for
+    backward compatibility (Playwright-only callers still find it there)
+    but the function no longer reads from it.
     """
-    page = rec.page
     rec.attempts_used += 1
     rec.attempts_remaining = max(0, 3 - rec.attempts_used)
 
@@ -954,14 +934,14 @@ def _execute_solve(
         x = tile["viewport_x"] + tile["w"] / 2
         y = tile["viewport_y"] + tile["h"] / 2
         try:
-            page.mouse.click(x, y)
+            driver.click_at(x, y)
         except Exception as e:
             return {
                 "status": "error",
                 "challenge_id": rec.challenge_id,
                 "attempts_remaining": rec.attempts_remaining,
                 "token": None,
-                "hint": f"mouse.click({x},{y}) failed: {type(e).__name__}: {e}",
+                "hint": f"click_at({x},{y}) failed: {type(e).__name__}: {e}",
             }
         time.sleep(0.1)
 
@@ -979,16 +959,20 @@ def _execute_solve(
         and _is_dynamic_mode(rec.challenge_text)
         and rec.rounds_used < _MAX_DYNAMIC_ROUNDS
     ):
-        # Let new images load + selection animations settle.
+        # Let new images load + selection animations settle. Maintained
+        # via the driver's underlying page handle for now — PR 4 will
+        # promote this to a driver.wait(ms) method so MaestroDriver can
+        # implement it via YAML waitForAnimationToEnd.
         try:
-            page.wait_for_timeout(1500)
+            driver._page.wait_for_timeout(1500)
         except Exception:
             time.sleep(1.5)
-        # Re-detect from the same page. The iframe is still mounted; we
-        # just need a fresh screenshot + updated tile geometry (clicked
-        # tiles often shift slightly after the replacement animation).
+        # Re-detect from the same driver. The iframe is still mounted;
+        # we just need a fresh screenshot + updated tile geometry
+        # (clicked tiles often shift slightly after the replacement
+        # animation).
         try:
-            fresh = _detect_visual_challenge(page)
+            fresh = _detect_visual_challenge(driver)
         except Exception:
             fresh = None
         if fresh is not None:
@@ -1022,13 +1006,9 @@ def _execute_solve(
     # Click the Verify button inside the iframe.
     verify_clicked = False
     if rec.frame_locator is not None:
-        try:
-            verify = rec.frame_locator.locator(verify_button_selector)
-            if verify.count() > 0:
-                verify.first.click()
-                verify_clicked = True
-        except Exception:
-            verify_clicked = False
+        verify_clicked = driver.frame_click_element(
+            rec.frame_locator, verify_button_selector
+        )
 
     if not verify_clicked:
         return {
@@ -1054,7 +1034,7 @@ def _execute_solve(
     token: str | None = None
     while time.monotonic() < deadline:
         try:
-            value = page.evaluate(eval_script)
+            value = driver.page_evaluate(eval_script)
         except Exception:
             value = ""
         if value:
