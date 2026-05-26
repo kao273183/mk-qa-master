@@ -21,14 +21,17 @@ from .bola import (
 )
 from .broken_auth import BrokenAuthRule, rule as broken_auth_rule
 from .headers_misconfig import HeadersMisconfigRule, rule as headers_misconfig_rule
+from .mass_assignment import MassAssignmentRule, rule as mass_assignment_rule
 
 # Registry of rules implemented so far. Ordered for deterministic
-# scanner output. PR-5 will extend this with mass_assignment.
+# scanner output. All 5 in-scope OWASP categories are now present;
+# PR-6 wires the MCP tool and ships v0.8.0.
 ALL_RULES: list[SecurityRule] = [
     headers_misconfig_rule,
     broken_auth_rule,
     bola_rule,
     function_authz_rule,
+    mass_assignment_rule,
 ]
 
 __all__ = [
@@ -40,6 +43,7 @@ __all__ = [
     "Finding",
     "FunctionAuthzRule",
     "HeadersMisconfigRule",
+    "MassAssignmentRule",
     "OperationContext",
     "SecurityRule",
     "Severity",
@@ -47,4 +51,5 @@ __all__ = [
     "broken_auth_rule",
     "function_authz_rule",
     "headers_misconfig_rule",
+    "mass_assignment_rule",
 ]
