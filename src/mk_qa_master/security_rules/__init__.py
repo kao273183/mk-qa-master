@@ -12,21 +12,25 @@ from .base import (
     SecurityRule,
     Severity,
 )
+from .broken_auth import BrokenAuthRule, rule as broken_auth_rule
 from .headers_misconfig import HeadersMisconfigRule, rule as headers_misconfig_rule
 
 # Registry of rules implemented so far. Ordered for deterministic
-# scanner output. PRs 3-5 will extend this list.
+# scanner output. PRs 4-5 will extend this list.
 ALL_RULES: list[SecurityRule] = [
     headers_misconfig_rule,
+    broken_auth_rule,
 ]
 
 __all__ = [
     "ALL_RULES",
     "APIClient",
+    "BrokenAuthRule",
     "Finding",
     "HeadersMisconfigRule",
     "OperationContext",
     "SecurityRule",
     "Severity",
+    "broken_auth_rule",
     "headers_misconfig_rule",
 ]
