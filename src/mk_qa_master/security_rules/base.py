@@ -98,16 +98,55 @@ class OperationContext:
 
 
 @dataclass
+class AuthPair:
+    """Two-user auth context for rules that need cross-user diffing.
+
+    PR-4 introduces this for BOLA (API1) — a vulnerable endpoint
+    returns user-B's object when called with user-A's token. Detecting
+    that requires:
+      - two real, valid tokens (we can't synthesize "user B" from
+        user A's token, because the server should be cryptographically
+        distinguishing them)
+      - knowledge of which object ids each user owns, so the rule
+        knows which forbidden id to substitute into the path
+
+    `bola_test_ids` is the discovery-strategy decision called out in
+    PRD §7.3 — we picked **explicit config** rather than auto-create
+    or seed-endpoint probing. Keeps the rule deterministic and avoids
+    POST/DELETE side effects during a security scan. Future PR-4.1
+    can add auto-seed for users who don't want to maintain the table.
+
+    `fla_admin_paths`: substrings that mark a path as elevated-priv.
+    Function Level Authz rule probes these with the LOW-priv token
+    (user_a) — a 2xx response is the API5 finding.
+    """
+    user_a_token: str
+    user_b_token: str
+    # {"user_a": [1, 3], "user_b": [2]} — ids of objects each user owns.
+    # Required for the BOLA rule; FLA rule doesn't use this.
+    bola_test_ids: dict[str, list[int]] | None = None
+    # Substring matches against the OpenAPI path. Default below if None.
+    fla_admin_paths: list[str] | None = None
+    # Which user is "low-priv" for the FLA rule. Default: user_a.
+    fla_low_priv_user: str = "user_a"
+
+
+@dataclass
 class APIClient:
     """Thin HTTP wrapper used by rules to probe endpoints.
 
     Holds the base URL + default timeout + optional auth token.
     Rules can override the token per-call (for tampering / fuzzing
     scenarios) without mutating the client.
+
+    `auth_pair` is the optional two-user context introduced by PR-4
+    for BOLA + FLA rules. Rules with `requires_auth_pair = True` check
+    this and skip with an INFO finding when missing.
     """
     base_url: str
     timeout_s: float = 10.0
     default_token: str | None = None
+    auth_pair: AuthPair | None = None
 
     def request(
         self,
