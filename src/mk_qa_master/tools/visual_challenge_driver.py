@@ -5,30 +5,33 @@ v0.8 introduces a driver Protocol so a Maestro-backed implementation
 can plug in for mobile WebView solves without rewriting the orchestration
 logic in visual_challenge.py.
 
-This module ships in two stages:
+Rollout history:
 
-  PR 2 (this commit) — Protocol + PlaywrightDriver thin facade that
-                       delegates to the existing module-level functions
-                       in visual_challenge.py. No behavior change; the
-                       Playwright call sites stay where they are. The
-                       seam is now in place for PR 3+ to lift the
-                       per-call abstractions out of the legacy functions.
-
-  PR 3              — extract per-operation methods (find_iframe /
-                       iframe_bbox / cell_bbox / click_at / ...) into
-                       PlaywrightDriver and refactor _detect_visual_challenge
-                       to consume them. Still no behavior change.
-
-  PR 4              — MaestroDriver implementing the same Protocol in
-                       mega-YAML mode (PRD §4). One `maestro test`
-                       subprocess per solve round, ~37 s per round vs
-                       ~9 minutes for a naive per-op design.
+  PR 2 — Protocol + PlaywrightDriver thin facade that delegates to the
+         existing module-level functions in visual_challenge.py.
+  PR 3 — extracted per-operation methods (find_iframe / iframe_bbox /
+         cell_bbox / click_at / ...) into PlaywrightDriver and routed
+         _detect_visual_challenge through them.
+  PR 4 (this commit) — MaestroDriver.detect_challenge in mega-YAML
+         mode. Generates one YAML flow per inspect cycle, runs
+         `maestro test`, parses the runScript output for cell bboxes
+         and challenge text. execute_solve still raises
+         NotImplementedError; PR 5 wires it up.
+  PR 5+ — MaestroDriver.execute_solve mega-YAML + sample mobile fixture
+         + Tier 1/2/3 CI workflows.
 
 The PRD lives at docs/prd-v0.8-mobile-webview-captcha.md. §11 ratifies
 all seven design decisions including mega-YAML mode for MaestroDriver.
 """
 from __future__ import annotations
 
+import json
+import os
+import re
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 
@@ -276,3 +279,365 @@ class PlaywrightDriver:
         """Run `script` in the page context (NOT inside an iframe).
         Returns the script's return value."""
         return self._page.evaluate(script)
+
+
+# ===========================================================================
+# MaestroDriver — mega-YAML mode (v0.8.0 PR 4 onwards)
+# ===========================================================================
+# Per the spike in docs/prd-v0.8-mobile-webview-captcha.md §4, each
+# `maestro test` invocation costs ~30s fixed overhead. To stay viable,
+# MaestroDriver assembles every operation needed for a single round
+# (inspect OR solve) into ONE YAML and runs `maestro test` once. Per-op
+# cost amortizes to ~200ms inside the flow.
+#
+# Trade-off: the AI client returns a tile selection once per round and
+# waits ~37s for that round's mega-YAML to commit. No mid-flow
+# intervention within a round. Multi-round dynamic-replace is preserved
+# (each round = its own mega-YAML, AI re-judges between rounds).
+
+
+def _maestro_cli_available() -> bool:
+    """True when the `maestro` binary is on PATH. Cached negative result
+    surfaces as a clear `no_maestro_cli` error at the tool boundary."""
+    return shutil.which("maestro") is not None
+
+
+# Probe JS that runs inside the WebView during the inspect mega-YAML.
+# Writes everything we need to reconstruct PlaywrightDriver's detect
+# return shape into `output.*` fields that Maestro exposes back.
+#
+# Selectors are passed in via string substitution at YAML-assembly time —
+# the same per-vendor fingerprint table v0.7 uses.
+#
+# `output.fingerprint_id`: vendor id ("recaptcha-v2-image" / "hcaptcha-image")
+#                          when iframe is present, else "" (so the driver
+#                          can report no_challenge_present cleanly).
+# `output.challenge_text`: stripped inner_text of the prompt selector.
+# `output.tile_count`:     count of matched cell elements.
+# `output.cells_json`:     JSON-stringified array of {x, y, w, h} per cell
+#                          in WebView logical pixels.
+# `output.viewport_w/h`:   WebView innerWidth/innerHeight for downstream
+#                          DPR / percentage conversions.
+_INSPECT_PROBE_JS_TEMPLATE = """\
+output.fingerprint_id = "";
+output.challenge_text = "";
+output.tile_count = 0;
+output.cells_json = "[]";
+output.viewport_w = window.innerWidth;
+output.viewport_h = window.innerHeight;
+try {{
+  const ifr = document.querySelector('{iframe_selector_css}');
+  if (ifr) {{
+    output.fingerprint_id = '{fingerprint_id}';
+    let frame = ifr.contentDocument || (ifr.contentWindow && ifr.contentWindow.document);
+    if (frame) {{
+      const desc = frame.querySelector('{challenge_text_selector}');
+      if (desc) output.challenge_text = (desc.innerText || '').trim();
+      const cells = frame.querySelectorAll('{tile_cell_selector}');
+      output.tile_count = cells.length;
+      const arr = [];
+      const ifrRect = ifr.getBoundingClientRect();
+      for (const c of cells) {{
+        const r = c.getBoundingClientRect();
+        // Translate iframe-internal coords back to outer-page logical px.
+        arr.push({{
+          x: Math.round(ifrRect.left + r.left),
+          y: Math.round(ifrRect.top + r.top),
+          w: Math.round(r.width),
+          h: Math.round(r.height),
+        }});
+      }}
+      output.cells_json = JSON.stringify(arr);
+    }}
+  }}
+}} catch (e) {{
+  output.error = String(e && e.message || e);
+}}
+"""
+
+
+def _build_inspect_yaml(
+    app_id: str, probe_js_path: str, screenshot_name: str
+) -> str:
+    """Compose the inspect-phase mega-YAML. Three steps:
+      1. launchApp (clearState: false — preserve session state across rounds)
+      2. takeScreenshot — Maestro writes <name>.png to CWD
+      3. runScript: probe JS file — populates output.* fields
+    """
+    return (
+        f"appId: {app_id}\n"
+        "---\n"
+        "- launchApp:\n"
+        "    clearState: false\n"
+        f"- takeScreenshot: {screenshot_name}\n"
+        f"- runScript: {probe_js_path}\n"
+    )
+
+
+# Regex grabs `output.foo = bar` lines from `maestro test` stdout.
+# Maestro echoes each runScript assignment under "Output:" — format is
+# stable across 2.5+ but we match defensively.
+_OUTPUT_LINE = re.compile(r"^\s*output\.([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*$")
+
+
+def _parse_runscript_output(stdout: str) -> dict[str, str]:
+    """Pull `output.*` field assignments out of `maestro test` stdout."""
+    fields: dict[str, str] = {}
+    for line in stdout.splitlines():
+        m = _OUTPUT_LINE.match(line)
+        if m:
+            fields[m.group(1)] = m.group(2).strip().strip('"')
+    return fields
+
+
+class MaestroDriver:
+    """Drives Maestro CLI in mega-YAML mode for mobile WebView CAPTCHA solving.
+
+    Each driver instance binds to one `app_id` (the foreground app's
+    bundle id / package name) and optionally one `device_id` (Maestro's
+    `--udid` / `--device` value). When `device_id` is omitted, Maestro's
+    auto-discovery picks the first connected device.
+
+    The first call to `detect_challenge` writes a probe JS file to a
+    tempdir, generates the inspect mega-YAML referencing it, and runs
+    `maestro test` once. Subsequent calls reuse the same tempdir.
+
+    PR 4 (this commit) implements `detect_challenge` only. `execute_solve`
+    raises NotImplementedError until PR 5 wires it. The driver_not_
+    implemented response from PR 1 is kept for `execute_solve` until then.
+    """
+
+    # Hard cap for the mega-YAML subprocess. Spike measured ~30 s per
+    # invocation on a warm device; first-call cold can stretch to ~90 s
+    # (driver install + WDA bootstrap). 180 s gives 2× headroom over
+    # cold path.
+    DEFAULT_SUBPROCESS_TIMEOUT_S: float = 180.0
+
+    def __init__(
+        self,
+        app_id: str,
+        device_id: str | None = None,
+        fingerprints: list[dict[str, Any]] | None = None,
+        timeout_s: float | None = None,
+    ):
+        if not app_id:
+            raise ValueError("MaestroDriver requires an app_id (bundle id / package name)")
+        self._app_id = app_id
+        self._device_id = device_id
+        # Fingerprints come from visual_challenge._FINGERPRINTS; passed
+        # in to avoid a circular import. PR 5 will move detection of
+        # which fingerprint matched into the probe JS itself; for PR 4
+        # we iterate fingerprints client-side and pick the first one
+        # whose iframe selector returns a match.
+        self._fingerprints: list[dict[str, Any]] = fingerprints or []
+        self._timeout_s = (
+            float(timeout_s) if timeout_s is not None
+            else self.DEFAULT_SUBPROCESS_TIMEOUT_S
+        )
+        # Lazy-created tempdir for probe JS files + screenshots.
+        self._workdir: Path | None = None
+        # DPR cache keyed by device_id (None when auto-discovery).
+        # Populated on first successful inspect.
+        self._dpr_cache: dict[str | None, float] = {}
+
+    # ---- Public Protocol surface ----------------------------------------
+
+    def detect_challenge(
+        self, selector_override: str | None = None
+    ) -> dict[str, Any] | None:
+        """Run an inspect mega-YAML and return PlaywrightDriver-shaped output.
+
+        Algorithm:
+          1. Pick the fingerprint candidates to probe — `selector_override`
+             pins to the first fingerprint; otherwise iterate
+             `_FINGERPRINTS` in declared order.
+          2. For each candidate, assemble the probe JS + inspect YAML
+             and run `maestro test` once. The probe writes
+             `output.fingerprint_id` empty when the iframe isn't on
+             the current screen → move to next candidate. Non-empty →
+             that vendor matched, parse the rest of the output.
+          3. Return the v0.7-shape detection dict.
+
+        Returns None when no fingerprint matches (no CAPTCHA on the
+        current WebView).
+        """
+        if not _maestro_cli_available():
+            # Surfaced via the tool boundary as `no_maestro_cli`; the
+            # driver layer raises so visual_challenge.py can translate.
+            raise RuntimeError(
+                "Maestro CLI is not on PATH. "
+                "Install: brew install maestro"
+            )
+
+        candidates: list[tuple[str, dict[str, Any]]] = []
+        if selector_override and self._fingerprints:
+            candidates.append((selector_override, self._fingerprints[0]))
+        else:
+            for fp in self._fingerprints:
+                for sel in fp.get("iframe_selectors", []):
+                    candidates.append((sel, fp))
+
+        for iframe_sel, fp in candidates:
+            result = self._run_inspect_probe(iframe_sel, fp)
+            if result is None:
+                # Maestro subprocess errored — skip to next candidate.
+                # PR 5 will distinguish "no device" from "iframe missing".
+                continue
+            if not result.get("fingerprint_id"):
+                # Probe ran cleanly but iframe wasn't on screen.
+                continue
+            return result
+
+        return None
+
+    def execute_solve(
+        self,
+        record: Any,
+        selected_tile_indices: list[int],
+        timeout_seconds: float,
+    ) -> dict[str, Any]:
+        """Click tiles + Verify + read token via one solve mega-YAML.
+
+        PR 5 implements this. PR 4 (this commit) raises so callers see
+        a clear error rather than a silent skip.
+        """
+        raise NotImplementedError(
+            "MaestroDriver.execute_solve is implemented in v0.8.0 PR 5. "
+            "Detect_challenge works (PR 4); solve mega-YAML generation "
+            "lands in the next PR per docs/prd-v0.8-mobile-webview-captcha.md §8."
+        )
+
+    # ---- Internals ------------------------------------------------------
+
+    def _workdir_path(self) -> Path:
+        if self._workdir is None:
+            self._workdir = Path(tempfile.mkdtemp(prefix="mk-qa-maestro-"))
+        return self._workdir
+
+    def _run_inspect_probe(
+        self, iframe_selector_css: str, fingerprint: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Generate + run one inspect mega-YAML; parse the result."""
+        wd = self._workdir_path()
+        probe_path = wd / "inspect_probe.js"
+        probe_path.write_text(
+            _INSPECT_PROBE_JS_TEMPLATE.format(
+                iframe_selector_css=iframe_selector_css.replace("'", "\\'"),
+                fingerprint_id=fingerprint["id"],
+                challenge_text_selector=fingerprint["challenge_text_selector"].replace("'", "\\'"),
+                tile_cell_selector=fingerprint["tile_cell_selector"].replace("'", "\\'"),
+            ),
+            encoding="utf-8",
+        )
+
+        screenshot_name = f"inspect_{os.getpid()}"
+        yaml_body = _build_inspect_yaml(
+            app_id=self._app_id,
+            probe_js_path=str(probe_path),
+            screenshot_name=screenshot_name,
+        )
+        yaml_path = wd / "inspect.yaml"
+        yaml_path.write_text(yaml_body, encoding="utf-8")
+
+        try:
+            proc = self._maestro_test(yaml_path)
+        except subprocess.TimeoutExpired:
+            return None
+        except OSError:
+            return None
+
+        if proc.returncode != 0:
+            return None
+
+        fields = _parse_runscript_output(proc.stdout or "")
+        if not fields.get("fingerprint_id"):
+            return None
+
+        cells = _parse_cells_json(fields.get("cells_json", "[]"))
+        tile_count = int(fields.get("tile_count", "0") or "0")
+        if tile_count == 0 or not cells:
+            return None
+        grid_layout = "4x4" if tile_count == 16 else "3x3"
+
+        # Cache DPR for execute_solve coordinate translation (PR 5).
+        try:
+            vw = float(fields.get("viewport_w", "0"))
+            vh = float(fields.get("viewport_h", "0"))
+            if vw and vh:
+                # Until we read window.devicePixelRatio explicitly,
+                # store viewport size as DPR proxy.
+                self._dpr_cache[self._device_id] = vw / vh if vh else 1.0
+        except ValueError:
+            pass
+
+        # Read the screenshot file Maestro just wrote and inline it as
+        # base64. Maestro writes to CWD by default.
+        screenshot_b64 = _read_screenshot_b64(Path.cwd() / f"{screenshot_name}.png")
+
+        tiles = [
+            {
+                "index": i,
+                "viewport_x": int(cell["x"]),
+                "viewport_y": int(cell["y"]),
+                "w": int(cell["w"]),
+                "h": int(cell["h"]),
+            }
+            for i, cell in enumerate(cells[:tile_count])
+        ]
+
+        return {
+            "screenshot_base64": screenshot_b64,
+            "challenge_text": fields.get("challenge_text", "") or "(challenge text unavailable)",
+            "grid_layout": grid_layout,
+            "tile_count": tile_count,
+            "tiles": tiles,
+            "fingerprint": f"{fingerprint['id']}-{grid_layout}",
+            "fingerprint_id": fingerprint["id"],
+            "fingerprint_config": fingerprint,
+            # Opaque handle — MaestroDriver uses the iframe selector
+            # string as a stand-in. PlaywrightDriver puts a Playwright
+            # frame_locator here. Caller treats this as opaque.
+            "frame_locator": iframe_selector_css,
+            "_coord_method": "maestro_runscript",
+        }
+
+    def _maestro_test(self, yaml_path: Path) -> subprocess.CompletedProcess:
+        """Wrap `subprocess.run(['maestro', 'test', yaml_path])`. Isolated
+        so unit tests can monkeypatch it without spawning a real Maestro."""
+        cmd = ["maestro"]
+        if self._device_id:
+            cmd.extend(["--udid", self._device_id])
+        cmd.extend(["test", str(yaml_path)])
+        return subprocess.run(
+            cmd, capture_output=True, text=True, timeout=self._timeout_s
+        )
+
+
+def _parse_cells_json(raw: str) -> list[dict[str, Any]]:
+    """Defensive JSON parse — returns [] on any parse failure or
+    non-list result. Maestro echoes the assignment with embedded quotes
+    sometimes; tolerate both bare-array and quoted forms."""
+    raw = (raw or "").strip()
+    if raw.startswith('"') and raw.endswith('"'):
+        # Strip outer quotes Maestro may have wrapped around the value.
+        raw = raw[1:-1].replace('\\"', '"')
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(data, list):
+        return []
+    return [d for d in data if isinstance(d, dict)]
+
+
+def _read_screenshot_b64(png_path: Path) -> str:
+    """Read a PNG file and return data:URL-prefixed base64. Empty string
+    when the file is missing — caller already handles that case."""
+    import base64
+    try:
+        data = png_path.read_bytes()
+    except OSError:
+        return ""
+    if not data:
+        return ""
+    return "data:image/png;base64," + base64.b64encode(data).decode("ascii")
