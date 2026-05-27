@@ -809,15 +809,23 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="verify_plan",
             description=(
-                "v0.9.1 — Walk a plan's critical points and check each against "
-                "evidence. Pairs with `qa_plan` — must be called with the plan_id "
-                "returned by a prior qa_plan call. Returns a structured checklist "
-                "with per-CP satisfaction + an overall status (passed / "
-                "incomplete / failed).\n\n"
+                "v0.9.1 (extended v0.9.2 with auto-discovery) — Walk a plan's "
+                "critical points and check each against evidence. Pairs with "
+                "`qa_plan` — must be called with the plan_id returned by a "
+                "prior qa_plan call. Returns a structured checklist with "
+                "per-CP satisfaction + an overall status (passed / incomplete "
+                "/ failed).\n\n"
                 "Matching rule: a CP is satisfied when its verification_hint "
                 "appears (case-insensitively, as a substring) in any evidence "
                 "item's stringified form. Evidence items may be strings, dicts, "
                 "or nested structures — the matcher flattens them.\n\n"
+                "v0.9.2 — auto_discover mode: set `auto_discover: true` and the "
+                "verifier reads the project's pytest-json-report at "
+                "`<QA_PROJECT_ROOT>/report.json` (or `MK_QA_REPORT_PATH`, or "
+                "the `report_path` arg) and adds its `tests` list to the "
+                "evidence stream. Best-effort — missing or malformed report "
+                "is silently skipped, NOT a hard error. The response's "
+                "`evidence_sources` field reports what was used.\n\n"
                 "status semantics:\n"
                 "  - 'passed': every CP satisfied\n"
                 "  - 'incomplete': some satisfied, some not\n"
@@ -827,9 +835,12 @@ async def list_tools() -> list[Tool]:
                 "ground truth wins over capability claims.\n\n"
                 "Returns: {plan_id, task, kind, status, checklist[{id, "
                 "description, verification_hint, satisfied, matched_evidence}], "
-                "unmet[], summary{total, satisfied, unsatisfied}, verified_at}.\n\n"
-                "Error shapes: no_plan_id / plan_not_found / no_evidence / "
-                "bad_evidence."
+                "unmet[], summary{total, satisfied, unsatisfied}, "
+                "evidence_sources{explicit_count, autodiscovered, "
+                "autodiscovered_count, report_path}, verified_at}.\n\n"
+                "Error shapes: no_plan_id / plan_not_found / no_evidence "
+                "(only when both explicit evidence AND auto_discover are "
+                "omitted) / bad_evidence."
             ),
             inputSchema={
                 "type": "object",
@@ -841,16 +852,38 @@ async def list_tools() -> list[Tool]:
                     "evidence": {
                         "type": "array",
                         "description": (
-                            "Required, may be empty. Each item is searched for "
-                            "each CP's verification_hint. Pass any structured "
-                            "payloads — test result rows from `get_test_report`, "
-                            "scan findings from `run_api_security_scan`, log "
-                            "lines, screenshot paths, etc."
+                            "Optional when `auto_discover: true`. Each item is "
+                            "searched for each CP's verification_hint. Pass "
+                            "structured payloads — test result rows from "
+                            "`get_test_report`, scan findings from "
+                            "`run_api_security_scan`, log lines, screenshot "
+                            "paths, etc."
                         ),
                         "items": {},
                     },
+                    "auto_discover": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": (
+                            "v0.9.2 — When true, read the project's pytest-"
+                            "json-report and add its `tests` array to the "
+                            "evidence stream. Useful for verifying a CP set "
+                            "against the most recent test run without "
+                            "manually copying report rows into the call."
+                        ),
+                    },
+                    "report_path": {
+                        "type": "string",
+                        "description": (
+                            "v0.9.2 — Override the report.json location when "
+                            "auto_discover is true. Defaults to "
+                            "`MK_QA_REPORT_PATH` env, then "
+                            "`<QA_PROJECT_ROOT>/report.json`, then "
+                            "`./report.json`."
+                        ),
+                    },
                 },
-                "required": ["plan_id", "evidence"],
+                "required": ["plan_id"],
             },
         ),
     ]

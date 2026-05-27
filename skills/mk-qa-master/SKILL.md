@@ -74,10 +74,13 @@ explicitly:
    (`"test_login passes"`, `"BOLA finding on /orders endpoint"`,
    `"3x3 reCAPTCHA solved with status=passed"`). Returns a `plan_id`.
 2. Do the work — one of Flows 1-5 below.
-3. **`verify_plan(plan_id, evidence)`** — pass the structured output
-   from the flow (test report rows, scan findings, log lines). Returns
-   per-CP satisfied/unsatisfied + an overall `passed | incomplete |
-   failed` verdict.
+3. **`verify_plan(plan_id, evidence?, auto_discover?)`** — pass the
+   structured output from the flow (test report rows, scan findings,
+   log lines), OR set `auto_discover: true` and the verifier will
+   pull the latest pytest-json-report's `tests` list automatically.
+   Both can be combined. Returns per-CP satisfied/unsatisfied + an
+   overall `passed | incomplete | failed` verdict + an
+   `evidence_sources` audit trail showing what was actually used.
 
 `status` is computed from per-CP ticks, NOT from your word. Even if
 you feel the task succeeded, verify_plan returns `incomplete` when

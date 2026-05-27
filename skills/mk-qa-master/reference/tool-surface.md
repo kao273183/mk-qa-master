@@ -1,16 +1,16 @@
-# mk-qa-master — Tool Surface Cheatsheet (v0.9.1)
+# mk-qa-master — Tool Surface Cheatsheet (v0.9.2)
 
 The 21 MCP tools currently exposed by mk-qa-master, grouped by flow.
 One-liner + the input-schema gotchas you actually need to remember.
 
 ---
 
-## v0.9.1 — Plan & Verify (prelude to every other flow)
+## v0.9.1+ — Plan & Verify (prelude to every other flow)
 
 | Tool | Purpose | Gotchas |
 |---|---|---|
 | `qa_plan` | Store a critical-points checklist BEFORE acting | `critical_points` accepts list[str] OR list[dict{id?, description, verification_hint?}]; 30-min TTL; LRU-bounded at 50 |
-| `verify_plan` | Walk plan CPs against evidence; return per-CP pass/fail + overall status | Matching is case-insensitive substring on `verification_hint`; status='passed' only when ALL CPs satisfied — partial = 'incomplete', zero = 'failed' |
+| `verify_plan` | Walk plan CPs against evidence; return per-CP pass/fail + overall status | Matching is case-insensitive substring on `verification_hint`; status='passed' only when ALL CPs satisfied — partial = 'incomplete', zero = 'failed'. **v0.9.2**: pass `auto_discover: true` to pull evidence from `<QA_PROJECT_ROOT>/report.json` automatically; combine with explicit `evidence` to merge sources. Response includes `evidence_sources` audit trail. |
 
 Use them as bookends around Flows 1-5. Skip for one-shot reads.
 
