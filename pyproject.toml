@@ -1,12 +1,12 @@
 [project]
 name = "mk-qa-master"
-version = "0.8.0"
-description = "MCP server for running tests across pytest / Jest / Cypress / Go test / Maestro / Schemathesis / Newman (web + mobile + native API via OpenAPI + Postman collections), with self-improvement analytics, a bilingual (EN / zh-TW) built-in QA knowledge layer, an AI Visual Challenge Solver for reCAPTCHA v2 + hCaptcha image-grid challenges, and an OWASP API Top 10 (2023) security scanner (BOLA / Broken Auth / Mass Assignment / Function-Level Authz / Security Misconfig) (AI 測試大師)"
+version = "0.9.0"
+description = "MCP server + cross-host agent skill for running tests across pytest / Jest / Cypress / Go test / Maestro / Schemathesis / Newman (web + mobile + native API via OpenAPI + Postman collections), with self-improvement analytics, a bilingual (EN / zh-TW) built-in QA knowledge layer, an AI Visual Challenge Solver for reCAPTCHA v2 + hCaptcha image-grid challenges, and an OWASP API Top 10 (2023) security scanner. v0.9.0 adds cross-host packaging: the same skill folder loads in Claude Code, OpenAI Codex, OpenClaw, and Hermes via the agentskills.io convention (AI 測試大師)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Jack Kao", email = "52775937+kao273183@users.noreply.github.com" }]
-keywords = ["mcp", "testing", "qa", "pytest", "playwright", "jest", "cypress", "maestro", "schemathesis", "newman", "postman", "openapi", "api-testing", "owasp", "security", "vulnerability-scanner", "automation", "model-context-protocol"]
+keywords = ["mcp", "testing", "qa", "pytest", "playwright", "jest", "cypress", "maestro", "schemathesis", "newman", "postman", "openapi", "api-testing", "owasp", "security", "vulnerability-scanner", "automation", "model-context-protocol", "claude-code", "codex-plugin", "agent-skill", "agentskills"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
