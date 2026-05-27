@@ -60,11 +60,14 @@ Tool envelopes
 """
 from __future__ import annotations
 
+import json
+import os
 import threading
 import uuid
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Iterable
 
 
@@ -233,6 +236,67 @@ def _stringify_evidence_item(item: Any) -> str:
     return str(item)
 
 
+# ---- auto-discovery (v0.9.2) ------------------------------------------
+
+def _default_report_path() -> Path:
+    """Locate the project's pytest-json-report file.
+
+    Order:
+      1. `MK_QA_REPORT_PATH` env override (absolute path)
+      2. `<QA_PROJECT_ROOT>/report.json` (mk-qa-master default — see
+         `mk_qa_master.config.REPORT_PATH`)
+      3. `./report.json` (CWD fallback for ad-hoc invocations)
+
+    We resolve at call time, not import time, so tests can monkeypatch
+    the env without re-importing.
+    """
+    override = os.environ.get("MK_QA_REPORT_PATH", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    project_root = os.environ.get("QA_PROJECT_ROOT", "").strip()
+    if project_root:
+        return (Path(project_root).expanduser() / "report.json").resolve()
+    return (Path.cwd() / "report.json").resolve()
+
+
+def _autodiscover_evidence(report_path: Path | None) -> tuple[list[Any], str | None]:
+    """Read a pytest-json-report file and turn its `tests` list into
+    evidence items. Returns (rows, source_path_str_for_debug).
+
+    On any read / parse failure we return ([], None) — auto-discovery
+    is best-effort, not load-bearing. Callers that want a hard error
+    when the report is missing should pass evidence explicitly.
+
+    The pytest-json-report shape is:
+        {"summary": {...}, "tests": [
+            {"nodeid": "tests/test_login.py::test_valid",
+             "outcome": "passed", "duration": 1.2, ...},
+            ...
+        ]}
+
+    We surface each test row as-is — `nodeid` carries the test name
+    that CPs typically reference; `outcome` lets a CP's hint say
+    "passed" / "failed" to be outcome-conditional. The runner-specific
+    extras (call info, capture, etc.) come along but are ignored by
+    the matcher.
+    """
+    if report_path is None:
+        return [], None
+    try:
+        if not report_path.is_file():
+            return [], None
+        text = report_path.read_text(encoding="utf-8")
+        data = json.loads(text)
+    except (OSError, json.JSONDecodeError):
+        return [], None
+    if not isinstance(data, dict):
+        return [], None
+    tests = data.get("tests")
+    if not isinstance(tests, list):
+        return [], None
+    return tests, str(report_path)
+
+
 def _match_cp(cp: _CriticalPoint, evidence: Iterable[Any]) -> list[Any]:
     """Return the subset of `evidence` whose stringified form contains
     the CP's verification_hint (case-insensitive). Empty list = unmet.
@@ -319,16 +383,31 @@ def verify_plan_tool(arguments: dict[str, Any]) -> dict[str, Any]:
 
     Args:
       plan_id: str — required.
-      evidence: list[dict | str] — required, possibly empty. Each item
-        is searched for the CP's verification_hint. A CP is satisfied
-        when at least one evidence item contains its hint (case-
-        insensitive substring).
+      evidence: list[dict | str] — optional. Each item is searched for
+        the CP's verification_hint. A CP is satisfied when at least one
+        evidence item contains its hint (case-insensitive substring).
+        May be omitted when auto_discover is True.
+      auto_discover: bool — optional, default False. When True, the
+        verifier reads the project's pytest-json-report at
+        `report_path` (or the resolved default) and adds its `tests`
+        list to the evidence stream. Best-effort: missing or malformed
+        reports are silently skipped rather than failing the call.
+      report_path: str — optional. Override the default report.json
+        location. Useful for non-pytest runners or custom layouts.
+        Resolved order when omitted:
+          1. `MK_QA_REPORT_PATH` env override
+          2. `<QA_PROJECT_ROOT>/report.json`
+          3. `./report.json`
 
     Returns a structured checklist with per-CP satisfaction + an
     overall status:
       - "passed" : every CP satisfied
       - "incomplete" : some CPs unsatisfied
       - "failed" : no CPs satisfied (or no evidence at all)
+
+    v0.9.2 adds an `evidence_sources` field to the response describing
+    where the matched evidence came from (explicit / autodiscovered /
+    both / none).
     """
     arguments = arguments or {}
     plan_id = arguments.get("plan_id")
@@ -351,24 +430,53 @@ def verify_plan_tool(arguments: dict[str, Any]) -> dict[str, Any]:
             ),
         }
 
-    evidence = arguments.get("evidence")
-    if evidence is None:
+    explicit_evidence = arguments.get("evidence")
+    auto_discover = bool(arguments.get("auto_discover", False))
+    report_path_arg = arguments.get("report_path")
+
+    if explicit_evidence is None and not auto_discover:
         return {
             "error": "no_evidence",
             "retryable": False,
             "hint": (
-                "verify_plan requires an `evidence` list (may be empty). "
-                "Pass any structured payloads — test result rows, scan "
-                "findings, log lines, screenshot paths — whose contents "
-                "the verifier will search for each CP's verification_hint."
+                "verify_plan needs either an explicit `evidence` list "
+                "(may be empty) OR `auto_discover=true` to read evidence "
+                "from the project's report.json. Pass at least one."
             ),
         }
-    if not isinstance(evidence, list):
+    if explicit_evidence is not None and not isinstance(explicit_evidence, list):
         return {
             "error": "bad_evidence",
             "retryable": False,
-            "hint": f"evidence must be a list, got {type(evidence).__name__}",
+            "hint": (
+                f"evidence must be a list, got {type(explicit_evidence).__name__}"
+            ),
         }
+
+    # ---- assemble evidence stream ----
+    evidence: list[Any] = list(explicit_evidence) if explicit_evidence else []
+    sources: dict[str, Any] = {
+        "explicit_count": len(evidence),
+        "autodiscovered": False,
+        "autodiscovered_count": 0,
+        "report_path": None,
+    }
+    if auto_discover:
+        resolved_report_path: Path | None
+        if isinstance(report_path_arg, str) and report_path_arg.strip():
+            resolved_report_path = Path(report_path_arg).expanduser().resolve()
+        else:
+            resolved_report_path = _default_report_path()
+        autodiscovered_rows, source = _autodiscover_evidence(resolved_report_path)
+        if autodiscovered_rows:
+            evidence.extend(autodiscovered_rows)
+            sources["autodiscovered"] = True
+            sources["autodiscovered_count"] = len(autodiscovered_rows)
+            sources["report_path"] = source
+        else:
+            # Auto-discover requested but no rows found — surface the
+            # path we LOOKED at so the user can diagnose.
+            sources["report_path"] = str(resolved_report_path)
 
     checklist: list[dict[str, Any]] = []
     satisfied_count = 0
@@ -408,5 +516,6 @@ def verify_plan_tool(arguments: dict[str, Any]) -> dict[str, Any]:
             "satisfied": satisfied_count,
             "unsatisfied": total - satisfied_count,
         },
+        "evidence_sources": sources,
         "verified_at": _now().isoformat(),
     }
