@@ -432,9 +432,68 @@ what we learned and how it shaped the API-security PRD's testing
 gates.
 
 
-## Wire into Claude Desktop
+## Use as a Claude Code / Codex / Hermes / OpenClaw skill (v0.9.0)
 
-Copy `examples/configs/claude_desktop_config.example.json` to:
+> *Same skill folder loads in four different agent hosts via the
+> [agentskills.io](https://agentskills.io) convention.*
+
+v0.9.0 packages mk-qa-master as a **cross-host agent skill** in addition
+to its MCP-server form. The `skills/mk-qa-master/` folder is the single
+source of truth — the same `SKILL.md`, slash commands, and reference
+docs load into:
+
+- **Claude Code** — via `.claude-plugin/plugin.json` (this repo is a
+  plugin marketplace).
+- **OpenAI Codex** — via `.codex-plugin/plugin.json` (Codex reads Claude-
+  style marketplaces).
+- **OpenClaw** — install from local checkout: `openclaw plugins install
+  /path/to/mk-qa-master`.
+- **Hermes Agent** — symlink the skill folder into `~/.hermes/skills/`.
+
+### Quick install (Claude Code)
+
+```text
+# Inside Claude Code:
+/plugin marketplace add kao273183/mk-qa-master
+/plugin install mk-qa-master@mk-qa-master
+```
+
+Restart Claude Code so the skill registers. Then any QA testing prompt
+auto-activates the skill — or explicitly invoke a slash command:
+
+```
+/mk-qa-master:run-tests login
+/mk-qa-master:generate https://staging.example.com
+/mk-qa-master:api-security https://api.staging.example.com/openapi.yaml
+```
+
+### What the skill does
+
+The skill is a single-file operating contract that teaches the host how
+to drive mk-qa-master's 19 MCP tools coherently. It encodes:
+
+- **When to auto-activate** — phrases like "run my tests", "why did this
+  test fail", "scan this API for OWASP issues" trigger it.
+- **Five flows** — run tests / generate tests / debug failures / solve
+  CAPTCHAs / scan APIs.
+- **Hard rules** — surface consent errors verbatim, don't silently
+  re-run with relaxed filters, confirm before destructive runs.
+
+Full reference at [`skills/mk-qa-master/SKILL.md`](skills/mk-qa-master/SKILL.md).
+
+### Why a skill on top of an MCP server?
+
+The MCP server makes the 19 tools **callable** by any client. The skill
+makes them **discoverable + governed**: it gives the host's skill router
+enough context to decide *when* to use the tools and *which flow* to
+follow. Inspired by [microsoft/Webwright](https://github.com/microsoft/Webwright),
+which uses the same pattern.
+
+
+## Wire into Claude Desktop (legacy MCP-only path)
+
+If you prefer the bare MCP-server wiring (no plugin/skill layer), copy
+`examples/configs/claude_desktop_config.example.json` to:
 
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`

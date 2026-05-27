@@ -1,0 +1,32 @@
+{
+  "name": "mk-qa-master",
+  "version": "0.9.0",
+  "description": "AI 測試大師 — QA testing agent skill. Drives mk-qa-master's 19-tool MCP surface (pytest / Jest / Cypress / Maestro / Schemathesis / Newman) plus the v0.7 AI Visual Challenge Solver and v0.8 OWASP API Security scanner. Auto-activates from prompts like 'run my tests', 'why did this test fail', 'generate tests for this URL', 'scan this API for OWASP issues'.",
+  "author": {
+    "name": "Jack Kao",
+    "url": "https://github.com/kao273183"
+  },
+  "homepage": "https://github.com/kao273183/mk-qa-master",
+  "repository": "https://github.com/kao273183/mk-qa-master",
+  "license": "MIT",
+  "keywords": [
+    "qa",
+    "testing",
+    "pytest",
+    "playwright",
+    "owasp",
+    "api-security",
+    "mcp",
+    "captcha"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "mk-qa-master",
+    "shortDescription": "QA testing skill — runs, generates, debugs tests + OWASP API scanner",
+    "longDescription": "Single-file agent skill backed by mk-qa-master's MCP server. Surfaces 5 flows: run tests, generate tests from URL/mobile, debug failures, solve CAPTCHAs, scan APIs for OWASP API Top 10. Same skill folder loads in Claude Code, Codex, OpenClaw, and Hermes via the agentskills.io convention.",
+    "developerName": "Jack Kao",
+    "category": "Developer Tools",
+    "capabilities": ["Bash", "Read", "Write", "Edit"],
+    "websiteURL": "https://github.com/kao273183/mk-qa-master"
+  }
+}
