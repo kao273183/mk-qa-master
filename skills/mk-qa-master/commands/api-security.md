@@ -53,6 +53,16 @@ $ARGUMENTS
    categories=..., severity_threshold="medium", base_url=...,
    timeout_s=30)`.
 
+   **v0.9.4 — bookend pattern (recommended).** Call `qa_plan` first
+   with one CP per OWASP rule you expect to fire (e.g.
+   `verification_hint="OWASP-API1-BOLA-CrossUserDataExposure"`), then
+   pass `plan_id=<...>` to `run_api_security_scan`. The response's
+   `plan_verification` block tells you in one shot which expected
+   findings did and didn't fire — no need for a separate
+   `verify_plan` call. Lower `severity_threshold` to `"low"` if any
+   of your CPs target a LOW-severity finding (the CORS-wildcard-
+   without-credentials variant is LOW, for example).
+
 5. **Report findings in severity-rank order.** For each finding above
    medium:
    - severity badge

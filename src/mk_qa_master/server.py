@@ -678,9 +678,14 @@ async def list_tools() -> list[Tool]:
                 "mass_assignment mutates server state — opt in by passing it in `categories`. "
                 "Tier 1 fixture (`examples/sample_vulnerable_api/`) ships with the package "
                 "for self-tests.\n\n"
+                "v0.9.4 — Pass `plan_id` (from qa_plan) to auto-verify the scan's "
+                "findings against the plan's critical points in the same call. "
+                "The response gains a `plan_verification` block (per-CP "
+                "checklist + overall status). One-shot equivalent of "
+                "qa_plan → run_api_security_scan → verify_plan.\n\n"
                 "Returns: {scan_id, spec_url, base_url, categories_run, rules_ran, "
                 "ops_scanned, severity_threshold, findings[...], summary{total, by_severity}, "
-                "findings_below_threshold_count}.\n\n"
+                "findings_below_threshold_count, plan_verification (only when plan_id given)}.\n\n"
                 "Error shapes: consent_required / unauthorized_domain / spec_load_failed / "
                 "no_base_url / unknown_categories / bad_severity_threshold."
             ),
@@ -734,6 +739,20 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "default": 30,
                         "description": "Per-request timeout. Default 30s.",
+                    },
+                    "plan_id": {
+                        "type": "string",
+                        "description": (
+                            "v0.9.4 — Optional. plan_id returned by qa_plan. "
+                            "When supplied, the scan auto-verifies its "
+                            "findings against the plan's critical points and "
+                            "adds a `plan_verification` block to the response "
+                            "(per-CP checklist + overall passed/incomplete/"
+                            "failed status). Only findings ABOVE "
+                            "severity_threshold are seen by the verifier — "
+                            "if a CP targets a low-severity finding, lower "
+                            "the threshold to 'low' or 'info' accordingly."
+                        ),
                     },
                 },
                 "required": ["spec_url"],
@@ -1141,6 +1160,7 @@ async def _dispatch(name: str, args: dict) -> list[TextContent]:
             severity_threshold=args.get("severity_threshold", "medium"),
             base_url=args.get("base_url"),
             timeout_s=args.get("timeout_s", 30),
+            plan_id=args.get("plan_id"),
         )
         return [TextContent(
             type="text",
