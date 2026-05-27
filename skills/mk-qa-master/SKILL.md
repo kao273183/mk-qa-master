@@ -59,8 +59,33 @@ npm install -g newman           # if using Postman collections
 
 ## Workflow
 
-mk-qa-master's 19 tools group into **five flows**. Pick the right flow
-based on what the user is trying to do.
+mk-qa-master's 21 tools group into **a prelude + five flows**. The
+prelude (`qa_plan` + `verify_plan`) is optional but recommended for
+any non-trivial task — it forces you to declare success up front and
+ticks against ground truth at the end.
+
+### Flow 0 — Plan before acting (v0.9.1+)
+
+When the user asks for anything beyond a simple `list_tests`, plan
+explicitly:
+
+1. **`qa_plan(task, critical_points, kind?)`** — declare what success
+   means. Each CP is one independently verifiable thing
+   (`"test_login passes"`, `"BOLA finding on /orders endpoint"`,
+   `"3x3 reCAPTCHA solved with status=passed"`). Returns a `plan_id`.
+2. Do the work — one of Flows 1-5 below.
+3. **`verify_plan(plan_id, evidence)`** — pass the structured output
+   from the flow (test report rows, scan findings, log lines). Returns
+   per-CP satisfied/unsatisfied + an overall `passed | incomplete |
+   failed` verdict.
+
+`status` is computed from per-CP ticks, NOT from your word. Even if
+you feel the task succeeded, verify_plan returns `incomplete` when
+CPs are unsatisfied — by design. Surface the unmet list to the user
+honestly.
+
+Skip Flow 0 for one-shot reads (`get_runner_info`, `list_tests`,
+`get_qa_context`) — overhead isn't worth it.
 
 ### Flow 1 — "Run my tests"
 

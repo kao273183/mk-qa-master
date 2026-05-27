@@ -739,6 +739,120 @@ async def list_tools() -> list[Tool]:
                 "required": ["spec_url"],
             },
         ),
+        Tool(
+            name="qa_plan",
+            description=(
+                "v0.9.1 — Store a critical-points checklist before acting on a QA "
+                "task. The host LLM declares what success looks like (test passes, "
+                "scan finds X, screenshot shows Y), this tool stores it, returns "
+                "a `plan_id`. Later, call `verify_plan` with evidence (test result "
+                "rows, scan findings, log lines, screenshot paths) and get a "
+                "per-CP pass/fail verdict. Inspired by microsoft/Webwright's "
+                "plan.md pattern: declaring success criteria up-front makes the "
+                "verifier honest about whether the work was done.\n\n"
+                "Plans live 30 minutes (cache TTL) and are LRU-bounded at 50 "
+                "outstanding. No persistence — dump plans to disk from the host "
+                "side if you need a record.\n\n"
+                "Returns: {plan_id (12 hex chars), task, kind, critical_points "
+                "[{id, description, verification_hint}], created_at, expires_at}.\n\n"
+                "Error shapes: no_task / no_critical_points / bad_critical_points "
+                "(duplicate id, missing description, wrong type) / bad_kind."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task": {
+                        "type": "string",
+                        "description": (
+                            "Required. The natural-language goal — what the user "
+                            "wants done. Will be echoed back in verify_plan's output."
+                        ),
+                    },
+                    "critical_points": {
+                        "type": "array",
+                        "minItems": 1,
+                        "description": (
+                            "Required, non-empty. Each entry is either a string "
+                            "(used as description+verification_hint) or a dict "
+                            "{id?, description, verification_hint?}. IDs auto-"
+                            "assigned as CP1..CPn if omitted. verification_hint "
+                            "defaults to description — pick a substring that will "
+                            "literally appear in the evidence you'll later pass."
+                        ),
+                        "items": {
+                            "oneOf": [
+                                {"type": "string"},
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "string"},
+                                        "description": {"type": "string"},
+                                        "verification_hint": {"type": "string"},
+                                    },
+                                    "required": ["description"],
+                                },
+                            ],
+                        },
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": ["run", "generate", "scan", "debug", "captcha"],
+                        "description": (
+                            "Optional. Hint for downstream verifiers about which "
+                            "evidence stream to expect. Omit if unsure."
+                        ),
+                    },
+                },
+                "required": ["task", "critical_points"],
+            },
+        ),
+        Tool(
+            name="verify_plan",
+            description=(
+                "v0.9.1 — Walk a plan's critical points and check each against "
+                "evidence. Pairs with `qa_plan` — must be called with the plan_id "
+                "returned by a prior qa_plan call. Returns a structured checklist "
+                "with per-CP satisfaction + an overall status (passed / "
+                "incomplete / failed).\n\n"
+                "Matching rule: a CP is satisfied when its verification_hint "
+                "appears (case-insensitively, as a substring) in any evidence "
+                "item's stringified form. Evidence items may be strings, dicts, "
+                "or nested structures — the matcher flattens them.\n\n"
+                "status semantics:\n"
+                "  - 'passed': every CP satisfied\n"
+                "  - 'incomplete': some satisfied, some not\n"
+                "  - 'failed': zero CPs satisfied (or empty evidence)\n\n"
+                "Even if the host claims 'all good', verify_plan returns "
+                "'incomplete' when any CP is unsatisfied. That's the design — "
+                "ground truth wins over capability claims.\n\n"
+                "Returns: {plan_id, task, kind, status, checklist[{id, "
+                "description, verification_hint, satisfied, matched_evidence}], "
+                "unmet[], summary{total, satisfied, unsatisfied}, verified_at}.\n\n"
+                "Error shapes: no_plan_id / plan_not_found / no_evidence / "
+                "bad_evidence."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "plan_id": {
+                        "type": "string",
+                        "description": "Required. The plan_id returned by qa_plan.",
+                    },
+                    "evidence": {
+                        "type": "array",
+                        "description": (
+                            "Required, may be empty. Each item is searched for "
+                            "each CP's verification_hint. Pass any structured "
+                            "payloads — test result rows from `get_test_report`, "
+                            "scan findings from `run_api_security_scan`, log "
+                            "lines, screenshot paths, etc."
+                        ),
+                        "items": {},
+                    },
+                },
+                "required": ["plan_id", "evidence"],
+            },
+        ),
     ]
 
 
@@ -981,6 +1095,24 @@ async def _dispatch(name: str, args: dict) -> list[TextContent]:
             base_url=args.get("base_url"),
             timeout_s=args.get("timeout_s", 30),
         )
+        return [TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )]
+
+    if name == "qa_plan":
+        # v0.9.1: pure in-memory store, no I/O — call directly without
+        # asyncio.to_thread.
+        from .tools.qa_plan import qa_plan_tool
+        result = qa_plan_tool(args or {})
+        return [TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )]
+
+    if name == "verify_plan":
+        from .tools.qa_plan import verify_plan_tool
+        result = verify_plan_tool(args or {})
         return [TextContent(
             type="text",
             text=json.dumps(result, ensure_ascii=False, indent=2),
