@@ -132,26 +132,57 @@ def _evict_expired_locked() -> None:
         _ACTIVE_PLANS.pop(pid, None)
 
 
-def _store_plan(plan: _Plan) -> None:
+def _store_plan(plan: _Plan) -> Path | None:
+    """Store a plan in-memory and optionally to disk.
+
+    Returns the persisted file path when disk persistence ran successfully,
+    None otherwise. Callers can surface this in the tool response so the
+    host LLM knows where to find the plan after a restart.
+    """
     with _CACHE_LOCK:
         _evict_expired_locked()
         while len(_ACTIVE_PLANS) >= _CACHE_MAX:
             _ACTIVE_PLANS.popitem(last=False)
         _ACTIVE_PLANS[plan.plan_id] = plan
+    if _persistence_enabled():
+        return _persist_plan(plan)
+    return None
 
 
-def _fetch_plan(plan_id: str) -> _Plan | None:
+def _fetch_plan(plan_id: str) -> tuple["_Plan | None", str]:
+    """Fetch a plan, returning (plan, source).
+
+    source is "memory" (cache hit), "disk" (fell through to persisted
+    file), or "none" (not found anywhere). Returned alongside the plan
+    so verify_plan can surface where the data came from in its
+    response.
+    """
     with _CACHE_LOCK:
         _evict_expired_locked()
         plan = _ACTIVE_PLANS.get(plan_id)
-        if plan is None:
-            return None
-        _ACTIVE_PLANS.move_to_end(plan_id)
-        return plan
+        if plan is not None:
+            _ACTIVE_PLANS.move_to_end(plan_id)
+            return plan, "memory"
+    if _persistence_enabled():
+        disk_plan = _load_persisted_plan(plan_id)
+        if disk_plan is not None:
+            # Repopulate the in-memory cache so subsequent verify_plan
+            # calls in the same process hit memory instead of disk.
+            with _CACHE_LOCK:
+                while len(_ACTIVE_PLANS) >= _CACHE_MAX:
+                    _ACTIVE_PLANS.popitem(last=False)
+                _ACTIVE_PLANS[plan_id] = disk_plan
+            return disk_plan, "disk"
+    return None, "none"
 
 
 def _reset_cache_for_tests() -> None:
-    """Test hook. Don't call from production code."""
+    """Test hook. Don't call from production code.
+
+    Only clears the in-memory cache. Tests that exercise persistence
+    should use tmp_path + monkeypatched MK_QA_PLANS_DIR so the disk
+    state is per-test isolated automatically.
+    """
     with _CACHE_LOCK:
         _ACTIVE_PLANS.clear()
 
@@ -234,6 +265,166 @@ def _stringify_evidence_item(item: Any) -> str:
     if isinstance(item, list):
         return " ".join(_stringify_evidence_item(v) for v in item)
     return str(item)
+
+
+# ---- persistence (v0.9.3) ---------------------------------------------
+
+# v0.9.1 plans lived only in-memory (30-min TTL, LRU cap 50). That
+# meant: process restart → all plans gone; long-running QA flow that
+# crosses TTL → plan_id silently invalid. v0.9.3 adds an opt-in disk
+# layer: when enabled, every qa_plan write also atomically dumps the
+# plan to `<plans_dir>/<plan_id>.json`, and verify_plan transparently
+# falls back to disk on in-memory misses.
+#
+# Default policy
+# --------------
+#   - Enabled when QA_PROJECT_ROOT is set (mk-qa-master is "configured").
+#   - Disabled when QA_PROJECT_ROOT is unset (ad-hoc invocations
+#     shouldn't surprise users with file writes).
+#   - QA_PLAN_PERSIST=true|false explicitly overrides either way.
+#
+# Path resolution
+# ---------------
+#   1. MK_QA_PLANS_DIR env override
+#   2. <QA_PROJECT_ROOT>/test-results/plans/
+#   3. ./test-results/plans/ (CWD fallback for opt-in-without-root)
+
+
+def _persistence_enabled() -> bool:
+    """Decide whether to write/read plan files this call.
+
+    Lazy (env-evaluated each call) so tests can monkeypatch cleanly.
+    """
+    explicit = os.environ.get("QA_PLAN_PERSIST", "").strip().lower()
+    if explicit in {"true", "1", "yes", "on"}:
+        return True
+    if explicit in {"false", "0", "no", "off"}:
+        return False
+    # Default policy: ON when QA_PROJECT_ROOT is set, else OFF.
+    return bool(os.environ.get("QA_PROJECT_ROOT", "").strip())
+
+
+def _plans_dir() -> Path:
+    """Locate the dir for persisted plan files.
+
+    Order: MK_QA_PLANS_DIR → <QA_PROJECT_ROOT>/test-results/plans → ./test-results/plans
+    """
+    override = os.environ.get("MK_QA_PLANS_DIR", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    project_root = os.environ.get("QA_PROJECT_ROOT", "").strip()
+    base = Path(project_root).expanduser() if project_root else Path.cwd()
+    return (base / "test-results" / "plans").resolve()
+
+
+def _plan_to_json(plan: "_Plan") -> dict[str, Any]:
+    return {
+        "plan_id": plan.plan_id,
+        "task": plan.task,
+        "kind": plan.kind,
+        "critical_points": [cp.to_dict() for cp in plan.critical_points],
+        "created_at": plan.created_at.isoformat(),
+        "expires_at": plan.expires_at.isoformat(),
+        "_schema": "mk-qa-master.plan.v1",
+    }
+
+
+def _plan_from_json(data: dict[str, Any]) -> "_Plan | None":
+    """Best-effort reverse of _plan_to_json. Returns None on shape mismatch."""
+    try:
+        plan_id = data["plan_id"]
+        task = data["task"]
+        kind = data.get("kind")
+        cps_raw = data["critical_points"]
+        created_at = datetime.fromisoformat(data["created_at"])
+        expires_at = datetime.fromisoformat(data["expires_at"])
+    except (KeyError, ValueError, TypeError):
+        return None
+    if not isinstance(cps_raw, list):
+        return None
+    cps: list[_CriticalPoint] = []
+    for entry in cps_raw:
+        if not isinstance(entry, dict):
+            return None
+        try:
+            cps.append(_CriticalPoint(
+                cp_id=str(entry["id"]),
+                description=str(entry["description"]),
+                verification_hint=str(entry.get("verification_hint")
+                                      or entry["description"]),
+            ))
+        except KeyError:
+            return None
+    return _Plan(
+        plan_id=plan_id, task=task, kind=kind,
+        critical_points=cps,
+        created_at=created_at, expires_at=expires_at,
+    )
+
+
+def _persist_plan(plan: "_Plan") -> Path | None:
+    """Atomically write the plan to <plans_dir>/<plan_id>.json.
+
+    Best-effort: any OSError is swallowed (returns None) so a read-only
+    filesystem or permission issue never breaks the qa_plan tool.
+    Uses tempfile + os.replace for atomicity — readers never see a
+    partial file.
+    """
+    try:
+        plans_dir = _plans_dir()
+        plans_dir.mkdir(parents=True, exist_ok=True)
+        target = plans_dir / f"{plan.plan_id}.json"
+        # Write to a sibling temp file then atomic-rename. tempfile.NamedTemporaryFile
+        # avoids name collisions across concurrent writers.
+        import tempfile
+        fd, tmp_path = tempfile.mkstemp(
+            prefix=f"{plan.plan_id}.", suffix=".tmp", dir=str(plans_dir)
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(_plan_to_json(plan), fh, indent=2)
+            os.replace(tmp_path, target)
+        except OSError:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            return None
+        return target
+    except OSError:
+        return None
+
+
+def _load_persisted_plan(plan_id: str) -> "_Plan | None":
+    """Read a plan back from disk. Returns None on missing / malformed.
+
+    Expiry semantics: we honor the original `expires_at` even on disk.
+    A plan that was created 2 hours ago with a 30-min TTL is "expired"
+    even if its file still exists; load returns None. This matches the
+    in-memory TTL behavior and prevents stale plans from being
+    silently re-instated.
+
+    For "I want the plan to survive longer than the in-memory TTL",
+    the right knob is a longer TTL at creation time (future v0.9.x
+    arg), not bypassing expiry checks on read.
+    """
+    try:
+        plans_dir = _plans_dir()
+        target = plans_dir / f"{plan_id}.json"
+        if not target.is_file():
+            return None
+        text = target.read_text(encoding="utf-8")
+        data = json.loads(text)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    plan = _plan_from_json(data)
+    if plan is None:
+        return None
+    if plan.expires_at <= _now():
+        return None  # honor expiry even when file still exists
+    return plan
 
 
 # ---- auto-discovery (v0.9.2) ------------------------------------------
@@ -367,7 +558,7 @@ def qa_plan_tool(arguments: dict[str, Any]) -> dict[str, Any]:
         created_at=now,
         expires_at=now + timedelta(seconds=_CACHE_TTL_SECONDS),
     )
-    _store_plan(plan)
+    persisted_to = _store_plan(plan)
     return {
         "plan_id": plan.plan_id,
         "task": plan.task,
@@ -375,6 +566,7 @@ def qa_plan_tool(arguments: dict[str, Any]) -> dict[str, Any]:
         "critical_points": [cp.to_dict() for cp in plan.critical_points],
         "created_at": plan.created_at.isoformat(),
         "expires_at": plan.expires_at.isoformat(),
+        "persisted_to": str(persisted_to) if persisted_to else None,
     }
 
 
@@ -418,7 +610,7 @@ def verify_plan_tool(arguments: dict[str, Any]) -> dict[str, Any]:
             "hint": "verify_plan requires a `plan_id` returned by qa_plan.",
         }
 
-    plan = _fetch_plan(plan_id)
+    plan, plan_source = _fetch_plan(plan_id)
     if plan is None:
         return {
             "error": "plan_not_found",
@@ -426,7 +618,9 @@ def verify_plan_tool(arguments: dict[str, Any]) -> dict[str, Any]:
             "hint": (
                 f"Unknown plan_id {plan_id!r} (expired, evicted, or "
                 f"never created). Plans live {_CACHE_TTL_SECONDS // 60} "
-                f"minutes; call qa_plan to start a fresh one."
+                f"minutes in memory; persisted plans survive process "
+                f"restarts but still honor the original TTL on read. "
+                f"Call qa_plan to start a fresh one."
             ),
         }
 
@@ -517,5 +711,6 @@ def verify_plan_tool(arguments: dict[str, Any]) -> dict[str, Any]:
             "unsatisfied": total - satisfied_count,
         },
         "evidence_sources": sources,
+        "plan_source": plan_source,  # "memory" or "disk"
         "verified_at": _now().isoformat(),
     }
