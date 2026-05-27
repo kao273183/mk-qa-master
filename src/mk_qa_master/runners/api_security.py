@@ -219,6 +219,7 @@ def run_scan(
     severity_threshold: str = "medium",
     base_url: str | None = None,
     timeout_s: int = 30,
+    plan_id: str | None = None,
 ) -> dict[str, Any]:
     """Orchestrate an API security scan.
 
@@ -238,6 +239,21 @@ def run_scan(
     Or an error envelope:
         {"error": "consent_required" | "unauthorized_domain" | ...,
          "hint": "..."}
+
+    v0.9.4 — Plan integration
+
+    Pass `plan_id` (returned by `qa_plan`) and the scan auto-verifies
+    the **findings above severity_threshold** against the plan's
+    critical points. The response gains a `plan_verification` field
+    with the per-CP checklist + overall status. Lets a host LLM run
+    the prelude (qa_plan) → scan → verification in a single round
+    trip instead of three.
+
+    Caveat: findings below `severity_threshold` are NOT seen by the
+    verifier. A CP whose verification_hint matches a LOW-severity
+    finding will look unmet when the default threshold ('medium') is
+    in effect. Lower the threshold (or skip it via 'info') when
+    plan CPs intentionally target low-severity findings.
     """
     # ---- consent gate ----------------------------------------------------
     if not _consent_granted():
@@ -362,7 +378,8 @@ def run_scan(
     above_threshold.sort(key=lambda f: (f.severity.rank, f.endpoint))
 
     import uuid
-    return {
+    finding_dicts = [f.to_dict() for f in above_threshold]
+    result: dict[str, Any] = {
         "scan_id": uuid.uuid4().hex[:12],
         "spec_url": spec_url,
         "base_url": resolved_base,
@@ -370,7 +387,26 @@ def run_scan(
         "rules_ran": [r.id for r in rules],
         "ops_scanned": len(ops),
         "severity_threshold": threshold.value,
-        "findings": [f.to_dict() for f in above_threshold],
+        "findings": finding_dicts,
         "summary": _summarize(above_threshold),
         "findings_below_threshold_count": len(all_findings) - len(above_threshold),
     }
+
+    # v0.9.4 — optional plan auto-verification.
+    if plan_id:
+        # Local import: avoids circular dep if anyone ever extends
+        # qa_plan to call into the runner (it doesn't today, but
+        # belt-and-suspenders).
+        from ..tools.qa_plan import verify_plan_tool
+
+        verify_result = verify_plan_tool({
+            "plan_id": plan_id,
+            "evidence": finding_dicts,
+        })
+        # If verify_plan errored (e.g. plan_not_found), surface its
+        # envelope under `plan_verification` rather than masking it
+        # or failing the whole scan. The scan ran fine; only the
+        # verification step had a problem.
+        result["plan_verification"] = verify_result
+
+    return result

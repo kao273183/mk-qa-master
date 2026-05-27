@@ -171,6 +171,25 @@ be in `QA_API_SECURITY_AUTHORIZED_DOMAINS` (localhost is implicit).
    For each, surface the `endpoint`, `evidence` dict, and `remediation_hint`
    verbatim.
 
+**v0.9.4 — bookend pattern.** Pair this with Flow 0: `qa_plan` first
+with one CP per expected OWASP finding, then pass `plan_id=<...>` to
+`run_api_security_scan` directly. The response's `plan_verification`
+block tells you which expected findings did and didn't fire — no
+separate `verify_plan` call needed.
+
+```
+qa_plan(critical_points=[
+    {"id": "CP-API1", "verification_hint": "OWASP-API1-BOLA"},
+    {"id": "CP-API2", "verification_hint": "OWASP-API2-BrokenAuth"},
+    ...
+]) → plan_id
+
+run_api_security_scan(spec_url, auth, plan_id=plan_id) → {
+    findings: [...],
+    plan_verification: {status: "passed", checklist: [...], unmet: []}
+}
+```
+
 Read `reference/api-security-deep.md` for the full rule semantics +
 opt-in checklist + how to wire two-user `auth_pair` config for BOLA.
 

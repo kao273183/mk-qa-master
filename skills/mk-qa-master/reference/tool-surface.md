@@ -1,4 +1,4 @@
-# mk-qa-master — Tool Surface Cheatsheet (v0.9.3)
+# mk-qa-master — Tool Surface Cheatsheet (v0.9.4)
 
 The 21 MCP tools currently exposed by mk-qa-master, grouped by flow.
 One-liner + the input-schema gotchas you actually need to remember.
@@ -63,7 +63,7 @@ Use them as bookends around Flows 1-5. Skip for one-shot reads.
 
 | Tool | Purpose | Gotchas |
 |---|---|---|
-| `run_api_security_scan` | Scan an OpenAPI 3.x spec for 5 OWASP API Top 10 issues | Needs `QA_API_SECURITY_CONSENT=true` + `AUTHORIZED_DOMAINS`; `mass_assignment` opt-in; default 4 of 5 categories |
+| `run_api_security_scan` | Scan an OpenAPI 3.x spec for 5 OWASP API Top 10 issues | Needs `QA_API_SECURITY_CONSENT=true` + `AUTHORIZED_DOMAINS`; `mass_assignment` opt-in; default 4 of 5 categories. **v0.9.4**: pass `plan_id` from `qa_plan` to auto-verify findings against CPs in one shot — response gains `plan_verification` block. Only findings ABOVE `severity_threshold` are seen by verify; lower threshold if a CP targets low-severity findings. |
 
 ---
 
