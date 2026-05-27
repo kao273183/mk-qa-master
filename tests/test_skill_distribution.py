@@ -227,3 +227,43 @@ def test_pyproject_version_is_v0_9():
         f"v0.9.x plugin skill distribution layer expects version 0.9.x; "
         f"got {_pyproject_version()!r}"
     )
+
+
+# ---- PyPI Summary 512-char limit (regression test for v0.9.4→0.9.5) ----
+
+def _pyproject_description() -> str:
+    """Pull the `description = "..."` value from pyproject.toml.
+
+    Stripped down to avoid pulling in `tomllib` or `toml` libs just
+    for one field. The pyproject grammar always quotes description
+    with double-quotes, and we don't currently use multi-line strings
+    for it.
+    """
+    text = PYPROJECT.read_text(encoding="utf-8")
+    match = re.search(r'^description\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    assert match, "couldn't find description in pyproject.toml"
+    return match.group(1)
+
+
+def test_pyproject_summary_under_512_chars():
+    """PyPI rejects uploads where the Core Metadata `Summary` field
+    exceeds 512 chars. pyproject's `description` is what becomes
+    `Summary` in the built distribution, so this is the gate that
+    keeps us from re-bricking PyPI publishes.
+
+    v0.9.4 hit this wall: PyPI returned
+        400 'summary' field must be 512 characters or less
+    after the GitHub release had already been cut. The release
+    workflow couldn't auto-publish to PyPI; we had to ship v0.9.5
+    with a shorter description.
+
+    Stay strictly under the limit — the boundary itself is fine but
+    leave breathing room for one more sentence before the next limit
+    hit.
+    """
+    desc = _pyproject_description()
+    assert len(desc) <= 512, (
+        f"pyproject `description` is {len(desc)} chars — PyPI rejects "
+        f"anything > 512 in the `Summary` Core Metadata field. "
+        f"Trim before bumping the version."
+    )
