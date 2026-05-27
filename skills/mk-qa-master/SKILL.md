@@ -80,7 +80,20 @@ explicitly:
    pull the latest pytest-json-report's `tests` list automatically.
    Both can be combined. Returns per-CP satisfied/unsatisfied + an
    overall `passed | incomplete | failed` verdict + an
-   `evidence_sources` audit trail showing what was actually used.
+   `evidence_sources` audit trail showing what was actually used +
+   a `plan_source` field ("memory" or "disk") so you can tell whether
+   the plan came from cache or was loaded from disk after a restart
+   (v0.9.3 persistence — see below).
+
+**v0.9.3 disk persistence**: when `QA_PROJECT_ROOT` is set (or
+`QA_PLAN_PERSIST=true` forced on), every `qa_plan` write also
+atomically dumps the plan to
+`<QA_PROJECT_ROOT>/test-results/plans/<plan_id>.json`. After process
+restart, `verify_plan` transparently loads the plan back from disk —
+the host doesn't have to track plan IDs across reconnects. Expiry
+is still honored: TTL'd plans won't silently reload. Persistence is
+best-effort: a read-only filesystem just sets `persisted_to: null`
+and continues.
 
 `status` is computed from per-CP ticks, NOT from your word. Even if
 you feel the task succeeded, verify_plan returns `incomplete` when

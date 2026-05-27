@@ -1,4 +1,4 @@
-# mk-qa-master — Tool Surface Cheatsheet (v0.9.2)
+# mk-qa-master — Tool Surface Cheatsheet (v0.9.3)
 
 The 21 MCP tools currently exposed by mk-qa-master, grouped by flow.
 One-liner + the input-schema gotchas you actually need to remember.
@@ -9,8 +9,8 @@ One-liner + the input-schema gotchas you actually need to remember.
 
 | Tool | Purpose | Gotchas |
 |---|---|---|
-| `qa_plan` | Store a critical-points checklist BEFORE acting | `critical_points` accepts list[str] OR list[dict{id?, description, verification_hint?}]; 30-min TTL; LRU-bounded at 50 |
-| `verify_plan` | Walk plan CPs against evidence; return per-CP pass/fail + overall status | Matching is case-insensitive substring on `verification_hint`; status='passed' only when ALL CPs satisfied — partial = 'incomplete', zero = 'failed'. **v0.9.2**: pass `auto_discover: true` to pull evidence from `<QA_PROJECT_ROOT>/report.json` automatically; combine with explicit `evidence` to merge sources. Response includes `evidence_sources` audit trail. |
+| `qa_plan` | Store a critical-points checklist BEFORE acting | `critical_points` accepts list[str] OR list[dict{id?, description, verification_hint?}]; 30-min TTL; LRU-bounded at 50. **v0.9.3**: also writes to `<QA_PROJECT_ROOT>/test-results/plans/<plan_id>.json` when persistence is on (default ON when QA_PROJECT_ROOT is set; force with `QA_PLAN_PERSIST=true|false`). Response includes `persisted_to` field. |
+| `verify_plan` | Walk plan CPs against evidence; return per-CP pass/fail + overall status | Matching is case-insensitive substring on `verification_hint`; status='passed' only when ALL CPs satisfied — partial = 'incomplete', zero = 'failed'. **v0.9.2**: pass `auto_discover: true` to pull evidence from `<QA_PROJECT_ROOT>/report.json` automatically; combine with explicit `evidence` to merge sources. Response includes `evidence_sources` audit trail. **v0.9.3**: transparently loads plans from disk when memory cache misses; response includes `plan_source: "memory" \| "disk"`. |
 
 Use them as bookends around Flows 1-5. Skip for one-shot reads.
 
