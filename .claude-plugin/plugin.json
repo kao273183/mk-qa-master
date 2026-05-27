@@ -1,6 +1,6 @@
 {
   "name": "mk-qa-master",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "description": "AI 測試大師 — run, generate, debug, and harden software tests via mk-qa-master's MCP tools. Includes the v0.7 AI Visual Challenge Solver (reCAPTCHA / hCaptcha) and the v0.8 OWASP API Security Top 10 scanner. Same skill folder loads in Claude Code, Codex, OpenClaw, and Hermes.",
   "author": {
     "name": "Jack Kao",
