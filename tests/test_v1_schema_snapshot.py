@@ -88,8 +88,24 @@ def test_v1_tool_surface_matches_snapshot():
 
     if os.environ.get("BREAKING_CHANGE_ACK", "").lower() == "true":
         # Intentional schema evolution. Rewrite the snapshot — the next
-        # run becomes the new baseline. The PR is responsible for the
-        # paired migration-doc update (enforced in PR-3).
+        # run becomes the new baseline. v1.0 PRD §11 #2 + PR-3:
+        # the ack alone is NOT a free pass; the migration doc + the
+        # deprecation policy must both exist for the ack to be honored.
+        # If either is missing, refuse to rewrite. The pairing forces
+        # the PR author to maintain the audit trail.
+        repo_root = Path(__file__).resolve().parent.parent
+        migration_doc = repo_root / "docs" / "MIGRATION-0.x-to-1.0.md"
+        deprecation_doc = repo_root / "docs" / "DEPRECATION-POLICY.md"
+        missing_docs = [
+            d for d in (migration_doc, deprecation_doc) if not d.is_file()
+        ]
+        if missing_docs:
+            pytest.fail(
+                "BREAKING_CHANGE_ACK=true requires the documentation "
+                "audit trail to be in place. Missing: "
+                f"{[str(d.relative_to(repo_root)) for d in missing_docs]}. "
+                "Create the doc(s) before re-acking."
+            )
         TOOL_SURFACE_SNAPSHOT.write_text(current_text, encoding="utf-8")
         return
 
