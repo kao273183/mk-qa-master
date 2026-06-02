@@ -21,6 +21,7 @@ async def analyze_url(
     url: str,
     timeout_ms: int = 15000,
     auth_cookie: str | None = None,
+    plan_id: str | None = None,
 ) -> dict[str, Any]:
     try:
         from playwright.async_api import async_playwright
@@ -81,7 +82,7 @@ async def analyze_url(
     modules = _build_modules(structure or {})
     endpoints = _dedupe_endpoints(api_calls)
     layout_warnings = (structure or {}).get("layout_warnings", []) or []
-    return {
+    result: dict[str, Any] = {
         "url": url,
         "page_title": page_title,
         "scanned_at": datetime.now().isoformat(timespec="seconds"),
@@ -95,6 +96,27 @@ async def analyze_url(
         "layout_warning_count": len(layout_warnings),
         "layout_warnings": layout_warnings,
     }
+
+    # v0.10.0 PR-3 — universal bookend (theme A,
+    # prd-v0.10-universal-bookend.md §5.3). Pass each discovered module
+    # as an evidence row — modules already carry a `kind` discriminator
+    # (form / nav / cta / dialog / section / tab_bar) which is exactly
+    # what record_matches CPs look for. We tack on the source `url` per
+    # row to give CPs scoping context when the same plan covers multiple
+    # pages.
+    #
+    # Decision §11 #4: no server-side filtering by confidence. The host
+    # LLM authoring CPs picks whatever threshold it cares about.
+    if plan_id:
+        evidence = [{**m, "url": url} for m in modules]
+        from .qa_plan import verify_plan_tool
+        verify_result = verify_plan_tool({
+            "plan_id": plan_id,
+            "evidence": evidence,
+        })
+        result["plan_verification"] = verify_result
+
+    return result
 
 
 def _parse_cookie_string(cookie_str: str, url: str) -> list[dict]:
