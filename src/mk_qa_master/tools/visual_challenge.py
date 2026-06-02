@@ -660,6 +660,40 @@ def solve_visual_challenge_tool(arguments: dict[str, Any]) -> dict[str, Any]:
     if result.get("status") in ("passed", "expired"):
         _drop_challenge(challenge_id)
 
+    # v0.10.0 PR-2 — universal bookend (theme A,
+    # prd-v0.10-universal-bookend.md §5.2). When the caller threads a
+    # plan_id through, attach a `plan_verification` envelope. Evidence
+    # is a *single-record* summary of the solve outcome; the actual
+    # token is NEVER included — §11 #2 hard rule honoring v0.7.0
+    # telemetry hygiene. CPs assert "solved" via the `token_populated`
+    # bool, not the raw credential.
+    #
+    # Earlier early-returns (consent_required / confirm_required /
+    # challenge_not_found / expired-before-solve / bad-tile-indices) all
+    # bypass this block on purpose: those are usage errors, not solve
+    # outcomes, and verifying a plan against them would just produce
+    # noise. Plan verification fires only when we actually executed the
+    # click chain.
+    plan_id = arguments.get("plan_id")
+    if plan_id:
+        evidence = [{
+            "kind": "captcha_solve",
+            "status": result.get("status"),
+            "token_populated": bool(result.get("token")),
+            "rounds_used": int(result.get("rounds_used", 0)),
+            "fingerprint": rec.fingerprint,
+            "challenge_id": challenge_id,
+        }]
+        from .qa_plan import verify_plan_tool
+        verify_result = verify_plan_tool({
+            "plan_id": plan_id,
+            "evidence": evidence,
+        })
+        # Surface plan errors (plan_not_found, etc.) under the envelope
+        # rather than masking the solve outcome. Same convention as the
+        # v0.9.4 api_security pattern.
+        result["plan_verification"] = verify_result
+
     return result
 
 

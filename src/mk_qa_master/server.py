@@ -597,7 +597,14 @@ async def list_tools() -> list[Tool]:
                 "challenge_id, attempts_remaining, token (only on passed), hint, plus on "
                 "'continue': screenshot_base64, tiles, tile_count, grid_layout, rounds_used}. "
                 "Telemetry logs the boolean outcome only — no screenshots, no challenge text, "
-                "no tile selection are ever persisted."
+                "no tile selection are ever persisted.\n\n"
+                "Plan bookend (v0.10.0): pass `plan_id` from a prior qa_plan call and the "
+                "response auto-attaches `plan_verification`. Evidence is a single-record "
+                "summary {kind: 'captcha_solve', status, token_populated, rounds_used, "
+                "fingerprint, challenge_id} — the raw `token` is NEVER included (telemetry "
+                "hygiene). Verification only fires once solve actually executes; "
+                "consent_required / confirm_required / challenge_not_found / expired all "
+                "bypass it because they're usage errors, not solve outcomes."
             ),
             inputSchema={
                 "type": "object",
@@ -625,6 +632,16 @@ async def list_tools() -> list[Tool]:
                             "Safety latch. MUST be set to true for the click chain to execute. "
                             "Without it, returns `confirm_required` and clicks nothing — this "
                             "prevents an accidental tool call from auto-submitting a CAPTCHA."
+                        ),
+                    },
+                    "plan_id": {
+                        "type": "string",
+                        "description": (
+                            "選填，v0.10.0+. Plan id returned by qa_plan. When supplied AND "
+                            "solve actually executes, the response gains a `plan_verification` "
+                            "envelope with single-record evidence {kind: 'captcha_solve', "
+                            "status, token_populated, rounds_used, fingerprint, challenge_id}. "
+                            "Raw token never appears in evidence — CPs check token_populated."
                         ),
                     },
                 },
