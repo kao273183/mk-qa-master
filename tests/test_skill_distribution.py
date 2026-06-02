@@ -219,13 +219,44 @@ def test_claude_plugin_commands_points_at_real_dir():
 
 # ---- pyproject version sanity -------------------------------------------
 
-def test_pyproject_version_is_v0_10():
-    """This test exists so a future PR that bumps the version updates
-    BOTH pyproject and the plugin manifests (the previous test would
-    fail to mismatch but this one screams what 'correct' is)."""
-    assert _pyproject_version().startswith("0.10."), (
-        f"v0.10.x universal-bookend release expects version 0.10.x; "
-        f"got {_pyproject_version()!r}"
+def test_pyproject_version_is_semver_and_at_or_above_floor():
+    """v1.0 PR-2 (postmortem §9 #3) — replaces the previous
+    `startswith("0.10.")` hardcoded check with a softer guard:
+
+      - version must be parseable as a major.minor.patch triple
+      - version must be ≥ MIN_VERSION_FLOOR
+
+    This stops every bump from having to edit a test, while still
+    catching the case where someone accidentally downgrades or writes
+    an unparseable version string.
+
+    To raise the floor on a release (e.g., when v1.0 ships, set floor
+    to (1, 0, 0)), update MIN_VERSION_FLOOR and the human-facing
+    error message together — the floor itself is documented invariant,
+    not just a constant."""
+    # When v1.0 ships, bump this to (1, 0, 0). Until then we're in the
+    # post-v0.10 pre-v1.0 window; the floor enforces "≥ 0.10.0".
+    MIN_VERSION_FLOOR = (0, 10, 0)
+
+    raw = _pyproject_version()
+    parts = raw.split(".")
+    assert len(parts) == 3, (
+        f"version must be major.minor.patch; got {raw!r}"
+    )
+    try:
+        major, minor, patch = (int(p) for p in parts)
+    except ValueError:
+        pytest.fail(
+            f"version components must be integers; got {raw!r}. "
+            "If shipping a pre-release like '1.0.0rc1', update this "
+            "test to handle the suffix."
+        )
+    current = (major, minor, patch)
+    assert current >= MIN_VERSION_FLOOR, (
+        f"pyproject version {raw!r} is below the documented floor "
+        f"{MIN_VERSION_FLOOR}; this looks like an accidental downgrade. "
+        "Bump the version and re-run, or raise the floor if you're "
+        "intentionally backporting."
     )
 
 
