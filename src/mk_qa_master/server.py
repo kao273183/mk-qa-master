@@ -420,7 +420,12 @@ async def list_tools() -> list[Tool]:
                 "- Page has 0 forms / 0 ctas → modules[] is empty but the call succeeds\n"
                 "- Login-walled URL with no auth_cookie → analyzes the login page (less "
                 "  useful) — pass auth_cookie to reach post-login pages\n"
-                "- SPA with delayed hydration → bump timeout_ms to 30000+"
+                "- SPA with delayed hydration → bump timeout_ms to 30000+\n\n"
+                "Plan bookend (v0.10.0): pass `plan_id` from a prior qa_plan call and the "
+                "response auto-attaches `plan_verification`. Each discovered module is passed "
+                "as an evidence row with its `kind` field intact (form / nav / cta / dialog / "
+                "section / tab_bar). CPs author `verification_hint` against the module kind / "
+                "name / selector. Source URL is tacked onto each row for scoping context."
             ),
             inputSchema={
                 "type": "object",
@@ -444,6 +449,17 @@ async def list_tools() -> list[Tool]:
                             "選填，預先注入登入 cookie，格式：`name1=value1; name2=value2`（一行 cookie header）。"
                             "用法：先在瀏覽器 DevTools / Application / Cookies 複製值再貼進來。"
                             "用於分析需要登入後才看得到的頁面。"
+                        ),
+                    },
+                    "plan_id": {
+                        "type": "string",
+                        "description": (
+                            "選填，v0.10.0+. Plan id returned by qa_plan. When supplied, "
+                            "the response gains a `plan_verification` envelope that checks "
+                            "every critical point against the discovered modules. Each module "
+                            "is passed as evidence with its `kind` field (form / cta / nav / "
+                            "etc.) preserved; CPs target the kind/name/selector to assert "
+                            "module discovery."
                         ),
                     },
                 },
@@ -1095,6 +1111,7 @@ async def _dispatch(name: str, args: dict) -> list[TextContent]:
             args["url"],
             timeout_ms=args.get("timeout_ms", 15000),
             auth_cookie=args.get("auth_cookie"),
+            plan_id=args.get("plan_id"),
         )
         if isinstance(result, dict) and "error" not in result:
             telemetry.log_discovered_modules(args["url"], result.get("modules", []))
