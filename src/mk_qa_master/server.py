@@ -73,7 +73,13 @@ async def list_tools() -> list[Tool]:
                 "- No tests match `filter` → exit_code != 0 with 「no tests ran」 in stderr_tail\n"
                 "- QA_TIMEOUT_SECONDS exceeded → exit_code 124 + `[TIMEOUT…]` tag in stderr_tail\n"
                 "- `filter` starting with `-` or containing `..` → blocked by security "
-                "  guardrail, returns {error: …}"
+                "  guardrail, returns {error: …}\n\n"
+                "Plan bookend (v0.10.0): pass `plan_id` from a prior qa_plan call and the "
+                "response auto-attaches `plan_verification` — the critical points are checked "
+                "against the just-written report.json via the same flow run_api_security_scan "
+                "uses. Omit `plan_id` to keep the legacy shape (no plan_verification key). "
+                "When verify_plan fails (unknown / expired plan_id), the run still succeeds; "
+                "the error envelope is surfaced *under* `plan_verification`."
             ),
             inputSchema={
                 "type": "object",
@@ -101,6 +107,15 @@ async def list_tools() -> list[Tool]:
                         "description": (
                             "選填，僅對 pytest-playwright 有效，指定 Playwright 啟用的 browser engine。"
                             "需事先 `playwright install <browser>` 過。"
+                        ),
+                    },
+                    "plan_id": {
+                        "type": "string",
+                        "description": (
+                            "選填，v0.10.0+。Plan id returned by qa_plan. When supplied, "
+                            "the response gains a `plan_verification` envelope that checks "
+                            "every critical point against the just-written report.json. "
+                            "Same shape as run_api_security_scan's plan bookend."
                         ),
                     },
                 },
@@ -996,6 +1011,7 @@ async def _dispatch(name: str, args: dict) -> list[TextContent]:
             filter=args.get("filter"),
             headed=args.get("headed", False),
             browser=args.get("browser", "chromium"),
+            plan_id=args.get("plan_id"),
         )
         return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
 
