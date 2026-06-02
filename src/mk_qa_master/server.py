@@ -673,7 +673,13 @@ async def list_tools() -> list[Tool]:
                 "適合「給我一個 URL、其他你看著辦」這種快速覆蓋場景。每條 candidate_tc 變成對應"
                 " test 函式的 docstring，run_tests 跑完 HTML 報告會用 docstring 當 case 名稱顯示。"
                 "回傳產生的檔案路徑列表 + 每個 module 對應幾個 test。預設每個 module 1 條，"
-                "想要更密的覆蓋拉 tests_per_module。"
+                "想要更密的覆蓋拉 tests_per_module。\n\n"
+                "Plan bookend (v0.10.0): pass `plan_id` from a prior qa_plan call and the "
+                "response auto-attaches `plan_verification`. Each generated test record (or "
+                "generation failure) becomes an evidence row with kind=generated_test, path, "
+                "covers_module (form/cta/nav/etc.), module_name, error (None on success), and "
+                "source url. CPs can assert coverage (\"form module produced ≥1 test\") or "
+                "failure-mode invariants (\"no module had generation errors\")."
             ),
             inputSchema={
                 "type": "object",
@@ -706,6 +712,16 @@ async def list_tools() -> list[Tool]:
                             "選填，每個 module 從 candidate_tcs 取前 N 條各產一條 test。"
                             "1-10，預設 1（最少噪音）。想要更密的覆蓋拉 3-5；"
                             "拉到 10 通常會產 garbage tests，因為 candidate_tcs 後段是泛例。"
+                        ),
+                    },
+                    "plan_id": {
+                        "type": "string",
+                        "description": (
+                            "選填，v0.10.0+. Plan id returned by qa_plan. When supplied, "
+                            "the response gains a `plan_verification` envelope. Each "
+                            "generated test record (success or failure) becomes one evidence "
+                            "row with kind=generated_test, path, covers_module, module_name, "
+                            "error (None on success), and source url."
                         ),
                     },
                 },
@@ -1140,6 +1156,7 @@ async def _dispatch(name: str, args: dict) -> list[TextContent]:
             timeout_ms=args.get("timeout_ms", 15000),
             auth_cookie=args.get("auth_cookie"),
             tests_per_module=args.get("tests_per_module", 1),
+            plan_id=args.get("plan_id"),
         )
         return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
 
@@ -1243,12 +1260,20 @@ async def _auto_generate_tests(
     timeout_ms: int,
     auth_cookie: str | None,
     tests_per_module: int,
+    plan_id: str | None = None,
 ) -> dict:
     """analyze_url → per module → generate_test × N. All-in-one orchestration.
 
     Why inline in server.py: the chain is short and stays close to where the
     individual tools are already wired. Telemetry hooks mirror the manual path
     so the optimizer still sees the same discovery + generation signals.
+
+    v0.10.0 PR-4 — when `plan_id` is supplied, attaches a
+    `plan_verification` envelope per prd-v0.10-universal-bookend.md §5.4.
+    Each generated test record becomes an evidence row with `kind:
+    "generated_test"`, the source URL, and the covering module info.
+    Failed generations also flow into evidence so CPs can assert on
+    failure modes (e.g., "module X had no generation errors").
     """
     analysis = await analyzer.analyze_url(
         url, timeout_ms=timeout_ms, auth_cookie=auth_cookie,
@@ -1288,7 +1313,7 @@ async def _auto_generate_tests(
                     "error": f"{type(e).__name__}: {e}",
                 })
 
-    return {
+    result = {
         "url": url,
         "page_title": analysis.get("page_title"),
         "module_count": analysis.get("module_count"),
@@ -1297,6 +1322,35 @@ async def _auto_generate_tests(
         "tests_failed": sum(1 for g in generated if "error" in g),
         "tests": generated,
     }
+
+    # v0.10.0 PR-4 — universal bookend (theme A,
+    # prd-v0.10-universal-bookend.md §5.4). One evidence row per
+    # generated test record, with the source URL and a `kind:
+    # "generated_test"` discriminator. Successful + failed generations
+    # both flow into evidence so CPs can assert on either dimension
+    # (e.g. "form module produced at least one test" or "no module
+    # generated >0 failures").
+    if plan_id:
+        evidence = [
+            {
+                "kind": "generated_test",
+                "path": g.get("filename"),
+                "covers_module": g.get("module_kind"),
+                "module_name": g.get("module_name"),
+                "description": g.get("description"),
+                "error": g.get("error"),  # None on success
+                "url": url,
+            }
+            for g in generated
+        ]
+        from .tools.qa_plan import verify_plan_tool
+        verify_result = verify_plan_tool({
+            "plan_id": plan_id,
+            "evidence": evidence,
+        })
+        result["plan_verification"] = verify_result
+
+    return result
 
 
 async def main():
