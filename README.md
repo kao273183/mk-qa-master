@@ -470,7 +470,7 @@ auto-activates the skill — or explicitly invoke a slash command:
 ### What the skill does
 
 The skill is a single-file operating contract that teaches the host how
-to drive mk-qa-master's 19 MCP tools coherently. It encodes:
+to drive mk-qa-master's 21 MCP tools coherently. It encodes:
 
 - **When to auto-activate** — phrases like "run my tests", "why did this
   test fail", "scan this API for OWASP issues" trigger it.
@@ -483,11 +483,51 @@ Full reference at [`skills/mk-qa-master/SKILL.md`](skills/mk-qa-master/SKILL.md)
 
 ### Why a skill on top of an MCP server?
 
-The MCP server makes the 19 tools **callable** by any client. The skill
+The MCP server makes the 21 tools **callable** by any client. The skill
 makes them **discoverable + governed**: it gives the host's skill router
 enough context to decide *when* to use the tools and *which flow* to
 follow. Inspired by [microsoft/Webwright](https://github.com/microsoft/Webwright),
 which uses the same pattern.
+
+
+## Universal plan + verify bookend (v0.10.0)
+
+> *Declare success up front, run the work, get a checklist back — on every
+> meaningful tool, not just one.*
+
+v0.10.0 generalizes the v0.9.4 bookend pattern (which lived only on
+`run_api_security_scan`) to **5 core tools**. Each one accepts an
+optional `plan_id` kwarg returned by `qa_plan`. When you thread that
+`plan_id` through, the tool's response gains a `plan_verification`
+envelope that auto-verifies the work against the critical points you
+declared — no separate `verify_plan` call needed.
+
+| Tool | Evidence shape | Typical CP |
+|---|---|---|
+| `run_tests` | pytest-json-report's `tests` array (per-test result) | `"test_login passes"` / `"suite duration < 30s"` |
+| `solve_visual_challenge` | Single record: `{kind, status, token_populated, rounds_used, fingerprint, challenge_id}` — **raw token NEVER in evidence** | `"captcha solved AND token_populated"` |
+| `analyze_url` | One row per discovered module (with `kind`, `selectors`, source URL) | `"form module discovered"` / `"≥1 cta found"` |
+| `auto_generate_tests` | One row per generated test (success or failure) | `"form module produced ≥1 test"` / `"no generation errors"` |
+| `run_api_security_scan` (v0.9.4) | One row per OWASP finding | `"BOLA finding on /orders endpoint"` |
+
+```python
+plan = qa_plan(
+    task="Smoke the signup flow",
+    critical_points=[
+        {"id": "CP1", "verification_hint": "test_happy_path passes"},
+        {"id": "CP2", "verification_hint": "BOLA-on-orders"},
+    ],
+)
+
+result = run_tests(plan_id=plan["plan_id"])
+
+# result["plan_verification"]["status"] == "passed" | "incomplete" | "failed"
+# result["plan_verification"]["checklist"] tells you per-CP outcomes
+```
+
+Backward compat: omitting `plan_id` keeps the v0.9.x response shape
+intact. See [`docs/prd-v0.10-universal-bookend.md`](docs/prd-v0.10-universal-bookend.md)
+for per-tool evidence contracts and the locked decisions.
 
 
 ## Wire into Claude Desktop (legacy MCP-only path)
