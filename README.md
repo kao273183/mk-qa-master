@@ -22,6 +22,8 @@
 
 > Universal MCP server for running tests across pytest / Jest / Cypress / Go,
 > with built-in DOM analyzer, run history, and a self-improvement coach.
+> **Stable since v1.0.0 (2026-06-02)** — see
+> [Stability promise](#stability-promise-v100) below.
 
 A **Model Context Protocol** server that lets Claude Desktop / Cursor / any
 MCP client drive your test suite end-to-end: run tests, inspect failures
@@ -488,6 +490,35 @@ makes them **discoverable + governed**: it gives the host's skill router
 enough context to decide *when* to use the tools and *which flow* to
 follow. Inspired by [microsoft/Webwright](https://github.com/microsoft/Webwright),
 which uses the same pattern.
+
+
+## Stability promise (v1.0.0)
+
+> *21 tools. Frozen schema. Versioned drift. Pin and go.*
+
+mk-qa-master shipped v1.0.0 on 2026-06-02. The MCP tool surface is locked: **21 tools, the consent gate env vars, the plan / bookend shapes, and the hard-stop blacklists** don't change without a deprecation cycle.
+
+### What this means for callers
+
+| If you pin… | What you get |
+|---|---|
+| `mk-qa-master==1.0.*` | Patch releases only (bugfixes; no surface change) |
+| `mk-qa-master==1.*` | Minor releases (additive only: new tools, new optional args, new fields) |
+| `mk-qa-master>=1,<2` | Same as above |
+
+Breaking changes require a v2.0 bump. Deprecations get **≥ 1 minor of warning** with `DeprecationWarning` raised at runtime, "Deprecated:" in the MCP tool description, and an entry in `docs/MIGRATION-1.x-to-2.0.md` (created when v2.0 work opens).
+
+### How the promise is enforced
+
+A CI snapshot test (`tests/test_v1_schema_snapshot.py`) freezes the 21-tool surface in `tests/snapshots/v1/tool_surface.json`. Any drift fails CI unless the PR sets `BREAKING_CHANGE_ACK=true` AND both `docs/MIGRATION-0.x-to-1.0.md` and `docs/DEPRECATION-POLICY.md` exist. The ack alone isn't a free pass — the docs must be in place.
+
+A second test (`tests/test_v1_doc_sync.py`) scans every public doc for tool-count claims and fails if any disagree with the live server.
+
+### Read the contract
+
+- [`docs/MIGRATION-0.x-to-1.0.md`](docs/MIGRATION-0.x-to-1.0.md) — every additive shape change v0.7 → v1.0 enumerated. TL;DR: v0.10 → v1.0 is a no-op.
+- [`docs/DEPRECATION-POLICY.md`](docs/DEPRECATION-POLICY.md) — formal cycle. patch = bugfix, minor = additive, major = removal (only after deprecation).
+- [`docs/prd-v1.0-stability-lock.md`](docs/prd-v1.0-stability-lock.md) — locked PRD.
 
 
 ## Universal plan + verify bookend (v0.10.0)

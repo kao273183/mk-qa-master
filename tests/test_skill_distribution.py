@@ -234,9 +234,10 @@ def test_pyproject_version_is_semver_and_at_or_above_floor():
     to (1, 0, 0)), update MIN_VERSION_FLOOR and the human-facing
     error message together — the floor itself is documented invariant,
     not just a constant."""
-    # When v1.0 ships, bump this to (1, 0, 0). Until then we're in the
-    # post-v0.10 pre-v1.0 window; the floor enforces "≥ 0.10.0".
-    MIN_VERSION_FLOOR = (0, 10, 0)
+    # v1.0 shipped 2026-06-02 — floor is now (1, 0, 0). Any future
+    # bump can leave this alone; downgrades and malformed versions are
+    # what the test catches. Next floor raise lands with v2.0.
+    MIN_VERSION_FLOOR = (1, 0, 0)
 
     raw = _pyproject_version()
     parts = raw.split(".")
