@@ -219,12 +219,12 @@ def test_claude_plugin_commands_points_at_real_dir():
 
 # ---- pyproject version sanity -------------------------------------------
 
-def test_pyproject_version_is_v0_9():
+def test_pyproject_version_is_v0_10():
     """This test exists so a future PR that bumps the version updates
     BOTH pyproject and the plugin manifests (the previous test would
     fail to mismatch but this one screams what 'correct' is)."""
-    assert _pyproject_version().startswith("0.9."), (
-        f"v0.9.x plugin skill distribution layer expects version 0.9.x; "
+    assert _pyproject_version().startswith("0.10."), (
+        f"v0.10.x universal-bookend release expects version 0.10.x; "
         f"got {_pyproject_version()!r}"
     )
 

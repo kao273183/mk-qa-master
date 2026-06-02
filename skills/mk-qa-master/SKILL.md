@@ -8,7 +8,7 @@ allowed-tools: Bash, Read, Write, Edit
 
 You are operating as the mk-qa-master agent. The user wants to run, generate,
 debug, or harden their software tests. mk-qa-master ships as an MCP server
-with **19 tools**, a bilingual QA knowledge layer, and three specialty
+with **21 tools**, a bilingual QA knowledge layer, and three specialty
 subsystems (visual challenge solver, OWASP API security scanner, self-
 improvement loop). This skill is the **single-file operating contract** —
 same file loads in Claude Code, OpenAI Codex, OpenClaw, and Hermes via the
@@ -33,7 +33,7 @@ API, design my DB, refactor my React code), DO NOT auto-activate this skill.
 
 Either:
 
-1. **mk-qa-master is wired as an MCP server in this host.** The 19 MCP tools
+1. **mk-qa-master is wired as an MCP server in this host.** The 21 MCP tools
    are directly callable — that's the happy path.
 2. **mk-qa-master is installed but not wired.** Use Bash to call
    `mk-qa-master` CLI entrypoint, or `python -m mk_qa_master.server` to
@@ -64,7 +64,7 @@ prelude (`qa_plan` + `verify_plan`) is optional but recommended for
 any non-trivial task — it forces you to declare success up front and
 ticks against ground truth at the end.
 
-### Flow 0 — Plan before acting (v0.9.1+)
+### Flow 0 — Plan before acting (v0.9.1+, universal bookend v0.10.0+)
 
 When the user asks for anything beyond a simple `list_tests`, plan
 explicitly:
@@ -73,17 +73,19 @@ explicitly:
    means. Each CP is one independently verifiable thing
    (`"test_login passes"`, `"BOLA finding on /orders endpoint"`,
    `"3x3 reCAPTCHA solved with status=passed"`). Returns a `plan_id`.
-2. Do the work — one of Flows 1-5 below.
-3. **`verify_plan(plan_id, evidence?, auto_discover?)`** — pass the
-   structured output from the flow (test report rows, scan findings,
-   log lines), OR set `auto_discover: true` and the verifier will
-   pull the latest pytest-json-report's `tests` list automatically.
-   Both can be combined. Returns per-CP satisfied/unsatisfied + an
-   overall `passed | incomplete | failed` verdict + an
-   `evidence_sources` audit trail showing what was actually used +
-   a `plan_source` field ("memory" or "disk") so you can tell whether
-   the plan came from cache or was loaded from disk after a restart
-   (v0.9.3 persistence — see below).
+2. Do the work — one of Flows 1-5 below. **v0.10.0**: every flow's
+   primary tool accepts `plan_id=<...>` as an optional kwarg
+   (`run_tests`, `solve_visual_challenge`, `analyze_url`,
+   `auto_generate_tests`, `run_api_security_scan`). When threaded
+   through, the tool's response includes `plan_verification` —
+   skip step 3 entirely.
+3. **`verify_plan(plan_id, evidence?, auto_discover?)`** — only needed
+   when a tool doesn't support `plan_id` natively, OR when stitching
+   evidence from multiple tools. Pass structured output, OR set
+   `auto_discover: true` to pull the latest pytest-json-report's
+   `tests` list. Returns per-CP satisfied/unsatisfied + an overall
+   `passed | incomplete | failed` verdict + `evidence_sources` audit
+   trail + `plan_source` ("memory" / "disk").
 
 **v0.9.3 disk persistence**: when `QA_PROJECT_ROOT` is set (or
 `QA_PLAN_PERSIST=true` forced on), every `qa_plan` write also
@@ -171,11 +173,10 @@ be in `QA_API_SECURITY_AUTHORIZED_DOMAINS` (localhost is implicit).
    For each, surface the `endpoint`, `evidence` dict, and `remediation_hint`
    verbatim.
 
-**v0.9.4 — bookend pattern.** Pair this with Flow 0: `qa_plan` first
-with one CP per expected OWASP finding, then pass `plan_id=<...>` to
-`run_api_security_scan` directly. The response's `plan_verification`
-block tells you which expected findings did and didn't fire — no
-separate `verify_plan` call needed.
+**v0.10.0 — universal bookend.** Every primary tool in Flows 1-5 now
+accepts `plan_id`. Pair Flow 0 with the relevant tool's `plan_id`
+arg; the response's `plan_verification` block tells you which CPs
+fired — no separate `verify_plan` call needed.
 
 ```
 qa_plan(critical_points=[
@@ -190,13 +191,21 @@ run_api_security_scan(spec_url, auth, plan_id=plan_id) → {
 }
 ```
 
+The same pattern works on `run_tests(plan_id=…)`, `analyze_url(plan_id=…)`,
+`solve_visual_challenge(plan_id=…)`, `auto_generate_tests(plan_id=…)`.
+Each tool builds an evidence stream tuned to its output: pytest test
+rows for `run_tests`, captcha-solve summary record for solve_visual_challenge
+(token NEVER in evidence — only `token_populated: bool`), module rows
+for analyze_url, generated-test rows for auto_generate_tests. See the
+per-tool evidence shapes in `docs/prd-v0.10-universal-bookend.md` §5.
+
 Read `reference/api-security-deep.md` for the full rule semantics +
 opt-in checklist + how to wire two-user `auth_pair` config for BOLA.
 
 ## Hard rules
 
 - **No fabricated tool calls.** Every tool name you announce must be in the
-  19-tool surface (see `reference/tool-surface.md`). If a host wraps the
+  21-tool surface (see `reference/tool-surface.md`). If a host wraps the
   MCP server, the tool names stay the same.
 - **Surface consent errors verbatim.** v0.7 visual challenge and v0.8 API
   security both gate on env vars. When the tool returns `consent_required`
@@ -228,7 +237,7 @@ from any prompt whose intent matches its description.
 ## Reference files
 
 - `reference/workflow.md` — full operating manual for each of the 5 flows
-- `reference/tool-surface.md` — cheatsheet of all 19 MCP tools with one-
+- `reference/tool-surface.md` — cheatsheet of all 21 MCP tools with one-
   liners + input schema gotchas
 - `reference/wire-mcp.md` — what to do when the host doesn't have mk-qa-
   master as an MCP server yet (CLI fallback)
