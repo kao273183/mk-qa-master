@@ -1,4 +1,4 @@
-# mk-qa-master — Tool Surface Cheatsheet (v0.10.0)
+# mk-qa-master — Tool Surface Cheatsheet (v1.0.0 — Stable)
 
 The 21 MCP tools currently exposed by mk-qa-master, grouped by flow.
 One-liner + the input-schema gotchas you actually need to remember.
