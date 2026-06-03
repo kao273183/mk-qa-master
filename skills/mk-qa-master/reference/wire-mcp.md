@@ -9,7 +9,7 @@ an MCP server. This file is for the fallback case where it isn't.
 
 If you ran `/plugin install mk-qa-master@mk-qa-master`, the plugin
 manifest at `.claude-plugin/plugin.json` already wires the MCP server.
-Restart Claude Code and the 21 tools should appear in tool autocomplete.
+Restart Claude Code and the 22 tools should appear in tool autocomplete.
 
 Otherwise, add to `~/Library/Application Support/Claude/claude_desktop_config.json`
 (macOS) or the equivalent on your platform:

@@ -313,19 +313,64 @@ def test_get_failure_details_filters_by_test_id_substring(_clean_edge_env, tmp_p
     assert failures[0]["nodeid"].endswith("test_detect_person")
 
 
-def test_generate_test_writes_placeholder_pytest_file(_clean_edge_env, tmp_path, monkeypatch):
-    """PR-1's runner has a placeholder generator. PR-3 replaces this
-    with the real edge template that emits IoU + latency assertions."""
+def test_generate_test_emits_working_pytest_with_iou_and_throughput(
+    _clean_edge_env, tmp_path, monkeypatch
+):
+    """v1.1 PR-3 swapped the PR-1 placeholder for a real spec §10
+    template. The generated file:
+      - imports the pytest plugin fixtures (backend / stream / latency)
+      - has a label-aware detection test that's skipped without a label
+      - has an unconditional throughput test
+      - reads EDGE_IOU_THRESHOLD / EDGE_MIN_FPS / EDGE_LATENCY_SLA_MS
+        from os.environ (so the runner's _edge_env() populates them)
+    """
     monkeypatch.setattr(
         "mk_qa_master.runners.edge_inference.PROJECT_ROOT", tmp_path,
     )
     from mk_qa_master.runners.edge_inference import EdgeInferenceRunner
     runner = EdgeInferenceRunner()
     rel_path = runner.generate_test(
-        description="detect_person at frame 0",
-        filename="test_edge_placeholder.py",
+        description="detect person in factory feed",
+        filename="test_edge_factory.py",
+        annotations_path="fixtures/factory.annotations.json",
+        label="person",
+        max_frame=120,
     )
-    assert rel_path == "test_edge_placeholder.py"
-    output = (tmp_path / "test_edge_placeholder.py").read_text()
-    assert "test_placeholder" in output
-    assert "detect_person at frame 0" in output  # description in docstring
+    assert rel_path == "test_edge_factory.py"
+    output = (tmp_path / "test_edge_factory.py").read_text()
+
+    # Docstring carries the human description.
+    assert "detect person in factory feed" in output
+    # Fixtures imported from the pytest plugin module.
+    assert "from mk_qa_master.edge.pytest_plugin import" in output
+    # Per-label test function uses the label as identifier.
+    assert "def test_detect_person" in output
+    # Throughput test always present.
+    assert "def test_throughput" in output
+    # Env-driven thresholds.
+    assert "EDGE_IOU_THRESHOLD" in output
+    assert "EDGE_MIN_FPS" in output
+    assert "EDGE_LATENCY_SLA_MS" in output
+    # Annotations path threaded through.
+    assert "fixtures/factory.annotations.json" in output
+
+
+def test_generate_test_without_label_skips_detection(_clean_edge_env, tmp_path, monkeypatch):
+    """Calling generate_test with no label still emits a valid file —
+    the detection test is decorated with skipif so the throughput test
+    is the only thing that runs."""
+    monkeypatch.setattr(
+        "mk_qa_master.runners.edge_inference.PROJECT_ROOT", tmp_path,
+    )
+    from mk_qa_master.runners.edge_inference import EdgeInferenceRunner
+    runner = EdgeInferenceRunner()
+    rel_path = runner.generate_test(
+        description="bare throughput baseline",
+        filename="test_edge_throughput.py",
+    )
+    output = (tmp_path / rel_path).read_text()
+    # Detection test exists but is skipped by default identifier.
+    assert "def test_detect_target" in output
+    assert "skipif(not LABEL" in output
+    # Throughput test always emitted.
+    assert "def test_throughput" in output

@@ -1,6 +1,6 @@
 # mk-qa-master — Tool Surface Cheatsheet (v1.0.0 — Stable)
 
-The 21 MCP tools currently exposed by mk-qa-master, grouped by flow.
+The 22 MCP tools currently exposed by mk-qa-master, grouped by flow.
 One-liner + the input-schema gotchas you actually need to remember.
 
 ---
@@ -34,6 +34,7 @@ Use them as bookends around Flows 1-5. Skip for one-shot reads.
 |---|---|---|
 | `analyze_url` | Discover modules + candidate TCs from a web URL | SPA-heavy sites need `timeout_ms=30000+`; behind-login needs `auth_cookie` |
 | `analyze_screen` | Same but for mobile (Maestro hierarchy) | Requires Maestro CLI + a booted device |
+| `analyze_stream` | **v1.1** — Same but for RTSP video streams. Returns `{width, height, fps, labels, candidate_tcs}`. Requires `[edge]` extras (opencv-python). Vendor-host blacklist refuses Dahua / Hikvision / etc. by default — set `QA_EDGE_ALLOW_VENDOR_HOSTS=true` to override. |
 | `generate_test` | Generate ONE pytest test from a description + module | `filename` should be a slug, no `.py` |
 | `auto_generate_tests` | Chain `analyze_url` → `generate_test` × N | `tests_per_module` defaults to 1 — anything above 3 produces noise |
 | `codegen` | Playwright codegen-style scaffolding | Only meaningful on pytest-playwright |

@@ -509,6 +509,53 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="analyze_stream",
+            description=(
+                "v1.1.0 — Edge AI version of analyze_url / analyze_screen. Probes an "
+                "RTSP stream (or a file path destined for local mediamtx) and returns "
+                "basic geometry (width / height / fps) plus a candidate_tcs list. When "
+                "an annotations sidecar (JSON: per-frame expected detections) is supplied, "
+                "candidate_tcs gets one entry per discovered label PLUS four runner-"
+                "standard entries (throughput, latency SLA, reconnect, empty-frame). "
+                "Strings only — same schema parity as analyze_url's candidate_tcs.\n\n"
+                "Vendor-host blacklist (default-on): refuses RTSP URLs at known "
+                "surveillance / IoT camera vendor domains (Dahua / Hikvision / etc.) "
+                "to keep accidental probing of public camera feeds off the default "
+                "path. Set QA_EDGE_ALLOW_VENDOR_HOSTS=true to opt out for own-camera "
+                "testing.\n\n"
+                "Requires the `[edge]` extras (`pip install \"mk-qa-master[edge]\"`) — "
+                "opencv-python is the probe driver. Tool returns "
+                "{error: missing_extras, hint} when the extras aren't installed.\n\n"
+                "Returns on success: {url, width, height, fps, labels, candidate_tcs}.\n"
+                "Returns on rejection: {error: bad_request | forbidden_vendor_host | "
+                "missing_extras | stream_unreachable, hint, ...}."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "rtsp_url": {
+                        "type": "string",
+                        "description": (
+                            "Required. The stream to probe. Either an `rtsp://...` URL "
+                            "or a file path that the EdgeInferenceRunner will serve via "
+                            "mediamtx + ffmpeg at setup time."
+                        ),
+                    },
+                    "annotations_path": {
+                        "type": "string",
+                        "description": (
+                            "Optional. JSON sidecar with per-frame expected detections "
+                            "(format: {fps, frames: {frame_idx: [{label, bbox}, ...]}}). "
+                            "When supplied, candidate_tcs lists one entry per discovered "
+                            "label. Missing / malformed files are non-fatal — the tool "
+                            "falls back to label-free candidates."
+                        ),
+                    },
+                },
+                "required": ["rtsp_url"],
+            },
+        ),
+        Tool(
             name="init_qa_knowledge",
             description=(
                 "在受測專案根 (PROJECT_ROOT) 建立 qa-knowledge.md 起手範本，"
@@ -1148,6 +1195,13 @@ async def _dispatch(name: str, args: dict) -> list[TextContent]:
             telemetry.log_discovered_modules(
                 args.get("app_id") or "screen", result.get("modules", []),
             )
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    if name == "analyze_stream":
+        # v1.1.0 — Edge AI stream probe. Sync (cv2.VideoCapture blocks)
+        # so wrap in to_thread to keep the MCP server's asyncio loop free.
+        from .tools.analyze_stream import analyze_stream as _analyze_stream_impl
+        result = await asyncio.to_thread(_analyze_stream_impl, args or {})
         return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
 
     if name == "auto_generate_tests":

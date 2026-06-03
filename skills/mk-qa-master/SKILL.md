@@ -8,7 +8,7 @@ allowed-tools: Bash, Read, Write, Edit
 
 You are operating as the mk-qa-master agent. The user wants to run, generate,
 debug, or harden their software tests. mk-qa-master ships as an MCP server
-with **21 tools**, a bilingual QA knowledge layer, and three specialty
+with **22 tools**, a bilingual QA knowledge layer, and three specialty
 subsystems (visual challenge solver, OWASP API security scanner, self-
 improvement loop). This skill is the **single-file operating contract** —
 same file loads in Claude Code, OpenAI Codex, OpenClaw, and Hermes via the
@@ -33,7 +33,7 @@ API, design my DB, refactor my React code), DO NOT auto-activate this skill.
 
 Either:
 
-1. **mk-qa-master is wired as an MCP server in this host.** The 21 MCP tools
+1. **mk-qa-master is wired as an MCP server in this host.** The 22 MCP tools
    are directly callable — that's the happy path.
 2. **mk-qa-master is installed but not wired.** Use Bash to call
    `mk-qa-master` CLI entrypoint, or `python -m mk_qa_master.server` to
@@ -59,7 +59,7 @@ npm install -g newman           # if using Postman collections
 
 ## Workflow
 
-mk-qa-master's 21 tools group into **a prelude + five flows**. The
+mk-qa-master's 22 tools group into **a prelude + five flows**. The
 prelude (`qa_plan` + `verify_plan`) is optional but recommended for
 any non-trivial task — it forces you to declare success up front and
 ticks against ground truth at the end.
@@ -205,7 +205,7 @@ opt-in checklist + how to wire two-user `auth_pair` config for BOLA.
 ## Hard rules
 
 - **No fabricated tool calls.** Every tool name you announce must be in the
-  21-tool surface (see `reference/tool-surface.md`). If a host wraps the
+  22-tool surface (see `reference/tool-surface.md`). If a host wraps the
   MCP server, the tool names stay the same.
 - **Surface consent errors verbatim.** v0.7 visual challenge and v0.8 API
   security both gate on env vars. When the tool returns `consent_required`
@@ -237,7 +237,7 @@ from any prompt whose intent matches its description.
 ## Reference files
 
 - `reference/workflow.md` — full operating manual for each of the 5 flows
-- `reference/tool-surface.md` — cheatsheet of all 21 MCP tools with one-
+- `reference/tool-surface.md` — cheatsheet of all 22 MCP tools with one-
   liners + input schema gotchas
 - `reference/wire-mcp.md` — what to do when the host doesn't have mk-qa-
   master as an MCP server yet (CLI fallback)

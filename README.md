@@ -472,7 +472,7 @@ auto-activates the skill — or explicitly invoke a slash command:
 ### What the skill does
 
 The skill is a single-file operating contract that teaches the host how
-to drive mk-qa-master's 21 MCP tools coherently. It encodes:
+to drive mk-qa-master's 22 MCP tools coherently. It encodes:
 
 - **When to auto-activate** — phrases like "run my tests", "why did this
   test fail", "scan this API for OWASP issues" trigger it.
@@ -485,7 +485,7 @@ Full reference at [`skills/mk-qa-master/SKILL.md`](skills/mk-qa-master/SKILL.md)
 
 ### Why a skill on top of an MCP server?
 
-The MCP server makes the 21 tools **callable** by any client. The skill
+The MCP server makes the 22 tools **callable** by any client. The skill
 makes them **discoverable + governed**: it gives the host's skill router
 enough context to decide *when* to use the tools and *which flow* to
 follow. Inspired by [microsoft/Webwright](https://github.com/microsoft/Webwright),
@@ -494,9 +494,9 @@ which uses the same pattern.
 
 ## Stability promise (v1.0.0)
 
-> *21 tools. Frozen schema. Versioned drift. Pin and go.*
+> *22 tools. Frozen schema. Versioned drift. Pin and go.*
 
-mk-qa-master shipped v1.0.0 on 2026-06-02. The MCP tool surface is locked: **21 tools, the consent gate env vars, the plan / bookend shapes, and the hard-stop blacklists** don't change without a deprecation cycle.
+mk-qa-master shipped v1.0.0 on 2026-06-02. The MCP tool surface is locked: **22 tools, the consent gate env vars, the plan / bookend shapes, and the hard-stop blacklists** don't change without a deprecation cycle.
 
 ### What this means for callers
 
@@ -510,7 +510,7 @@ Breaking changes require a v2.0 bump. Deprecations get **≥ 1 minor of warning*
 
 ### How the promise is enforced
 
-A CI snapshot test (`tests/test_v1_schema_snapshot.py`) freezes the 21-tool surface in `tests/snapshots/v1/tool_surface.json`. Any drift fails CI unless the PR sets `BREAKING_CHANGE_ACK=true` AND both `docs/MIGRATION-0.x-to-1.0.md` and `docs/DEPRECATION-POLICY.md` exist. The ack alone isn't a free pass — the docs must be in place.
+A CI snapshot test (`tests/test_v1_schema_snapshot.py`) freezes the 22-tool surface in `tests/snapshots/v1/tool_surface.json`. Any drift fails CI unless the PR sets `BREAKING_CHANGE_ACK=true` AND both `docs/MIGRATION-0.x-to-1.0.md` and `docs/DEPRECATION-POLICY.md` exist. The ack alone isn't a free pass — the docs must be in place.
 
 A second test (`tests/test_v1_doc_sync.py`) scans every public doc for tool-count claims and fails if any disagree with the live server.
 
