@@ -1,6 +1,6 @@
 [project]
 name = "mk-qa-master"
-version = "1.1.0"
+version = "1.1.1"
 description = "Stable since v1.0.0 — MCP server + cross-host agent skill (Claude Code / Codex / OpenClaw / Hermes) for QA testing across pytest / Jest / Cypress / Go / Maestro / Schemathesis / Newman, plus v1.1 Edge AI Runner (RTSP + YOLO). 22 frozen tools, bilingual EN/zh-TW QA knowledge, AI Visual Challenge Solver (reCAPTCHA / hCaptcha), OWASP API Top 10 (2023) scanner, universal qa_plan + verify bookend across 5 core tools (AI 測試大師)"
 readme = "README.md"
 requires-python = ">=3.10"
