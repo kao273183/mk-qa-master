@@ -521,31 +521,87 @@ A second test (`tests/test_v1_doc_sync.py`) scans every public doc for tool-coun
 - [`docs/prd-v1.0-stability-lock.md`](docs/prd-v1.0-stability-lock.md) — locked PRD.
 
 
-## Edge AI Runner (v1.1.0)
+## Edge AI Runner (v1.1.0+)
 
 > *RTSP stream + YOLO inference + pytest assertions in a single `QA_RUNNER=edge` flag.*
 
 v1.1.0 adds an Edge AI Inference Runner that drops into the same `analyze → generate → run` loop the web and mobile runners already use. The new `analyze_stream` MCP tool (tool #22) probes RTSP geometry and emits candidate test cases per detected label.
 
+### Quick install
+
 ```bash
 pip install "mk-qa-master[edge]"   # opencv-python + ultralytics + requests
 
-export QA_RUNNER=edge
-export QA_RTSP_SOURCE=fixtures/factory.mp4   # or rtsp://camera.local:554/feed
-export QA_MODEL_PATH=yolov8n.pt
+# Plus the binary deps the runner shells out to:
+brew install ffmpeg mediamtx       # macOS
+# or: sudo apt install ffmpeg + download mediamtx from https://github.com/bluenviron/mediamtx
 ```
 
-Ask Claude: *"analyze rtsp://localhost:8554/cam with fixtures/factory.annotations.json and generate detection tests"*. The runner brings up mediamtx + ffmpeg (when given a file source), generates a working pytest with IoU + p95 latency + throughput assertions, and runs it.
+### End-to-end walkthrough
 
-Phase 1+2 ship in v1.1.0 (desktop YOLO + `analyze_stream`). Phase 3 (remote inference via `QA_JETSON_HOST` / `QA_INFERENCE_ENDPOINT`) and Phase 4 (resilience signals into `get_optimization_plan`) defer to v1.2.0+. The full PRD is at [`docs/prd-v1.1-edge-ai-runner.md`](docs/prd-v1.1-edge-ai-runner.md).
+The bundled sample fixture at [`examples/sample_edge_fixture/`](examples/sample_edge_fixture/) exercises the full loop. Tested against `mk-qa-master==1.1.0` (Edge AI), `mk-qa-master==1.1.1` (housekeeping), and `1.1.2` (this doc patch).
+
+**1. Configure the runner.** Three env vars are enough for the desktop path:
+
+```bash
+export QA_RUNNER=edge
+export QA_RTSP_SOURCE="$(pwd)/examples/sample_edge_fixture/factory.mp4"
+export QA_MODEL_PATH=yolov8n.pt    # ultralytics auto-downloads on first use
+```
+
+Optional tuning (defaults in parentheses): `QA_MIN_FPS` (25), `QA_LATENCY_SLA_MS` (40), `QA_IOU_THRESHOLD` (0.5).
+
+**2. Ask Claude / Cursor / any MCP host.** With mk-qa-master wired as an MCP server (see [Wire into Claude Desktop](#wire-into-claude-desktop-legacy-mcp-only-path)), prompt:
+
+> *"analyze the stream at `examples/sample_edge_fixture/factory.mp4` with the bundled annotations sidecar, then generate detection tests for each label."*
+
+Claude calls `analyze_stream` → gets `{width: 320, height: 240, fps: 5, labels: ["forklift", "person"], candidate_tcs: [...]}` → calls `generate_test` per label → writes `test_edge_factory_person.py` and `test_edge_factory_forklift.py` to `PROJECT_ROOT/tests/`.
+
+**3. Run.** The runner brings up local `mediamtx` + `ffmpeg` (the file source loops over RTSP), exports `EDGE_*` env vars from the `QA_*` you set, and invokes pytest. Each generated test:
+
+- Reads frames via `cv2.VideoCapture(EDGE_RTSP_URL)`
+- Pushes each frame through the YOLO backend
+- Tracks per-frame latency in a `LatencyTracker`
+- Asserts the per-label detection appears within the IoU threshold for at least one frame in the ground-truth window
+- Asserts p95 latency ≤ `EDGE_LATENCY_SLA_MS`
+- Asserts sustained throughput ≥ `EDGE_MIN_FPS` over a 150-frame window
+
+The report lands in `PROJECT_ROOT/report.json` + `junit.xml`, gets archived under `test-results/history/`, and triggers `get_optimization_plan` like any other runner.
 
 ### Vendor-host safety default
 
-`analyze_stream` refuses RTSP URLs at known surveillance / IoT camera vendor domains (Dahua, Hikvision, Ezviz, Axis, Amcrest, Lorex, Swann, Reolink) by default. This keeps accidental probing of public camera feeds off the default path. Set `QA_EDGE_ALLOW_VENDOR_HOSTS=true` to opt in for own-camera testing.
+`analyze_stream` refuses RTSP URLs at known surveillance / IoT camera vendor domains (Dahua, Hikvision, Ezviz, Axis, Amcrest, Lorex, Swann, Reolink) by default. Keeps accidental probing of public camera feeds off the default path. Set `QA_EDGE_ALLOW_VENDOR_HOSTS=true` to opt in for own-camera testing.
 
-### Migration from v1.0.0
+### Phase status
 
-v1.0.0 → v1.1.0 is **additive only** — no existing tool changed shape. See [`docs/MIGRATION-1.x.md`](docs/MIGRATION-1.x.md) for the full change log + the list of new `QA_*` env vars.
+| Phase | What | Status |
+|---|---|---|
+| 1 | Desktop YOLO runner + RTSP source mgmt + metrics | ✅ v1.1.0 |
+| 2 | `analyze_stream` MCP tool + edge `generate_test` template | ✅ v1.1.0 |
+| housekeeping | Sample fixture + `edge-sample` CI + EN/zh-TW Edge knowledge section | ✅ v1.1.1 |
+| docs | README walkthrough + troubleshooting (this section) | ✅ v1.1.2 |
+| 3 | Remote inference (`RemoteHTTP.infer()` + `QA_JETSON_HOST` real probe) | ⏸️ v1.2.0+ — `NotImplementedError` raised if used early |
+| 4 | Resilience injection + Edge flake signals + degradation scenarios | ⏸️ v1.2.0+ |
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `Could not open RTSP stream: rtsp://localhost:8554/cam` | ffmpeg or mediamtx not on PATH; readiness probe timed out at 10 s | Verify `which ffmpeg mediamtx`; if mediamtx lives elsewhere, set `QA_MEDIAMTX_BIN=/full/path/to/mediamtx`; slow first-run on Apple Silicon — re-run after the first mediamtx boot |
+| `[edge] setup failed: ConnectionError` | Port 8554 already in use by another mediamtx / RTSP server | Set `QA_RTSP_PORT=8555` (or any free port); the generated test reads `EDGE_RTSP_URL` so no test edit needed |
+| `{ "error": "missing_extras", "hint": ... }` from `analyze_stream` | Base install without `[edge]` extras | `pip install "mk-qa-master[edge]"` |
+| `{ "error": "forbidden_vendor_host", "blocked_host": "..." }` | Default-on blacklist (Dahua / Hikvision / etc.) | If it's your own camera: `export QA_EDGE_ALLOW_VENDOR_HOSTS=true`. If it isn't: leave the block in place |
+| `NotImplementedError: RemoteHTTP backend lands in v1.2 (Phase 3 of theme G)` | You set `QA_JETSON_HOST` or `QA_INFERENCE_ENDPOINT` against v1.1.x | v1.1 ships LocalYolo only. Unset the remote env vars to fall back to desktop YOLO. Phase 3 follows in v1.2 |
+| `ultralytics` taking forever to install | First-time torch download (~700 MB) | One-time cost. Cache `pip install` in CI; locally use `pip install --no-deps` once torch is in place |
+| Generated test asserts `hit, "label X not detected"` but the sample fixture is just `testsrc` | Synthetic test pattern doesn't contain real persons / forklifts | Expected for the bundled fixture (it's plumbing verification only). Swap in real footage + real annotations for actual detection assertions; see [`examples/sample_edge_fixture/README.md`](examples/sample_edge_fixture/README.md) |
+| p95 latency assertion fires on CPU but passes on GPU | Default `QA_LATENCY_SLA_MS=40` assumes GPU inference | Raise `QA_LATENCY_SLA_MS` for CPU runs (typical CPU yolov8n: 60–120 ms). See the SLA defaults table in `get_qa_context(section="Edge Vision Inference")` |
+| ffmpeg complains about `Stream #0:0: Video: ... at 5/1 fps` | Sample fixture is intentionally low fps (5) to keep the binary at 75KB | Expected. For real testing supply your own higher-fps source |
+
+### Migration from v1.0.0 → v1.1.x
+
+v1.0.0 → v1.1.0 is **additive only** — no existing tool changed shape. v1.1.0 → v1.1.1 → v1.1.2 are patch releases (housekeeping + docs). See [`docs/MIGRATION-1.x.md`](docs/MIGRATION-1.x.md) for the full change log + the list of new `QA_*` env vars.
+
+Full PRD: [`docs/prd-v1.1-edge-ai-runner.md`](docs/prd-v1.1-edge-ai-runner.md).
 
 
 ## Universal plan + verify bookend (v0.10.0)
@@ -627,6 +683,16 @@ Two environment variables drive the runtime:
 "env": { "QA_RUNNER": "go", "QA_PROJECT_ROOT": "/path/to/go-project" }
 ```
 
+**Maestro (mobile, since v0.3.0)**:
+```json
+"env": {
+  "QA_RUNNER": "maestro",
+  "QA_PROJECT_ROOT": "/path/to/maestro-flows",
+  "QA_ANDROID_HOST": "127.0.0.1:5555"
+}
+```
+`QA_ANDROID_HOST` is optional — only set it when targeting BlueStacks / Genymotion / cloud-Android-farm via remote ADB. iOS Simulator / Android Emulator / local USB device auto-discovered.
+
 **Schemathesis (API)**:
 ```json
 "env": {
@@ -642,6 +708,16 @@ Two environment variables drive the runtime:
   "QA_POSTMAN_COLLECTION": "/absolute/path/to/collection.json"
 }
 ```
+
+**Edge AI (RTSP + YOLO, since v1.1.0)**:
+```json
+"env": {
+  "QA_RUNNER": "edge",
+  "QA_RTSP_SOURCE": "/absolute/path/to/factory.mp4",
+  "QA_MODEL_PATH": "yolov8n.pt"
+}
+```
+Requires `pip install "mk-qa-master[edge]"` + ffmpeg + mediamtx on PATH. See the [Edge AI Runner walkthrough](#edge-ai-runner-v110) for the full env-var table and troubleshooting.
 
 ---
 
