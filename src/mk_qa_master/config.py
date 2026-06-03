@@ -251,9 +251,17 @@ class EdgeConfig:
     @property
     def device_timeout_s(self) -> int:
         # Mirrors Maestro's pattern of extending timeouts when network
-        # device paths are involved. v1.2 (Phase 3) will use this when
-        # the RemoteHTTP backend talks to a Jetson over LAN.
+        # device paths are involved. v1.2 (Phase 3) uses this for the
+        # setup-time GET /health probe in EdgeInferenceRunner — separate
+        # from per-inference timeouts (see `inference_timeout_s` below).
         return int(os.getenv("QA_DEVICE_TIMEOUT_S", "60"))
+
+    @property
+    def inference_timeout_s(self) -> float:
+        # v1.2.0 — per-inference timeout for RemoteHTTP.infer(). Separate
+        # from device_timeout_s (which is setup-time GET /health). Default
+        # 10 s gives fast feedback during dev; tune up for batch jobs.
+        return float(os.getenv("QA_INFERENCE_TIMEOUT_S", "10"))
 
     @property
     def allow_vendor_hosts(self) -> bool:

@@ -88,3 +88,29 @@ def test_vendor_host_blacklist_override_accepts_truthy(monkeypatch, cfg):
     assert cfg.allow_vendor_hosts is True
     monkeypatch.setenv("QA_EDGE_ALLOW_VENDOR_HOSTS", "yes")
     assert cfg.allow_vendor_hosts is True
+
+
+# ---- v1.2.0 — QA_INFERENCE_TIMEOUT_S --------------------------------------
+
+def test_inference_timeout_s_default_is_10(cfg):
+    """Default 10s — fast feedback during dev; users tune up for batch.
+    Locked per PRD §11 #4."""
+    assert cfg.inference_timeout_s == 10.0
+
+
+def test_inference_timeout_s_env_override(monkeypatch, cfg):
+    """QA_INFERENCE_TIMEOUT_S env var propagates to the config property.
+    RemoteHTTP.infer() reads the env directly (separate path); this
+    locks the EdgeConfig surface for callers who'd rather query the
+    config object than poke at environ."""
+    monkeypatch.setenv("QA_INFERENCE_TIMEOUT_S", "42.5")
+    assert cfg.inference_timeout_s == 42.5
+
+
+def test_inference_timeout_s_is_separate_from_device_timeout_s(monkeypatch, cfg):
+    """Decision §11 #4: per-inference vs setup-time are intentionally
+    separate knobs. Tuning one doesn't move the other."""
+    monkeypatch.setenv("QA_INFERENCE_TIMEOUT_S", "5")
+    monkeypatch.setenv("QA_DEVICE_TIMEOUT_S", "120")
+    assert cfg.inference_timeout_s == 5.0
+    assert cfg.device_timeout_s == 120
