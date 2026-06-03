@@ -140,7 +140,15 @@ async def list_tools() -> list[Tool]:
                 "total / passed / failed / skipped / flaky_in_run（auto-retry 救回的數量）/ "
                 "duration（秒）。比再跑一次 suite 便宜得多——適合在連續操作中間反覆查狀態。"
                 "未跑過時回 {error: 找不到報告，請先執行 run_tests}。"
-                "拿到摘要後若 failed > 0，接 get_failure_details 拿錯誤細節。"
+                "拿到摘要後若 failed > 0，接 get_failure_details 拿錯誤細節。\n\n"
+                "v1.3.0+: Edge AI runner attaches an optional `edge_metrics` block "
+                "to each test entry "
+                "({p95_latency_ms, fps, iou_per_frame, labels_covered}). "
+                "`get_optimization_plan` reads these to surface 4 Edge-specific "
+                "flake signals (latency_p95_exceeded_sla, fps_variance_across_runs, "
+                "iou_jitter_per_tc, coverage_gap_per_label) alongside the "
+                "standard flake/broken/slow_regression categories. Non-edge "
+                "runs have no `edge_metrics` field and see no signal changes."
             ),
             inputSchema={"type": "object", "properties": {}},
         ),

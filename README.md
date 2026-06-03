@@ -601,6 +601,19 @@ The report lands in `PROJECT_ROOT/report.json` + `junit.xml`, gets archived unde
 
 `analyze_stream` refuses RTSP URLs at known surveillance / IoT camera vendor domains (Dahua, Hikvision, Ezviz, Axis, Amcrest, Lorex, Swann, Reolink) by default. Keeps accidental probing of public camera feeds off the default path. Set `QA_EDGE_ALLOW_VENDOR_HOSTS=true` to opt in for own-camera testing.
 
+### Resilience injection (v1.3.0)
+
+v1.3.0 adds an opt-in network degradation harness for Edge runs. Pass `resilience_mode="netem"` to `generate_test` and the emitted pytest uses Linux `tc qdisc` (via `mk_qa_master.edge.resilience.apply_netem`) to inject 200 ms latency + 5 % packet loss on the loopback interface, asserts the runner stays within SLA under degradation, then clears the qdisc on teardown.
+
+Double-guarded for safety:
+
+- `apply_netem` raises `RuntimeError` on non-Linux (macOS / Windows hosts → tests `pytest.skip` automatically).
+- Even on Linux it refuses to run until `QA_EDGE_NETEM_ENABLED=true` — explicit consent for the loopback impact.
+
+The same module also ships three companion helpers: `clear_netem` (idempotent teardown), `kill_ffmpeg_subprocess` (process-loss scenario), and `build_corrupted_gop_fixture` (ffmpeg-driven bitstream noise injection). See [`src/mk_qa_master/edge/resilience.py`](src/mk_qa_master/edge/resilience.py) and the v1.3.0 PRD for the full menu.
+
+When tests run under resilience mode, the emitted report carries an additive per-test `edge_metrics` block (frame drops, recovery time, etc.). `get_optimization_plan` reads it to surface 4 Edge-specific flake signals (corrupted-frame rate, recovery-time skew, drop bursts, sustained latency violations) alongside its usual signal mix.
+
 ### Phase status
 
 | Phase | What | Status |
@@ -609,8 +622,8 @@ The report lands in `PROJECT_ROOT/report.json` + `junit.xml`, gets archived unde
 | 2 | `analyze_stream` MCP tool + edge `generate_test` template | ✅ v1.1.0 |
 | housekeeping | Sample fixture + `edge-sample` CI + EN/zh-TW Edge knowledge section | ✅ v1.1.1 |
 | docs | README walkthrough + troubleshooting (this section) | ✅ v1.1.2 |
-| 3 | Remote inference (`RemoteHTTP.infer()` + `QA_JETSON_HOST` real probe) | ⏸️ v1.2.0+ — `NotImplementedError` raised if used early |
-| 4 | Resilience injection + Edge flake signals + degradation scenarios | ⏸️ v1.2.0+ |
+| 3 | Remote inference (`RemoteHTTP.infer()` + `QA_JETSON_HOST` real probe) | ✅ v1.2.0 |
+| 4 | Resilience injection + Edge flake signals + degradation scenarios | ✅ v1.3.0 |
 
 ### Troubleshooting
 
@@ -628,7 +641,7 @@ The report lands in `PROJECT_ROOT/report.json` + `junit.xml`, gets archived unde
 
 ### Migration from v1.0.0 → v1.1.x
 
-v1.0.0 → v1.1.0 is **additive only** — no existing tool changed shape. v1.1.0 → v1.1.1 → v1.1.2 are patch releases (housekeeping + docs). See [`docs/MIGRATION-1.x.md`](docs/MIGRATION-1.x.md) for the full change log + the list of new `QA_*` env vars.
+v1.0.0 → v1.1.0 is **additive only** — no existing tool changed shape. v1.1.0 → v1.1.1 → v1.1.2 are patch releases (housekeeping + docs). v1.2.0 added Phase 3 (remote inference). v1.3.0 added Phase 4 (resilience injection + Edge flake signals). See [`docs/MIGRATION-1.x.md`](docs/MIGRATION-1.x.md) for the full change log + the list of new `QA_*` env vars (`QA_EDGE_NETEM_ENABLED`, …).
 
 Full PRD: [`docs/prd-v1.1-edge-ai-runner.md`](docs/prd-v1.1-edge-ai-runner.md).
 

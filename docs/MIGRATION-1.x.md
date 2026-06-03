@@ -190,3 +190,39 @@ Callers that ignore the new field keep working unchanged.
 - `.github/workflows/ci.yml` gained a `stability-lock` job that fails when `BREAKING_CHANGE_ACK=true` is set but no `docs/MIGRATION-*.md` was edited in the PR
 - `.github/PULL_REQUEST_TEMPLATE/` gained four templates (`feat-runner`, `feat-tool`, `feat-bookend`, `release`)
 - v1.2 PRD §11 #5 response-shape lock expansion: `test_v1_schema_snapshot.py` now also asserts bookend tools' descriptions mention `plan_verification`
+
+---
+
+### v1.2.1 → v1.3.0 (Edge AI Runner Phase 4 — Resilience + Coach)
+
+**No new MCP tools. Tool count stays at 22.** Phase 4 closes the Edge AI Phase arc — Phases 1+2 (v1.1), 3 (v1.2), 4 (this) — and ships an opt-in resilience-injection layer plus 4 Edge-specific flake signals.
+
+**New module `mk_qa_master.edge.resilience`** with four helpers (all Linux-only via `_linux_only()` guard; `apply_netem` additionally gated on `QA_EDGE_NETEM_ENABLED=true` consent):
+
+| Helper | Purpose |
+|---|---|
+| `apply_netem(jitter_ms=80, loss_pct=2)` | `tc qdisc add` netem to lo — affects local mediamtx/ffmpeg/cv2 path |
+| `clear_netem()` | Tears down qdisc; `check=False` so teardown never crashes |
+| `kill_ffmpeg_subprocess(handle, after=5s)` | Daemon-thread schedules `.terminate()` on SourceHandle._procs |
+| `build_corrupted_gop_fixture(in, out, t=3)` | ffmpeg `-bsf:v noise=10000` to make cv2 choke on affected GOPs |
+
+**`get_optimization_plan` gains 4 Edge-specific flake signals** in the suite-quality lens. They read the new optional `edge_metrics` block on per-test report.json entries (added by the edge runner; absent on non-edge runs):
+
+| Signal | Priority | Triggers when |
+|---|---|---|
+| `edge_latency_p95_exceeded_sla` | 🔴 high | current run's `p95_latency_ms` > `EDGE_LATENCY_SLA_MS` (env, 40ms default) |
+| `edge_fps_variance_across_runs` | 🟡 medium | relative stddev > 0.2 across ≥5 runs of the same nodeid |
+| `edge_iou_jitter_per_tc` | 🟡 medium | stddev(iou_per_frame) > 0.1 across ≥5 samples |
+| `edge_coverage_gap_per_label` | 🟡 medium | label in `edge_metrics.labels_covered` but no nodeid contains it |
+
+Non-edge suites see no signal changes — `_analyze_edge_signals` returns `{}` when no test carries the block. The `suite_quality` block of `get_test_report`'s response gains an additive `edge_signals` key alongside the existing `tests` / `by_category` / `total_tests`. `get_test_report`'s tool description was updated to mention `edge_metrics` (per PRD §11 #2 description-text response-shape lock).
+
+**`generate_test` gains optional `resilience_mode='netem'`** keyword arg. When set, the generated pytest file gets a session-scoped autouse `_resilience` fixture that wraps detection + throughput tests with `apply_netem` / `clear_netem`. The fixture uses `pytest.importorskip` + try/except on `RuntimeError` so it cleanly skips when the resilience module isn't importable, `QA_EDGE_NETEM_ENABLED` is unset, or `sys.platform != "linux"`. Default (omit / empty string) emits no resilience artifacts — strict backward compat with v1.1/v1.2 generated tests.
+
+**New optional env var `QA_EDGE_NETEM_ENABLED`** (default `false`). Required by `apply_netem` because netem affects ALL loopback traffic — not just the test's RTSP stream — so quiet auto-enabling could disrupt unrelated host processes.
+
+**Theme J sweep**: `skills/mk-qa-master/reference/tool-surface.md` gained `analyze_stream` in its "stable since v1.1" reference list. ~5 minute housekeeping; purely doc.
+
+**Action required**: none for v1.x users on web/mobile/API runners. Edge AI users can opt into resilience-mode tests by passing `resilience_mode='netem'` to `generate_test`; flake signals appear automatically once any test entry carries `edge_metrics`.
+
+**v1.3.0 → v2.0 timing**: per `docs/RELICENSING.md` strict cycle (PRD §11 #6 ratified) — v1.3 ships within 2 weeks of merge; v2.0 (the MIT → Apache 2.0 relicense) follows after **≥ 1 calendar month** of v1.3.0 being on PyPI. The v1.x bugfix line continues for ≥ 6 months after v2.0.0 ships per `docs/DEPRECATION-POLICY.md` §"License changes".
