@@ -184,3 +184,89 @@ def connect_android_host(timeout_s: float = 10.0) -> tuple[bool, str]:
     if "connected to" in low or "already connected" in low:
         return True, out
     return False, out or f"adb connect {ANDROID_HOST} returned no output"
+
+
+# ---- v1.1.0 — Edge AI Inference Runner config -----------------------------
+# Theme G from docs/v1.1-planning.md §3, ratified Phase 1+2 bundle.
+#
+# All `QA_*` env vars; missing == "use desktop mode with the default model".
+# The runner reads this dataclass-like object at setup() to decide:
+#   - whether to start a local RTSP server (mediamtx + ffmpeg) for a file
+#     source, OR pass through an rtsp:// URL as-is
+#   - which inference backend to construct (LocalYolo / RemoteHTTP-via-
+#     QA_INFERENCE_ENDPOINT / RemoteHTTP-via-QA_JETSON_HOST)
+#   - what FPS / latency / IoU thresholds the generated tests should assert
+#
+# Reading env at access time (via properties below) keeps tests trivial —
+# monkeypatch.setenv(...) flips the config without import-order surprises.
+
+class EdgeConfig:
+    """Read-on-access view of the Edge runner's env config.
+
+    Properties rather than constants so each call re-reads `os.environ` —
+    tests use monkeypatch and the runner sees the new values immediately
+    without module reloads.
+    """
+
+    @property
+    def rtsp_source(self) -> str:
+        return os.getenv("QA_RTSP_SOURCE", "")
+
+    @property
+    def rtsp_port(self) -> int:
+        return int(os.getenv("QA_RTSP_PORT", "8554"))
+
+    @property
+    def rtsp_path(self) -> str:
+        return os.getenv("QA_RTSP_PATH", "cam")
+
+    @property
+    def jetson_host(self) -> str:
+        return os.getenv("QA_JETSON_HOST", "")
+
+    @property
+    def inference_url(self) -> str:
+        return os.getenv("QA_INFERENCE_ENDPOINT", "")
+
+    @property
+    def model_path(self) -> str:
+        return os.getenv("QA_MODEL_PATH", "yolov8n.pt")
+
+    @property
+    def min_fps(self) -> float:
+        return float(os.getenv("QA_MIN_FPS", "25"))
+
+    @property
+    def latency_sla_ms(self) -> float:
+        return float(os.getenv("QA_LATENCY_SLA_MS", "40"))
+
+    @property
+    def iou_threshold(self) -> float:
+        return float(os.getenv("QA_IOU_THRESHOLD", "0.5"))
+
+    @property
+    def mediamtx_bin(self) -> str:
+        return os.getenv("QA_MEDIAMTX_BIN", "./mediamtx")
+
+    @property
+    def device_timeout_s(self) -> int:
+        # Mirrors Maestro's pattern of extending timeouts when network
+        # device paths are involved. v1.2 (Phase 3) will use this when
+        # the RemoteHTTP backend talks to a Jetson over LAN.
+        return int(os.getenv("QA_DEVICE_TIMEOUT_S", "60"))
+
+    @property
+    def allow_vendor_hosts(self) -> bool:
+        # §6 + §11 #6: by default `analyze_stream` refuses RTSP URLs
+        # pointing at known surveillance / IoT camera vendor domains
+        # (Dahua, Hikvision, etc.) to keep accidental probing of public
+        # camera feeds off the default path. Set this env to opt out.
+        return os.getenv(
+            "QA_EDGE_ALLOW_VENDOR_HOSTS", ""
+        ).lower() in ("1", "true", "yes")
+
+    @property
+    def desktop_mode(self) -> bool:
+        """True when no remote inference target is configured. Drives
+        backend selection in `edge.inference.make_backend()`."""
+        return not self.jetson_host and not self.inference_url
