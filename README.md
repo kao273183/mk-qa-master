@@ -683,6 +683,16 @@ Two environment variables drive the runtime:
 "env": { "QA_RUNNER": "go", "QA_PROJECT_ROOT": "/path/to/go-project" }
 ```
 
+**Maestro (mobile, since v0.3.0)**:
+```json
+"env": {
+  "QA_RUNNER": "maestro",
+  "QA_PROJECT_ROOT": "/path/to/maestro-flows",
+  "QA_ANDROID_HOST": "127.0.0.1:5555"
+}
+```
+`QA_ANDROID_HOST` is optional — only set it when targeting BlueStacks / Genymotion / cloud-Android-farm via remote ADB. iOS Simulator / Android Emulator / local USB device auto-discovered.
+
 **Schemathesis (API)**:
 ```json
 "env": {
@@ -698,6 +708,16 @@ Two environment variables drive the runtime:
   "QA_POSTMAN_COLLECTION": "/absolute/path/to/collection.json"
 }
 ```
+
+**Edge AI (RTSP + YOLO, since v1.1.0)**:
+```json
+"env": {
+  "QA_RUNNER": "edge",
+  "QA_RTSP_SOURCE": "/absolute/path/to/factory.mp4",
+  "QA_MODEL_PATH": "yolov8n.pt"
+}
+```
+Requires `pip install "mk-qa-master[edge]"` + ffmpeg + mediamtx on PATH. See the [Edge AI Runner walkthrough](#edge-ai-runner-v110) for the full env-var table and troubleshooting.
 
 ---
 
