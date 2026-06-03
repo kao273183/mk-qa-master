@@ -1,0 +1,116 @@
+# Migration Guide — mk-qa-master 1.x
+
+This document logs additive shape changes within the v1.x line. v0.x → v1.0 changes live in [`MIGRATION-0.x-to-1.0.md`](MIGRATION-0.x-to-1.0.md). Future breaking changes (renames, removals, type changes) require a v2.0 bump per [`DEPRECATION-POLICY.md`](DEPRECATION-POLICY.md) — those will get a separate `MIGRATION-1.x-to-2.0.md` when v2.0 work opens.
+
+Every entry is **additive**. v1.0.0 → v1.1.0 callers that ignore newly-added fields keep working unchanged.
+
+---
+
+## TL;DR for upgraders
+
+If you're on v1.0.0, upgrading to v1.1.0 is a drop-in:
+- 21 v1.0-frozen tools all unchanged in shape
+- 1 new tool: `analyze_stream` (Edge AI Runner — only consumed when you opt into the `[edge]` extras)
+- `get_runner_info` now lists 2 new available runners (`edge`, `rtsp`) — both alias the same `EdgeInferenceRunner` class
+
+If you don't want Edge AI, ignore the new tool. The base install is unchanged.
+
+---
+
+## Change log — v1.0 → v1.1
+
+### v1.0.0 → v1.1.0 (Edge AI Runner, Theme G Phases 1+2)
+
+**New MCP tool: `analyze_stream`** (tool count 21 → 22, snapshot ack consumed).
+
+Probes an RTSP stream's basic geometry (width, height, fps) and optionally reads an annotations sidecar to surface per-label candidate test cases. The shape parallels `analyze_url` / `analyze_screen`:
+
+```jsonc
+// Input
+{
+  "rtsp_url": "rtsp://camera.local:554/feed",  // required
+  "annotations_path": "fixtures/factory.annotations.json"  // optional
+}
+
+// Success
+{
+  "url": "rtsp://camera.local:554/feed",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30.0,
+  "labels": ["person", "forklift"],
+  "candidate_tcs": [
+    "frames containing person should be detected within the IoU threshold",
+    "frames containing forklift should be detected within the IoU threshold",
+    "overall throughput should be >= the configured min_fps",
+    "single-frame p95 latency should be <= the latency SLA",
+    "stream reconnects after mid-test interruption without crashing",
+    "empty / no-target frames do not generate false-positive detections"
+  ]
+}
+
+// Error envelopes (additive, follow the existing error_kind pattern)
+{ "error": "bad_request", "hint": "..." }
+{ "error": "forbidden_vendor_host", "hint": "...", "blocked_host": "camera.dahua.com" }
+{ "error": "missing_extras", "hint": "..." }
+{ "error": "stream_unreachable", "hint": "...", "url": "..." }
+```
+
+**Vendor-host blacklist** (default-on). `analyze_stream` refuses RTSP URLs pointing at known surveillance / IoT camera vendor domains (Dahua / Hikvision / Ezviz / Axis / Amcrest / Lorex / Swann / Reolink). The override is `QA_EDGE_ALLOW_VENDOR_HOSTS=true` for own-camera testing.
+
+**New runner: `EdgeInferenceRunner`** registered as `edge` (canonical) and `rtsp` (alias). Set `QA_RUNNER=edge` to drive RTSP-stream + inference-device test scenarios. Sample lifecycle:
+
+```bash
+# Desktop mode (LocalYolo)
+export QA_RUNNER=edge
+export QA_RTSP_SOURCE=fixtures/factory.mp4
+export QA_MODEL_PATH=yolov8n.pt
+mk-qa-master  # runner brings up mediamtx + ffmpeg, runs pytest with EDGE_* env vars set
+```
+
+**Optional extras**: `pip install "mk-qa-master[edge]"`. Installs `opencv-python>=4.9`, `ultralytics>=8,<9`, `requests>=2.31`. Base install (`pip install mk-qa-master`) doesn't pull these heavy deps — the new `analyze_stream` tool surfaces `error: missing_extras` instead of crashing if you call it without the extras.
+
+**New env vars (all `QA_*`-prefixed, all optional)**:
+
+| Env var | Purpose | Default |
+|---|---|---|
+| `QA_RTSP_SOURCE` | File path or `rtsp://` URL | empty |
+| `QA_RTSP_PORT` / `QA_RTSP_PATH` | Local mediamtx server | `8554` / `cam` |
+| `QA_JETSON_HOST` | Future Phase 3 remote inference (v1.2) | empty |
+| `QA_INFERENCE_ENDPOINT` | Direct remote inference URL (v1.2) | empty |
+| `QA_MODEL_PATH` | LocalYolo model file | `yolov8n.pt` |
+| `QA_MIN_FPS` / `QA_LATENCY_SLA_MS` / `QA_IOU_THRESHOLD` | Threshold defaults the generated tests assert | `25` / `40` / `0.5` |
+| `QA_MEDIAMTX_BIN` | Path to the mediamtx binary | `./mediamtx` |
+| `QA_DEVICE_TIMEOUT_S` | Network timeout extension | `60` |
+| `QA_EDGE_ALLOW_VENDOR_HOSTS` | Override vendor-host blacklist | `false` |
+
+**Action required**: none. Skip the new tool + runner if you don't need them. Existing tools and runners are unchanged.
+
+---
+
+## What stays stable from v1.0
+
+The 21 v1.0-frozen tools are still frozen (now 22 total with the additive `analyze_stream`). The v1.0 stability promise from [`MIGRATION-0.x-to-1.0.md`](MIGRATION-0.x-to-1.0.md) "What stays stable forever" still applies:
+
+- 21 v1.0 tool names — none renamed, none removed
+- All consent gate env vars
+- Plan / bookend shapes
+- Hard-stop blacklists
+
+v1.1 adds `analyze_stream` as the 22nd frozen tool. From v1.1 forward, removing `analyze_stream` would require a v2.0 bump with a deprecation cycle.
+
+---
+
+## How to deliberately evolve the schema in v1.x
+
+Same mechanism as v1.0:
+
+1. Set `BREAKING_CHANGE_ACK=true` in the PR's CI env
+2. Add an entry to **this file** (v1.x successor entries get appended here; once v2.0 opens, a new `MIGRATION-1.x-to-2.0.md` takes over)
+3. The snapshot test rewrites itself when both `MIGRATION-*.md` files exist alongside `DEPRECATION-POLICY.md`
+
+PR #83 (the v1.1 `analyze_stream` addition) is the first real use of this mechanism — it worked. The pattern is now battle-tested for future v1.x additions.
+
+---
+
+*Last updated: 2026-06-03 (v1.1.0 release PR-4). Cross-reference: [`MIGRATION-0.x-to-1.0.md`](MIGRATION-0.x-to-1.0.md), [`DEPRECATION-POLICY.md`](DEPRECATION-POLICY.md), [`prd-v1.1-edge-ai-runner.md`](prd-v1.1-edge-ai-runner.md).*

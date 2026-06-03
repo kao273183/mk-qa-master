@@ -521,6 +521,33 @@ A second test (`tests/test_v1_doc_sync.py`) scans every public doc for tool-coun
 - [`docs/prd-v1.0-stability-lock.md`](docs/prd-v1.0-stability-lock.md) — locked PRD.
 
 
+## Edge AI Runner (v1.1.0)
+
+> *RTSP stream + YOLO inference + pytest assertions in a single `QA_RUNNER=edge` flag.*
+
+v1.1.0 adds an Edge AI Inference Runner that drops into the same `analyze → generate → run` loop the web and mobile runners already use. The new `analyze_stream` MCP tool (tool #22) probes RTSP geometry and emits candidate test cases per detected label.
+
+```bash
+pip install "mk-qa-master[edge]"   # opencv-python + ultralytics + requests
+
+export QA_RUNNER=edge
+export QA_RTSP_SOURCE=fixtures/factory.mp4   # or rtsp://camera.local:554/feed
+export QA_MODEL_PATH=yolov8n.pt
+```
+
+Ask Claude: *"analyze rtsp://localhost:8554/cam with fixtures/factory.annotations.json and generate detection tests"*. The runner brings up mediamtx + ffmpeg (when given a file source), generates a working pytest with IoU + p95 latency + throughput assertions, and runs it.
+
+Phase 1+2 ship in v1.1.0 (desktop YOLO + `analyze_stream`). Phase 3 (remote inference via `QA_JETSON_HOST` / `QA_INFERENCE_ENDPOINT`) and Phase 4 (resilience signals into `get_optimization_plan`) defer to v1.2.0+. The full PRD is at [`docs/prd-v1.1-edge-ai-runner.md`](docs/prd-v1.1-edge-ai-runner.md).
+
+### Vendor-host safety default
+
+`analyze_stream` refuses RTSP URLs at known surveillance / IoT camera vendor domains (Dahua, Hikvision, Ezviz, Axis, Amcrest, Lorex, Swann, Reolink) by default. This keeps accidental probing of public camera feeds off the default path. Set `QA_EDGE_ALLOW_VENDOR_HOSTS=true` to opt in for own-camera testing.
+
+### Migration from v1.0.0
+
+v1.0.0 → v1.1.0 is **additive only** — no existing tool changed shape. See [`docs/MIGRATION-1.x.md`](docs/MIGRATION-1.x.md) for the full change log + the list of new `QA_*` env vars.
+
+
 ## Universal plan + verify bookend (v0.10.0)
 
 > *Declare success up front, run the work, get a checklist back — on every
