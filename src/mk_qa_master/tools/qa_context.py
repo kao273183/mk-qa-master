@@ -1201,7 +1201,17 @@ def init_qa_knowledge(overwrite: bool = False) -> dict:
     edit targets in one file. Methodology language is driven by
     config.QA_LANG (`en` default; `zh-tw` for the original Traditional
     Chinese content).
+
+    v1.2.0: when QA_RUNNER=edge (or rtsp), the response gains
+    `runner_section_included: true` to signal that the scaffolded
+    knowledge file's "Edge Vision Inference Testing" section is the
+    runner-relevant starting point. Other runners get `false`. This
+    is purely a discoverability hint — the section is in the bundled
+    methodology either way (v1.1.1 added it).
     """
+    import os
+    runner = os.environ.get("QA_RUNNER", "pytest").lower()
+    runner_section_included = runner in ("edge", "rtsp")
     if QA_KNOWLEDGE_PATH.is_file() and not overwrite:
         try:
             existing_size = QA_KNOWLEDGE_PATH.stat().st_size
@@ -1211,6 +1221,7 @@ def init_qa_knowledge(overwrite: bool = False) -> dict:
             "path": str(QA_KNOWLEDGE_PATH),
             "created": False,
             "existing_bytes": existing_size,
+            "runner_section_included": runner_section_included,
             "reason": (
                 "File exists; pass overwrite=true to replace (back it up first)."
                 if QA_LANG == "en"
@@ -1219,12 +1230,20 @@ def init_qa_knowledge(overwrite: bool = False) -> dict:
         }
     try:
         QA_KNOWLEDGE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        content = _starter_template().format(project_name=QA_KNOWLEDGE_PATH.parent.name)
+        # `.replace()` not `.format()` — the bundled methodology bodies
+        # contain `{type, title, status, detail, instance}` JSON examples
+        # (RFC 7807 problem-details) that would trip `.format()`'s
+        # placeholder parser. v1.2 PR-4 swap; the only intentional
+        # placeholder is `{project_name}`.
+        content = _starter_template().replace(
+            "{project_name}", QA_KNOWLEDGE_PATH.parent.name
+        )
         QA_KNOWLEDGE_PATH.write_text(content, encoding="utf-8")
     except OSError as e:
         return {
             "path": str(QA_KNOWLEDGE_PATH),
             "created": False,
+            "runner_section_included": runner_section_included,
             "error": f"{type(e).__name__}: {e}",
         }
     return {
@@ -1232,16 +1251,28 @@ def init_qa_knowledge(overwrite: bool = False) -> dict:
         "created": True,
         "bytes": len(content),
         "lang": QA_LANG,
+        "runner_section_included": runner_section_included,
         "next_step": (
-            "Edit this file and replace each `Your XXX` TODO section with your "
-            "domain business rules / historical bugs / standard assertion strings / "
-            "user journeys / technical constraints. From then on, get_qa_context "
-            "reads your version directly (no more fallback)."
+            (
+                "Edit this file and replace each `Your XXX` TODO section with your "
+                "domain business rules / historical bugs / standard assertion strings / "
+                "user journeys / technical constraints. From then on, get_qa_context "
+                "reads your version directly (no more fallback)."
+                + (
+                    " QA_RUNNER=edge detected — start with the `Edge Vision "
+                    "Inference Testing` section for runner-specific guidance."
+                    if runner_section_included else ""
+                )
+            )
             if QA_LANG == "en"
             else (
                 "編輯這個檔案、把「你的 XXX」TODO 區段換成你的業務規則 / 歷史 Bug / "
                 "標準斷言文字 / User Journeys / 技術約束。"
                 "之後 get_qa_context 會直接讀你的版本（不再回 fallback）。"
+                + (
+                    " 偵測到 QA_RUNNER=edge，請先看「邊緣視覺推論測試」這段 runner 專屬建議。"
+                    if runner_section_included else ""
+                )
             )
         ),
     }
