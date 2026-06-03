@@ -472,6 +472,36 @@ mk-qa-master 計劃中的 `solve_visual_challenge` tool：
 客戶站、有授權            -> Tier 1 -> fallback Tier 3
 不是你的站                -> 不要跑 CAPTCHA bypass / solver
 ```
+
+## 邊緣視覺推論測試 (v1.1.0+)
+
+`QA_RUNNER=edge` 把 RTSP 串流 + YOLO 推論 + pytest 斷言串成單一測試流。本段歸納跑 Edge AI 測試時與一般 web/mobile 測試最不一樣的幾條領域原則。
+
+### 核心原則
+
+- **偵測正確性一律用 IoU 門檻、禁止精確座標比對**。AI 輸出本質模糊，pixel-level 比對只是在驗 AI 的隨機性，不是驗業務正確性。`mk_qa_master.edge.metrics.match_detection` 走 IoU，預設門檻 0.5。
+- **效能與正確性同等重要**。慢半拍的正確答案在產線上等於失效。每個 detection 測試應該成對地寫 throughput / latency 斷言，p95 latency 比 mean latency 更能反映實況。
+- **每個輸入必須能回溯到幀號**。把幀號燒入影片角落或讀 `cv2.CAP_PROP_POS_FRAMES`，否則 fail 報告只能說「某個時間點 detection 沒中」，無法復現。
+- **韌性情境是一級公民**。斷流重連、壞幀、非預期 codec 都不能讓測試 crash。建議至少有：(1) 中途 `kill ffmpeg` 模擬斷流；(2) 故意餵壞 GOP；(3) 用 `tc qdisc netem` 注入網路抖動。
+- **空畫面 / 無目標幀的誤報率單獨追蹤**。一個健康的模型不該對純色畫面或 noise 產生 detection。每個 suite 至少有一條 `test_empty_frame_no_false_positives`。
+
+### Edge runner 特有風險
+
+- **mediamtx + ffmpeg 啟動順序敏感**：runner 已用 socket 就緒探測規避，但 CI 上偶爾仍會 race。若看到「open RTSP 失敗」先檢查 `start_rtsp_source` 的 timeout 是否被縮短。
+- **YOLO 模型載入只能 session-scope**：`backend` fixture 是 session-scoped 不是 function-scoped。誤改成 function-scoped 會讓每個 test case 都重載模型、suite 跑爆。
+- **QA_JETSON_HOST / QA_INFERENCE_ENDPOINT 沒設時走 LocalYolo**：v1.1 不支援這兩條，呼叫 `.infer()` 會丟 NotImplementedError。Phase 3 (v1.2) 補。
+- **Vendor-host blacklist 預設擋 Dahua / Hikvision 等廠牌**：自己擁有的攝影機才設 `QA_EDGE_ALLOW_VENDOR_HOSTS=true`，不然測試會收到 `forbidden_vendor_host` envelope。
+
+### 推薦 SLA 預設
+
+| 場景 | min_fps | latency_sla_ms | iou_threshold |
+|---|---|---|---|
+| 桌機 yolov8n 開發 | 25 | 40 | 0.5 |
+| Jetson Nano | 15 | 70 | 0.5 |
+| Jetson Orin Nano | 30 | 25 | 0.6 |
+| 雲端 GPU 推論服務 | 60 | 16 | 0.6 |
+
+行數字當起點調，超出 SLA 第一次就 fail、不要等多次跌破才補測。
 """
 
 
@@ -920,6 +950,36 @@ Your site, can't touch backend?  -> Tier 1 variant (proxy or IP allowlist)
 Client site, authorized?         -> Tier 1, fallback Tier 3
 Not your site at all?            -> Don't run CAPTCHA bypass or solvers
 ```
+
+## Edge Vision Inference Testing (v1.1.0+)
+
+`QA_RUNNER=edge` chains RTSP stream + YOLO inference + pytest assertions into a single test flow. This section captures the domain principles that differ most from typical web / mobile testing.
+
+### Core principles
+
+- **Detection correctness must use IoU thresholds — never compare exact coordinates.** AI output is inherently fuzzy; pixel-level matching tests randomness, not business correctness. `mk_qa_master.edge.metrics.match_detection` uses IoU with a 0.5 default threshold.
+- **Performance and correctness are equally important.** A correct answer half a beat late is, in production, a failure. Every detection test should be paired with throughput / latency assertions, and p95 latency reflects reality better than mean.
+- **Every input must be traceable back to a frame number.** Burn frame indices into the video corner or read `cv2.CAP_PROP_POS_FRAMES`. Without that, failure reports can only say "detection missed at some time" — not reproducible.
+- **Resilience scenarios are first-class citizens.** Stream disconnects, corrupt frames, unexpected codecs must not crash the test. At minimum cover: (1) mid-test `kill ffmpeg` to simulate disconnect; (2) deliberately corrupted GOP; (3) `tc qdisc netem` to inject jitter.
+- **Track the empty-frame false-positive rate separately.** A healthy model should NOT produce detections against solid-color or noise frames. Every suite should include at least one `test_empty_frame_no_false_positives`.
+
+### Edge runner-specific risks
+
+- **mediamtx + ffmpeg startup is order-sensitive.** The runner uses socket readiness probing to mitigate, but CI still races occasionally. If you see "RTSP open failed", check whether `start_rtsp_source`'s timeout was shortened.
+- **YOLO model load must be session-scoped.** The `backend` fixture is session-scoped, not function-scoped. Accidentally narrowing it to function scope reloads the model per test case and blows the suite's wall-clock.
+- **Without `QA_JETSON_HOST` / `QA_INFERENCE_ENDPOINT`, the runner uses LocalYolo.** v1.1 does not support remote inference — calling `.infer()` raises NotImplementedError. Phase 3 (v1.2) wires it up.
+- **The vendor-host blacklist refuses Dahua / Hikvision / etc. by default.** Set `QA_EDGE_ALLOW_VENDOR_HOSTS=true` only for cameras you own; otherwise tests receive a `forbidden_vendor_host` envelope.
+
+### Recommended SLA defaults
+
+| Scenario | min_fps | latency_sla_ms | iou_threshold |
+|---|---|---|---|
+| Desktop yolov8n development | 25 | 40 | 0.5 |
+| Jetson Nano | 15 | 70 | 0.5 |
+| Jetson Orin Nano | 30 | 25 | 0.6 |
+| Cloud GPU inference service | 60 | 16 | 0.6 |
+
+Take these as starting points and tune. Fail the very first time SLA is breached — don't wait until repeated regressions accumulate.
 """
 
 

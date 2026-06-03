@@ -228,3 +228,84 @@ jobs:
           QA_VISUAL_CHALLENGE_CONSENT: "true"
           QA_VISUAL_CHALLENGE_AUTHORIZED_DOMAINS: "localhost,127.0.0.1,test-fixture.local,client-staging.example.com"
         run: pytest tests/test_visual_challenge.py -k hcaptcha -v
+
+  edge-sample:
+    name: edge sample · Python 3.12 + ffmpeg
+    runs-on: ubuntu-latest
+    needs: smoke
+    # v1.1.1 — plumbing verification for the Edge AI Runner. Uses the
+    # bundled examples/sample_edge_fixture/factory.mp4 (75KB synthetic
+    # test pattern) + factory.annotations.json. Doesn't install the
+    # full [edge] extras (torch is ~1GB; PyPI runners would time out)
+    # — instead exercises the runner-level plumbing tests with cv2
+    # mocked, leaving the heavy ultralytics path to local dogfood.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package + opencv (skipping ultralytics)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          # cv2 only — ultralytics + torch are ~1GB and would timeout.
+          # The plumbing tests cover cv2 + ffmpeg paths; the YOLO path
+          # is covered by mocked unit tests in tests/test_edge_inference.py.
+          pip install "opencv-python>=4.9"
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+
+      - name: Verify fixture present + valid
+        run: |
+          test -f examples/sample_edge_fixture/factory.mp4 || {
+            echo "ERROR: factory.mp4 missing"; exit 1;
+          }
+          test -f examples/sample_edge_fixture/factory.annotations.json || {
+            echo "ERROR: factory.annotations.json missing"; exit 1;
+          }
+          # Probe the synthetic clip so a corrupted commit gets caught
+          # before downstream consumers hit it.
+          ffprobe -v error -show_entries stream=width,height,r_frame_rate \
+            examples/sample_edge_fixture/factory.mp4
+
+      - name: Run edge runner + analyze_stream tests
+        run: |
+          pytest -v \
+            tests/test_edge_config.py \
+            tests/test_edge_metrics.py \
+            tests/test_edge_ground_truth.py \
+            tests/test_edge_inference.py \
+            tests/test_edge_rtsp_source.py \
+            tests/test_edge_runner.py \
+            tests/test_analyze_stream.py
+
+      - name: Plumbing — analyze_stream against the bundled fixture
+        run: |
+          python - <<'PY'
+          """v1.1.1 plumbing dogfood: feed analyze_stream the bundled
+          factory.mp4 (treated as a file path; would be served via
+          mediamtx in real use). cv2 will open the file directly and
+          we can verify the geometry-probe path works end-to-end."""
+          import json
+          from mk_qa_master.tools.analyze_stream import analyze_stream
+
+          out = analyze_stream({
+              "rtsp_url": "examples/sample_edge_fixture/factory.mp4",
+              "annotations_path": "examples/sample_edge_fixture/factory.annotations.json",
+          })
+          print(json.dumps(out, indent=2))
+          assert "error" not in out, f"unexpected error envelope: {out}"
+          assert out["width"] == 320
+          assert out["height"] == 240
+          assert out["labels"] == ["forklift", "person"]
+          # 2 per-label TCs + 4 runner-standard
+          assert len(out["candidate_tcs"]) == 6
+          print("OK — analyze_stream plumbing verified against fixture")
+          PY

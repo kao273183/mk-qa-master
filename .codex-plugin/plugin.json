@@ -1,6 +1,6 @@
 {
   "name": "mk-qa-master",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "AI 測試大師 — v1.1 QA testing agent skill. Drives mk-qa-master's 22-tool MCP surface (pytest / Jest / Cypress / Maestro / Schemathesis / Newman / edge) plus the AI Visual Challenge Solver, OWASP API Security scanner, universal plan + verify bookend on 5 core tools, and the v1.1 Edge AI Runner (RTSP + YOLO). Auto-activates from prompts like 'run my tests', 'why did this test fail', 'generate tests for this URL', 'scan this API for OWASP issues', 'analyze this RTSP stream'.",
   "author": {
     "name": "Jack Kao",

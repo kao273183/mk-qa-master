@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "v1.1.1 — Sample annotations sidecar for the Edge Runner. Pairs with",
+    "factory.mp4 (synthetic test pattern; not real factory footage). The",
+    "purpose of this fixture is plumbing verification — generated tests",
+    "should be able to read the video stream, run inference, and surface",
+    "throughput + latency assertions WITHOUT depending on actual detections.",
+    "",
+    "The annotations below describe what a real factory feed might contain;",
+    "downstream tests that use this file with a real YOLO model + real video",
+    "will get real assertions. Tests against the synthetic factory.mp4 will",
+    "skip the detection branch (no labels detected) and only the throughput",
+    "test will fire."
+  ],
+  "fps": 5,
+  "frames": {
+    "0":  [{ "label": "person",   "bbox": [80, 60, 40, 100] }],
+    "15": [{ "label": "forklift", "bbox": [180, 80, 100, 60] }],
+    "30": [
+      { "label": "person",   "bbox": [40, 70, 40, 100] },
+      { "label": "forklift", "bbox": [200, 90, 100, 60] }
+    ]
+  }
+}
