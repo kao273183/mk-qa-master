@@ -3,6 +3,13 @@
 Three lenses on the data:
   1. Suite quality   — flake / broken / slow_regression / stable_passing / new
                        (from HISTORY_DIR archived report.json snapshots)
+                       v1.3.0 adds 4 Edge AI runner signals:
+                         - latency_p95_exceeded_sla (🔴 high)
+                         - fps_variance_across_runs (🟡 medium)
+                         - iou_jitter_per_tc        (🟡 medium)
+                         - coverage_gap_per_label   (🟡 medium)
+                       These fire when test entries carry the v1.3
+                       `edge_metrics` shape.
   2. MCP usability   — top tools, error rates, repeat patterns, chain patterns
                        (from telemetry tool-usage log)
   3. AI strategy     — generated test adoption + analyze_url coverage gaps
@@ -12,6 +19,8 @@ Output: structured dict + markdown at OPTIMIZATION_PATH. The runner auto-writes
 this after each archived run; AI editors read it via MCP resource.
 """
 import json
+import math
+import os
 import re
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -172,6 +181,141 @@ def _analyze_suite(history: list[dict]) -> dict:
         "total_tests": len(tests),
         "by_category": dict(Counter(t["category"] for t in tests)),
         "tests": tests,
+        "edge_signals": _analyze_edge_signals(history),
+    }
+
+
+# --- Edge AI Runner flake signals (v1.3.0) ----------------------------------
+
+def _edge_metrics_of(test_entry: dict) -> dict | None:
+    """Return the `edge_metrics` block if this test was run by the edge
+    runner; else None. Shape: `{p95_latency_ms, fps, iou_per_frame: [...],
+    labels_covered: [...]}` — additive optional field per
+    docs/MIGRATION-1.x.md v1.2.1 → v1.3.0 entry.
+    """
+    em = test_entry.get("edge_metrics")
+    return em if isinstance(em, dict) else None
+
+
+def _stddev(values: list[float]) -> float:
+    """Sample stddev. Returns 0 for ≤1 sample (no variance signal possible)."""
+    n = len(values)
+    if n < 2:
+        return 0.0
+    mean = sum(values) / n
+    return math.sqrt(sum((v - mean) ** 2 for v in values) / (n - 1))
+
+
+def _analyze_edge_signals(history: list[dict]) -> dict:
+    """v1.3.0 — Edge runner-specific flake signals.
+
+    Walks history's test entries looking for `edge_metrics` blocks
+    (additive per-test field added in v1.3). Returns four signal lists:
+
+      - latency_sla_breaches  — current run's p95 > EDGE_LATENCY_SLA_MS
+      - fps_variance          — stddev(fps)/mean > 0.2 across history
+      - iou_jitter            — stddev(iou_per_frame) > 0.1 across history
+      - coverage_gaps         — labels asserted somewhere but missing
+                                from tests' nodeids
+
+    Output `{}` when no test entry has an `edge_metrics` block.
+    """
+    if not history:
+        return {}
+
+    sla_ms = float(os.environ.get("EDGE_LATENCY_SLA_MS", "40"))
+
+    # Bucket by nodeid for the per-tc analyses.
+    metrics_by_test: dict[str, list[dict]] = defaultdict(list)
+    for run in history:
+        for t in run["data"].get("tests", []) or []:
+            em = _edge_metrics_of(t)
+            if em is None:
+                continue
+            nodeid = t.get("nodeid")
+            if nodeid:
+                metrics_by_test[nodeid].append(em)
+
+    if not metrics_by_test:
+        return {}
+
+    latency_sla_breaches: list[dict] = []
+    fps_variance: list[dict] = []
+    iou_jitter: list[dict] = []
+    all_labels: set[str] = set()
+    label_covered_by_nodeid: dict[str, set[str]] = defaultdict(set)
+
+    for nodeid, runs in metrics_by_test.items():
+        # latency_p95_exceeded_sla — current (last) run only
+        latest = runs[-1]
+        p95 = latest.get("p95_latency_ms")
+        if isinstance(p95, (int, float)) and p95 > sla_ms:
+            latency_sla_breaches.append({
+                "nodeid": nodeid,
+                "p95_latency_ms": float(p95),
+                "sla_ms": sla_ms,
+            })
+
+        # fps_variance_across_runs — relative stddev > 0.2
+        fps_values = [
+            float(r["fps"]) for r in runs
+            if isinstance(r.get("fps"), (int, float))
+        ]
+        if len(fps_values) >= 5:
+            mean_fps = sum(fps_values) / len(fps_values)
+            if mean_fps > 0:
+                rel_stddev = _stddev(fps_values) / mean_fps
+                if rel_stddev > 0.2:
+                    fps_variance.append({
+                        "nodeid": nodeid,
+                        "relative_stddev": round(rel_stddev, 3),
+                        "fps_window": fps_values,
+                    })
+
+        # iou_jitter_per_tc — stddev of per-frame iou > 0.1 (across runs)
+        iou_samples: list[float] = []
+        for r in runs:
+            iou_list = r.get("iou_per_frame") or []
+            iou_samples.extend(
+                float(v) for v in iou_list
+                if isinstance(v, (int, float))
+            )
+        if len(iou_samples) >= 5:
+            iou_sd = _stddev(iou_samples)
+            if iou_sd > 0.1:
+                iou_jitter.append({
+                    "nodeid": nodeid,
+                    "iou_stddev": round(iou_sd, 3),
+                    "sample_count": len(iou_samples),
+                })
+
+        # Track per-nodeid labels for the coverage gap signal.
+        for r in runs:
+            for label in (r.get("labels_covered") or []):
+                if isinstance(label, str):
+                    all_labels.add(label)
+                    label_covered_by_nodeid[nodeid].add(label)
+
+    # coverage_gap_per_label — labels asserted SOMEWHERE in edge_metrics
+    # but not mentioned in any test's nodeid string. Catches the case
+    # where annotations have a label but no test exists for it.
+    coverage_gaps: list[dict] = []
+    all_nodeids = " ".join(metrics_by_test.keys()).lower()
+    for label in sorted(all_labels):
+        if label.lower() not in all_nodeids:
+            coverage_gaps.append({
+                "label": label,
+                "evidence": (
+                    "appears in edge_metrics.labels_covered but no "
+                    "test nodeid contains the label string"
+                ),
+            })
+
+    return {
+        "latency_sla_breaches": latency_sla_breaches,
+        "fps_variance": fps_variance,
+        "iou_jitter": iou_jitter,
+        "coverage_gaps": coverage_gaps,
     }
 
 
@@ -319,6 +463,66 @@ def _prioritize(suite: dict, usability: dict, strategy: dict) -> list[dict]:
                     "evidence": f"{t['passed']}/{t['runs']} 連續通過",
                     "suggestion": "考慮從 daily smoke 移到 release tier 節省 CI 時間",
                 })
+
+        # v1.3.0 — Edge AI runner signals. Each lives next to the
+        # category-driven actions above and uses the same action shape
+        # so downstream consumers (HTML report, AI editor) don't need
+        # special-casing.
+        edge_signals = suite.get("edge_signals") or {}
+        for entry in edge_signals.get("latency_sla_breaches", []):
+            actions.append({
+                "priority": "high",
+                "category": "edge_latency_p95_exceeded_sla",
+                "target": entry["nodeid"],
+                "evidence": (
+                    f"p95={entry['p95_latency_ms']:.1f}ms > "
+                    f"SLA={entry['sla_ms']:.1f}ms"
+                ),
+                "suggestion": (
+                    "推論延遲超 SLA — 換 GPU / 量化模型 / 降輸入解析度 / "
+                    "拉 EDGE_LATENCY_SLA_MS 對應實際硬體門檻"
+                ),
+            })
+        for entry in edge_signals.get("fps_variance", []):
+            actions.append({
+                "priority": "medium",
+                "category": "edge_fps_variance_across_runs",
+                "target": entry["nodeid"],
+                "evidence": (
+                    f"相對 stddev={entry['relative_stddev']*100:.1f}% "
+                    f"across last {len(entry['fps_window'])} runs"
+                ),
+                "suggestion": (
+                    "FPS 跨次抖動偏高 — 隔離環境負載 / 固定 CPU 親和度 / "
+                    "排查共用 GPU 競爭資源"
+                ),
+            })
+        for entry in edge_signals.get("iou_jitter", []):
+            actions.append({
+                "priority": "medium",
+                "category": "edge_iou_jitter_per_tc",
+                "target": entry["nodeid"],
+                "evidence": (
+                    f"IoU stddev={entry['iou_stddev']} across "
+                    f"{entry['sample_count']} frames"
+                ),
+                "suggestion": (
+                    "偵測穩定度差 — 確認資料前處理是否一致 / 模型版本固定 / "
+                    "annotation 框是否正確"
+                ),
+            })
+        for entry in edge_signals.get("coverage_gaps", []):
+            actions.append({
+                "priority": "medium",
+                "category": "edge_coverage_gap_per_label",
+                "target": entry["label"],
+                "evidence": entry["evidence"],
+                "suggestion": (
+                    f'call generate_test(description="detect {entry["label"]} '
+                    f'frames", label="{entry["label"]}", ...) for explicit '
+                    "label coverage"
+                ),
+            })
 
     if not strategy.get("empty"):
         for gap in strategy.get("coverage_gaps", []):
