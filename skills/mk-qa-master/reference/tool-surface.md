@@ -80,6 +80,8 @@ Use them as bookends around Flows 1-5. Skip for one-shot reads.
 | `QA_VISUAL_CHALLENGE_TIMEOUT` | v0.7 wall-clock | `120` seconds |
 | `QA_API_SECURITY_CONSENT` | v0.8 scanner | unset (refuses to run) |
 | `QA_API_SECURITY_AUTHORIZED_DOMAINS` | v0.8 external hosts | unset (only localhost allowed) |
+| `QA_EDGE_ALLOW_VENDOR_HOSTS` | v1.1 `analyze_stream` vendor-host override | unset (Dahua / Hikvision / etc. refused) |
+| `QA_EDGE_NETEM_ENABLED` | v1.3 resilience injection (`generate_test resilience_mode="netem"`) | unset (apply_netem refuses to run) |
 
 ---
 
@@ -88,7 +90,7 @@ Use them as bookends around Flows 1-5. Skip for one-shot reads.
 - `*_tool` suffix internally in the Python module names (e.g.
   `inspect_visual_challenge_tool`) but the MCP-exposed tool name drops
   the suffix (`inspect_visual_challenge`).
-- The 19 names above are the **canonical** ones the host's MCP client
+- The 22 names above are the **canonical** ones the host's MCP client
   sees. Never invent variants.
 
 ---

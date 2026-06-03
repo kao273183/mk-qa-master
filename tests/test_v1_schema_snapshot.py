@@ -240,3 +240,37 @@ def test_v1_bookend_tools_document_plan_verification_response():
             f"only half-locked without this — host LLMs won't know to "
             f"expect the envelope. Restore the description mention."
         )
+
+
+def test_v1_get_test_report_documents_edge_metrics_response_field():
+    """v1.3.0 PRD §11 #2 — same description-text response-shape lock
+    pattern as the bookend tools, applied to `get_test_report`.
+
+    v1.3.0 adds an additive per-test `edge_metrics` block to the
+    report.json shape (populated by the edge runner, ignored by other
+    runners). `get_optimization_plan` reads it to surface 4 Edge-
+    specific flake signals. The host LLM needs to know to look for
+    the block in get_test_report's response; the contract is half-
+    locked without the description mention.
+
+    If a future PR drops the documentation, this test fires and the
+    contributor knows to either restore the mention OR follow the
+    v1.0 stability deprecation cycle.
+    """
+    import asyncio
+    from mk_qa_master.server import list_tools
+
+    async def _gather():
+        return await list_tools()
+
+    tools_by_name = {t.name: t for t in asyncio.run(_gather())}
+    report_tool = tools_by_name.get("get_test_report")
+    assert report_tool is not None, "get_test_report missing from live server"
+
+    description = report_tool.description or ""
+    assert "edge_metrics" in description, (
+        "`get_test_report` description doesn't mention `edge_metrics`. "
+        "v1.3.0 contract: the per-test response shape gains an optional "
+        "edge_metrics block when running the edge runner. Host LLMs need "
+        "to know about it. See docs/prd-v1.3-edge-ai-phase-4.md §11 #2."
+    )
