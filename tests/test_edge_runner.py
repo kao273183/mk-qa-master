@@ -475,3 +475,74 @@ def test_generate_test_without_label_skips_detection(_clean_edge_env, tmp_path, 
     assert "skipif(not LABEL" in output
     # Throughput test always emitted.
     assert "def test_throughput" in output
+
+
+# ---- v1.3.0 PR-3: resilience_mode="netem" ---------------------------------
+
+
+def test_generate_test_emits_netem_resilience_fixture_when_mode_is_netem(
+    _clean_edge_env, tmp_path, monkeypatch,
+):
+    """Passing resilience_mode='netem' injects the session-scoped
+    autouse fixture that calls apply_netem / clear_netem from
+    mk_qa_master.edge.resilience around the detection + throughput
+    tests."""
+    monkeypatch.setattr(
+        "mk_qa_master.runners.edge_inference.PROJECT_ROOT", tmp_path,
+    )
+    from mk_qa_master.runners.edge_inference import EdgeInferenceRunner
+    runner = EdgeInferenceRunner()
+    rel_path = runner.generate_test(
+        description="detect person under jitter",
+        filename="test_edge_jitter_person.py",
+        annotations_path="fixtures/factory.annotations.json",
+        label="person",
+        resilience_mode="netem",
+    )
+    output = (tmp_path / rel_path).read_text()
+
+    # The session-scoped autouse fixture appears.
+    assert 'scope="session"' in output
+    assert "autouse=True" in output
+    # apply_netem + clear_netem from the v1.3.0 module.
+    assert "from mk_qa_master.edge.resilience import apply_netem, clear_netem" in output
+    assert "apply_netem(jitter_ms=80, loss_pct=2)" in output
+    assert "clear_netem()" in output
+    # importorskip guards against missing extras.
+    assert 'pytest.importorskip("mk_qa_master.edge.resilience")' in output
+    # The pytest.skip remediation path is present (so non-Linux / no-consent
+    # paths skip cleanly instead of crashing).
+    assert "pytest.skip" in output
+    # Detection + throughput tests still present — resilience wraps,
+    # doesn't replace.
+    assert "def test_detect_person" in output
+    assert "def test_throughput" in output
+
+
+def test_generate_test_omits_resilience_fixture_by_default(
+    _clean_edge_env, tmp_path, monkeypatch,
+):
+    """Default call (resilience_mode unset / empty string) emits a file
+    with no apply_netem / clear_netem / _resilience fixture — backward
+    compat with v1.1/v1.2 generated tests."""
+    monkeypatch.setattr(
+        "mk_qa_master.runners.edge_inference.PROJECT_ROOT", tmp_path,
+    )
+    from mk_qa_master.runners.edge_inference import EdgeInferenceRunner
+    runner = EdgeInferenceRunner()
+    rel_path = runner.generate_test(
+        description="plain detection",
+        filename="test_edge_plain.py",
+        annotations_path="fixtures/factory.annotations.json",
+        label="person",
+    )
+    output = (tmp_path / rel_path).read_text()
+
+    # None of the resilience-mode artifacts present.
+    assert "apply_netem" not in output
+    assert "clear_netem" not in output
+    assert "_resilience" not in output
+    assert "mk_qa_master.edge.resilience" not in output
+    # But the regular detection + throughput tests are still there.
+    assert "def test_detect_person" in output
+    assert "def test_throughput" in output

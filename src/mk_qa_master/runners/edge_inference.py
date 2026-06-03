@@ -248,6 +248,7 @@ class EdgeInferenceRunner(TestRunner):
         annotations_path: str = "",
         label: str = "",
         max_frame: int = 60,
+        resilience_mode: str = "",
     ) -> str:
         """v1.1 PR-3 — emit a working pytest with IoU + throughput
         assertions, not a TODO stub. Honors PRD §11 #4 ("no stubs").
@@ -264,6 +265,16 @@ class EdgeInferenceRunner(TestRunner):
         Defaults make the template work without an annotations file —
         the label-aware detection test is skipped and only throughput
         + latency assertions remain.
+
+        v1.3.0 — `resilience_mode` opt-in adds degradation injection.
+        When set to "netem", a session-scoped autouse fixture wraps
+        the test in `apply_netem()` / `clear_netem()` from
+        `mk_qa_master.edge.resilience`. The fixture is gated on
+        `pytest.importorskip` + the helper's own
+        `QA_EDGE_NETEM_ENABLED` consent check + Linux platform —
+        cleanly skips on macOS/Windows or when the consent gate is
+        unset. Default ("") emits no resilience fixture (backward
+        compat for non-resilience tests).
         """
         target = PROJECT_ROOT / filename
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -276,6 +287,10 @@ class EdgeInferenceRunner(TestRunner):
             for ch in (label or "target").lower()
         )
 
+        resilience_block = ""
+        if resilience_mode == "netem":
+            resilience_block = _NETEM_RESILIENCE_FIXTURE
+
         target.write_text(
             EDGE_TEST_TEMPLATE.format(
                 description=description,
@@ -283,10 +298,40 @@ class EdgeInferenceRunner(TestRunner):
                 label=label,
                 ident=ident,
                 max_frame=int(max_frame),
+                resilience_block=resilience_block,
             ),
             encoding="utf-8",
         )
         return str(target.relative_to(PROJECT_ROOT))
+
+
+# v1.3.0 — netem resilience fixture, injected into the generated file
+# when `resilience_mode="netem"` is passed to `generate_test`. Triple-quoted
+# raw string so the apostrophes in the docstring don't fight the outer
+# triple-quoted EDGE_TEST_TEMPLATE.
+_NETEM_RESILIENCE_FIXTURE = '''
+
+# v1.3.0 — netem resilience injection (auto-skips when:
+#  - pytest.importorskip can't find the resilience module
+#  - QA_EDGE_NETEM_ENABLED is unset / not "true" (raised by apply_netem)
+#  - sys.platform != "linux" (raised by both apply_netem and clear_netem))
+@pytest.fixture(scope="session", autouse=True)
+def _resilience():
+    pytest.importorskip("mk_qa_master.edge.resilience")
+    from mk_qa_master.edge.resilience import apply_netem, clear_netem
+    try:
+        apply_netem(jitter_ms=80, loss_pct=2)
+    except RuntimeError as exc:
+        pytest.skip(f"resilience-mode netem unavailable: {exc}")
+    try:
+        yield
+    finally:
+        try:
+            clear_netem()
+        except RuntimeError:
+            pass  # already skipped above; teardown is best-effort
+
+'''
 
 
 # Edge runner test template (spec §10). Produces a self-contained
@@ -314,7 +359,7 @@ IOU = float(os.environ.get("EDGE_IOU_THRESHOLD", "0.5"))
 MIN_FPS = float(os.environ.get("EDGE_MIN_FPS", "25"))
 SLA = float(os.environ.get("EDGE_LATENCY_SLA_MS", "40"))
 
-
+{resilience_block}
 def _load_annotations():
     if not ANN_PATH:
         return {{}}
