@@ -190,3 +190,53 @@ def test_v1_snapshot_includes_all_bookend_tools():
             f"Bookend tool {tool!r} lost its plan_id arg in the "
             f"v1.0 snapshot — that's a v0.10 contract violation."
         )
+
+
+# v1.2 PRD §11 #5 — locking documented-response shape (PR-1 scope).
+# The snapshot file currently captures inputSchema only. The other
+# half of the contract — what callers actually get back — should
+# also be enforced. The "small change" the PRD proposed: for every
+# bookend tool, assert the description text mentions
+# `plan_verification` explicitly so a future PR can't quietly remove
+# the documented promise from the LLM-facing description.
+
+def test_v1_bookend_tools_document_plan_verification_response():
+    """v1.0's plan-bookend contract has two halves: the input arg
+    (`plan_id`) and the output envelope (`plan_verification`). The
+    snapshot test already enforces the input half; this assertion
+    enforces the output half via description text. If a future PR
+    removes the `plan_verification` mention from a bookend tool's
+    description, host LLMs lose the discoverability signal even if
+    the response shape still works.
+
+    v1.2 PRD §11 #5: small expansion of the snapshot test to also
+    lock documented-response shape; this is the PR-1 implementation.
+    """
+    import asyncio
+    from mk_qa_master.server import list_tools
+
+    async def _gather():
+        return await list_tools()
+
+    tools_by_name = {t.name: t for t in asyncio.run(_gather())}
+
+    bookend = (
+        "run_tests",
+        "solve_visual_challenge",
+        "analyze_url",
+        "auto_generate_tests",
+        "run_api_security_scan",
+    )
+
+    for tool_name in bookend:
+        tool = tools_by_name.get(tool_name)
+        assert tool is not None, (
+            f"Bookend tool {tool_name!r} missing from live server"
+        )
+        description = tool.description or ""
+        assert "plan_verification" in description, (
+            f"Bookend tool {tool_name!r} description doesn't mention "
+            f"`plan_verification`. The v0.10 output-shape contract is "
+            f"only half-locked without this — host LLMs won't know to "
+            f"expect the envelope. Restore the description mention."
+        )
