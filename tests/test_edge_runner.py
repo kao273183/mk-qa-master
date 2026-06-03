@@ -154,19 +154,20 @@ def test_teardown_is_safe_when_no_source_started():
     assert runner._source is None
 
 
-# ---- _healthcheck_device --------------------------------------------------
+# ---- _healthcheck_device (v1.2.0 — real probe) ----------------------------
 
-def test_healthcheck_passes_for_well_formed_inference_url(_clean_edge_env, monkeypatch):
-    """v1.1 stub: just verifies URL shape, doesn't actually probe.
-    Real HTTP probe lands in v1.2."""
-    monkeypatch.setenv("QA_INFERENCE_ENDPOINT", "http://dev:8000/infer")
-    from mk_qa_master.runners.edge_inference import EdgeInferenceRunner
-    runner = EdgeInferenceRunner()
-    runner._healthcheck_device()  # must not raise
+
+def _ok_response():
+    """Builds a successful HTTP response mock (200, raise_for_status no-op)."""
+    r = MagicMock()
+    r.status_code = 200
+    r.raise_for_status = MagicMock()
+    return r
 
 
 def test_healthcheck_raises_on_malformed_target(_clean_edge_env, monkeypatch):
-    """A non-HTTP target raises so setup aborts cleanly."""
+    """A non-HTTP target raises BEFORE the network call so setup aborts
+    cleanly. Same shape gate v1.1 used; kept as the first check."""
     monkeypatch.setenv("QA_INFERENCE_ENDPOINT", "ftp://wrong-protocol/")
     from mk_qa_master.runners.edge_inference import EdgeInferenceRunner
     runner = EdgeInferenceRunner()
@@ -179,6 +180,106 @@ def test_healthcheck_noop_in_desktop_mode(_clean_edge_env):
     from mk_qa_master.runners.edge_inference import EdgeInferenceRunner
     runner = EdgeInferenceRunner()
     runner._healthcheck_device()  # must not raise
+
+
+def test_healthcheck_probes_health_endpoint_when_jetson_host_set(
+    _clean_edge_env, monkeypatch
+):
+    """QA_JETSON_HOST=<ip> derives <http://ip:8000/infer> as the
+    inference URL; healthcheck should swap the trailing `/infer` for
+    `/health` and GET that URL."""
+    monkeypatch.setenv("QA_JETSON_HOST", "192.168.1.50")
+    fake_requests = MagicMock(get=MagicMock(return_value=_ok_response()))
+    with patch.dict("sys.modules", {"requests": fake_requests}):
+        from mk_qa_master.runners.edge_inference import EdgeInferenceRunner
+        EdgeInferenceRunner()._healthcheck_device()
+    # Probed URL = http://192.168.1.50:8000/health (not /infer)
+    fake_requests.get.assert_called_once()
+    args, kwargs = fake_requests.get.call_args
+    assert args[0] == "http://192.168.1.50:8000/health"
+
+
+def test_healthcheck_probes_inference_url_when_explicitly_set(
+    _clean_edge_env, monkeypatch
+):
+    """QA_INFERENCE_ENDPOINT wins over QA_JETSON_HOST; healthcheck should
+    derive /health from whatever URL was given."""
+    monkeypatch.setenv("QA_INFERENCE_ENDPOINT", "http://dev:9000/infer")
+    monkeypatch.setenv("QA_JETSON_HOST", "should-be-ignored")
+    fake_requests = MagicMock(get=MagicMock(return_value=_ok_response()))
+    with patch.dict("sys.modules", {"requests": fake_requests}):
+        from mk_qa_master.runners.edge_inference import EdgeInferenceRunner
+        EdgeInferenceRunner()._healthcheck_device()
+    args, _ = fake_requests.get.call_args
+    assert args[0] == "http://dev:9000/health"
+
+
+def test_healthcheck_handles_non_infer_path_suffix(_clean_edge_env, monkeypatch):
+    """When the inference URL doesn't end with /infer (e.g., user has a
+    custom /predict path), we still need to probe a /health endpoint —
+    append it to the URL base."""
+    monkeypatch.setenv("QA_INFERENCE_ENDPOINT", "http://dev/myapi/predict")
+    fake_requests = MagicMock(get=MagicMock(return_value=_ok_response()))
+    with patch.dict("sys.modules", {"requests": fake_requests}):
+        from mk_qa_master.runners.edge_inference import EdgeInferenceRunner
+        EdgeInferenceRunner()._healthcheck_device()
+    args, _ = fake_requests.get.call_args
+    assert args[0] == "http://dev/myapi/predict/health"
+
+
+def test_healthcheck_raises_on_5xx(_clean_edge_env, monkeypatch):
+    """503 from /health → setup aborts with a clear message."""
+    monkeypatch.setenv("QA_INFERENCE_ENDPOINT", "http://overloaded/infer")
+    import requests as real_requests
+    bad = MagicMock()
+    bad.status_code = 503
+    bad.raise_for_status = MagicMock(
+        side_effect=real_requests.HTTPError("503"),
+    )
+    fake_requests = MagicMock(get=MagicMock(return_value=bad))
+    # Preserve real exception classes so isinstance/except work.
+    fake_requests.HTTPError = real_requests.HTTPError
+    fake_requests.Timeout = real_requests.Timeout
+    fake_requests.ConnectionError = real_requests.ConnectionError
+    with patch.dict("sys.modules", {"requests": fake_requests}):
+        from mk_qa_master.runners.edge_inference import EdgeInferenceRunner
+        runner = EdgeInferenceRunner()
+        with pytest.raises(RuntimeError, match="unreachable"):
+            runner._healthcheck_device()
+
+
+def test_healthcheck_raises_on_timeout_with_clear_message(
+    _clean_edge_env, monkeypatch
+):
+    """Timeout → RuntimeError that mentions QA_DEVICE_TIMEOUT_S so the
+    user knows which knob to turn."""
+    monkeypatch.setenv("QA_INFERENCE_ENDPOINT", "http://slow/infer")
+    import requests as real_requests
+    fake_requests = MagicMock(
+        get=MagicMock(side_effect=real_requests.Timeout("simulated")),
+    )
+    fake_requests.HTTPError = real_requests.HTTPError
+    fake_requests.Timeout = real_requests.Timeout
+    fake_requests.ConnectionError = real_requests.ConnectionError
+    with patch.dict("sys.modules", {"requests": fake_requests}):
+        from mk_qa_master.runners.edge_inference import EdgeInferenceRunner
+        runner = EdgeInferenceRunner()
+        with pytest.raises(RuntimeError, match="QA_DEVICE_TIMEOUT_S"):
+            runner._healthcheck_device()
+
+
+def test_healthcheck_respects_device_timeout_s_env_var(
+    _clean_edge_env, monkeypatch
+):
+    """QA_DEVICE_TIMEOUT_S override propagates to requests.get(timeout=)."""
+    monkeypatch.setenv("QA_INFERENCE_ENDPOINT", "http://dev/infer")
+    monkeypatch.setenv("QA_DEVICE_TIMEOUT_S", "120")
+    fake_requests = MagicMock(get=MagicMock(return_value=_ok_response()))
+    with patch.dict("sys.modules", {"requests": fake_requests}):
+        from mk_qa_master.runners.edge_inference import EdgeInferenceRunner
+        EdgeInferenceRunner()._healthcheck_device()
+    _, kwargs = fake_requests.get.call_args
+    assert kwargs["timeout"] == 120
 
 
 # ---- run_tests ------------------------------------------------------------

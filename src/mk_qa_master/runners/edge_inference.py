@@ -78,10 +78,17 @@ class EdgeInferenceRunner(TestRunner):
             self._source = None
 
     def _healthcheck_device(self) -> None:
-        """Probe the remote inference host before tests fire. v1.1 ships
-        a stub that just checks the URL has the expected shape — the
-        actual HTTP probe lands in v1.2 (Phase 3) alongside the real
-        RemoteHTTP.infer() implementation.
+        """Probe the remote inference host before tests fire.
+
+        v1.1 shipped a URL-shape-only stub; v1.2.0 (Phase 3) lands the
+        real GET /health probe. v1.1's shape gate is kept as the first
+        check — fail fast on obviously-broken config without hitting
+        the network.
+
+        The /health endpoint is derived from the inference endpoint:
+        the trailing `/infer` segment is replaced with `/health`. Users
+        running non-conforming endpoints (e.g., custom `/predict` path)
+        get `<base>/health` probed; document the convention.
 
         Raising here aborts setup → teardown still runs → tests don't
         run against a misconfigured remote target.
@@ -99,7 +106,34 @@ class EdgeInferenceRunner(TestRunner):
                 "like an HTTP URL. Check QA_INFERENCE_ENDPOINT / "
                 "QA_JETSON_HOST."
             )
-        # Phase 3 will replace this with a real GET /health probe.
+
+        # v1.2.0 — real GET /health probe. Derive /health from the
+        # inference endpoint by replacing the trailing path segment.
+        if target.endswith("/infer"):
+            health_url = target[: -len("/infer")] + "/health"
+        else:
+            health_url = target.rstrip("/") + "/health"
+
+        try:
+            import requests  # type: ignore[import-not-found]
+        except ImportError as e:  # pragma: no cover — install-time guidance
+            raise RuntimeError(
+                "Edge runner healthcheck requires the [edge] extras "
+                "(requests). Install with: pip install "
+                '"mk-qa-master[edge]". '
+                f"Underlying ImportError: {e}"
+            ) from e
+        try:
+            response = requests.get(
+                health_url, timeout=self.cfg.device_timeout_s,
+            )
+            response.raise_for_status()
+        except Exception as e:
+            raise RuntimeError(
+                f"Edge runner: inference target unreachable at "
+                f"{health_url!r} ({type(e).__name__}: {e}). Raise "
+                "QA_DEVICE_TIMEOUT_S or verify the board is online."
+            )
 
     # ---- env plumbing ----------------------------------------------------
 
