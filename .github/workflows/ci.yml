@@ -21,6 +21,62 @@ on:
     branches: [main]
 
 jobs:
+  # v1.2.0 PR-1 — close the carry-forward housekeeping item flagged
+  # across three postmortems (v0.11 §9 #1, v1.0 §9 #1, v1.1 §9 #2).
+  #
+  # When a PR sets BREAKING_CHANGE_ACK=true in its CI env (via repository
+  # secret, environment variable, or workflow_dispatch input), v1.0's
+  # schema-snapshot test rewrites the snapshot file instead of failing.
+  # That ack is meant to be paired with a docs/MIGRATION-*.md update —
+  # otherwise the surface change has no audit trail.
+  #
+  # This job runs on every PR. When the ack is set AND the PR doesn't
+  # touch any docs/MIGRATION-*.md file, the job fails with a clear
+  # remediation message. Without the ack, the job is a no-op.
+  ack-check:
+    name: stability-lock — ack + migration-doc pairing
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Fetch enough history so `git diff origin/main...HEAD` works
+          # even on PRs from forks with shallow clones.
+          fetch-depth: 0
+
+      - name: Verify ack/migration-doc pairing
+        env:
+          BREAKING_CHANGE_ACK: ${{ vars.BREAKING_CHANGE_ACK }}
+        run: |
+          if [ "${BREAKING_CHANGE_ACK,,}" != "true" ]; then
+            echo "BREAKING_CHANGE_ACK not set — skipping pairing check."
+            exit 0
+          fi
+          echo "BREAKING_CHANGE_ACK=true detected; checking for paired"
+          echo "docs/MIGRATION-*.md edit in this PR..."
+          changed_migrations="$(
+            git diff --name-only origin/main...HEAD -- 'docs/MIGRATION-*.md' || true
+          )"
+          if [ -z "$changed_migrations" ]; then
+            cat <<'EOM'
+          ::error::BREAKING_CHANGE_ACK=true but no docs/MIGRATION-*.md
+          edited in this PR. The stability-lock ack is meant to be paired
+          with a migration-doc entry so the surface change has an audit
+          trail. Fix one of:
+
+            1. Unset BREAKING_CHANGE_ACK if the PR doesn't actually
+               change the MCP tool surface (the snapshot test will
+               then enforce the freeze).
+            2. Add an entry to docs/MIGRATION-1.x.md (or successor)
+               describing the schema change.
+
+          Closes the v0.11 §9 #1 / v1.0 §9 #1 / v1.1 §9 #2 carry-forward
+          housekeeping item.
+          EOM
+            exit 1
+          fi
+          echo "✓ Migration doc edited: $changed_migrations"
+
   smoke:
     name: smoke · Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
