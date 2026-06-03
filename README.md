@@ -521,6 +521,35 @@ A second test (`tests/test_v1_doc_sync.py`) scans every public doc for tool-coun
 - [`docs/prd-v1.0-stability-lock.md`](docs/prd-v1.0-stability-lock.md) — locked PRD.
 
 
+## License Evolution Plan (v1.2.1 announcement)
+
+> *MIT today. Apache 2.0 in v2.0.*
+
+mk-qa-master is announcing that it will **relicense from MIT to Apache 2.0 in v2.0.0**. This patch (v1.2.1) is the formal announcement and starts the deprecation clock.
+
+### What changes for you
+
+| If you pin... | What you get |
+|---|---|
+| `mk-qa-master==1.0.*` / `==1.1.*` / `==1.2.*` etc. | **MIT forever** — every v1.x release stays MIT-licensed |
+| `mk-qa-master>=1,<2` | MIT for as long as you stay on v1.x |
+| `mk-qa-master>=2,<3` (when v2.0 ships) | Apache 2.0 |
+
+Apache 2.0 grants **strictly more rights** than MIT (explicit patent grant + trademark protection) while keeping the same commercial-use permission. **No scenario reduces your usage rights.**
+
+### Timeline
+
+- **v1.2.1** (this release): announcement only. No code changes.
+- **v1.3.x onwards**: still MIT. Hold cycle for at least one minor before v2.0 lands.
+- **v2.0.0** (TBD): actual relicense. Apache 2.0 LICENSE file, NOTICE file, source-header sweep, manifest sync.
+
+Plus a **commitment to maintain v1.x bugfix releases for ≥ 6 months after v2.0.0 ships**. If your company can't move to Apache 2.0 immediately, you have a runway.
+
+### Why
+
+Long-term sustainability — patent peace, trademark protection, contributor IP unambiguity, broader corporate procurement compatibility. See [`docs/RELICENSING.md`](docs/RELICENSING.md) for the full rationale + mechanical v2.0 checklist.
+
+
 ## Edge AI Runner (v1.1.0+)
 
 > *RTSP stream + YOLO inference + pytest assertions in a single `QA_RUNNER=edge` flag.*

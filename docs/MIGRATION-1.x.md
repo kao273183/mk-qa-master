@@ -113,7 +113,31 @@ PR #83 (the v1.1 `analyze_stream` addition) is the first real use of this mechan
 
 ---
 
-*Last updated: 2026-06-03 (v1.2.0 release PR-4). Cross-reference: [`MIGRATION-0.x-to-1.0.md`](MIGRATION-0.x-to-1.0.md), [`DEPRECATION-POLICY.md`](DEPRECATION-POLICY.md), [`prd-v1.1-edge-ai-runner.md`](prd-v1.1-edge-ai-runner.md), [`prd-v1.2-edge-ai-phase-3.md`](prd-v1.2-edge-ai-phase-3.md).*
+*Last updated: 2026-06-03 (v1.2.1 — relicense announcement). Cross-reference: [`MIGRATION-0.x-to-1.0.md`](MIGRATION-0.x-to-1.0.md), [`DEPRECATION-POLICY.md`](DEPRECATION-POLICY.md), [`prd-v1.1-edge-ai-runner.md`](prd-v1.1-edge-ai-runner.md), [`prd-v1.2-edge-ai-phase-3.md`](prd-v1.2-edge-ai-phase-3.md), [`RELICENSING.md`](RELICENSING.md).*
+
+---
+
+### v1.2.0 → v1.2.1 (Relicense announcement — MIT → Apache 2.0 planned for v2.0.0)
+
+**No code changes. No surface changes. Pure documentation.**
+
+This patch starts the deprecation clock for a license change. The actual relicense lands in v2.0.0; v1.2.1 only announces the plan so downstream users who have license-review requirements have time to react.
+
+**What changes**:
+- New `docs/RELICENSING.md` document covering the rationale, timeline, user impact, and mechanical v2.0 checklist
+- New "License Evolution Plan (v1.2.1 announcement)" section in `README.md`
+- New "License changes" section in `docs/DEPRECATION-POLICY.md` codifying the rule that license changes are major-version-only with ≥ 1 minor of announcement
+
+**What does NOT change**:
+- The `LICENSE` file (still MIT)
+- `pyproject.toml`'s `license` field (still MIT)
+- Plugin manifests (still MIT)
+- Any source-file header
+- Any tool / API / response shape
+
+**Action required for v1.x users**: none. v1.x stays MIT for every future release through v1.x.y. Apache 2.0 only applies when (and if) you upgrade to v2.0+.
+
+See `RELICENSING.md` for the full timeline and the v6+ month v1.x bugfix commitment after v2.0 ships.
 
 ---
 
