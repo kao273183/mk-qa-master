@@ -34,6 +34,15 @@ dependencies = [
 # Native API testing via Schemathesis (QA_RUNNER=schemathesis). Optional so
 # the base install stays slim; users opt in with `pip install 'mk-qa-master[api]'`.
 api = ["schemathesis>=3.0,<4"]
+# v1.1.0 — Edge AI Inference Runner (QA_RUNNER=edge). Heavy (ultralytics
+# pulls torch, ~1GB); kept optional so base users don't take the hit.
+# `ultralytics>=8,<9` per PRD §11 #2 (locked against future major-version
+# output-shape changes that would silently break generated tests).
+edge = [
+  "opencv-python>=4.9",
+  "ultralytics>=8,<9",
+  "requests>=2.31",
+]
 
 [project.urls]
 Homepage = "https://github.com/kao273183/mk-qa-master"
