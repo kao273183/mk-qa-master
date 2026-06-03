@@ -105,11 +105,50 @@ What they can't ship:
 
 | Semver | mk-qa-master example |
 |---|---|
-| MAJOR | v1.0.0 → v2.0.0 — removal of deprecated items |
+| MAJOR | v1.0.0 → v2.0.0 — removal of deprecated items, OR license change (see "License changes" below) |
 | MINOR | v1.0.0 → v1.1.0 — new tool / new optional arg |
 | PATCH | v1.0.0 → v1.0.1 — bug fix |
 
 This is the canonical semver mapping, no surprises. The CI test `test_pyproject_version_is_semver_and_at_or_above_floor` (added in v1.0 PR-2) enforces that the version string is parseable; reviewer enforces semantic correctness against the table above.
+
+---
+
+## License changes
+
+License is part of the contract. A change in the project's license — even an "upgrade" toward more permissive terms — is treated as a **major version bump (v2.0+)** with a documented announcement cycle.
+
+### Rules
+
+1. **License changes only land at major version boundaries.** Never in a patch, never in a minor.
+2. **Announcement required ≥ 1 minor version before the major bump.** The announcement lives in:
+   - A dedicated `docs/RELICENSING.md` (or successor) document explaining the rationale, the timeline, and the user impact
+   - A "License Evolution Plan" section in `README.md` with the same content in summary
+   - An entry in the current `docs/MIGRATION-*.md`
+3. **Historical releases stay under their original license forever.** A relicense affects only future versions tagged after the change. Past releases retain their original LICENSE perpetually — anyone with a v1.x release has perpetual rights under v1.x's license.
+4. **v1.x line gets bugfix-only maintenance for ≥ 6 months after the major bump.** If the relicense happens at v2.0.0, v1.x.y patch releases continue under v1.x's original license for at least 6 months. After 6 months, v1.x enters reduced-support mode (security fixes only).
+5. **Contributor consent**: before a relicense PR is merged, every unique contributor in `git log --all --pretty=format:%an` must have either signed off on the change OR have their commits limited to code subsequently rewritten by the relicensor. Solo-author projects skip this check trivially.
+
+### Why even "upgrade" license changes get a major bump
+
+A license is a contract. Even if the new license grants strictly more rights than the old one, downstream users who have legal review requirements need an unambiguous signal that the contract changed. Bundling the change into a major bump:
+
+- Lets `docs/MIGRATION-*.md` cleanly split per major version
+- Gives `pip install <package>==X.Y.*` semantics a meaningful "I want the old license" pin
+- Honors the v1.0 stability lock spirit, not just the letter
+- Bundles with other v2.x cleanups that were waiting for a major bump
+
+The one extra version-number digit is worth the unambiguity.
+
+### Example (announced 2026-06-03)
+
+mk-qa-master v1.2.1 announced relicensing from MIT → Apache 2.0 in v2.0.0:
+
+- v1.2.1: announcement (no LICENSE file change; `docs/RELICENSING.md` added)
+- v1.3.0 → v1.x.y: hold cycle, still MIT
+- v2.0.0: actual relicense, Apache 2.0 LICENSE file + NOTICE + source headers + manifest sync
+- v1.x.y bugfix line: maintained under MIT for ≥ 6 months after v2.0.0 ships
+
+See `docs/RELICENSING.md` for the full plan + mechanical checklist.
 
 ---
 
