@@ -115,10 +115,139 @@ def test_remote_http_construction_stores_url():
     assert b.url == "http://test/infer"
 
 
-def test_remote_http_infer_raises_not_implemented_for_v1_1():
-    """v1.1 ships LocalYolo only. A caller who sets QA_JETSON_HOST or
-    QA_INFERENCE_ENDPOINT prematurely gets a clear signal, not a
-    silent empty-detection result."""
-    b = RemoteHTTP("http://test/infer")
-    with pytest.raises(NotImplementedError, match="v1.2"):
-        b.infer(frame=None)
+# ---- RemoteHTTP (v1.2.0+) -----------------------------------------------
+
+def _fake_cv2():
+    """Mock cv2 module that returns a deterministic JPEG-encoded payload."""
+    m = MagicMock()
+    m.imencode = MagicMock(return_value=(True, MagicMock(tobytes=lambda: b"jpegdata")))
+    m.IMWRITE_JPEG_QUALITY = 1
+    return m
+
+
+def _fake_requests_module(post_response=None, post_side_effect=None):
+    """Mock requests module that lets each test stub the .post() return."""
+    m = MagicMock()
+    if post_side_effect is not None:
+        m.post = MagicMock(side_effect=post_side_effect)
+    else:
+        m.post = MagicMock(return_value=post_response or MagicMock())
+    # The except-blocks reference these as types — keep the real
+    # exception classes so isinstance/raise/raise-from work normally.
+    import requests as real_requests  # noqa: PLC0415
+    m.Timeout = real_requests.Timeout
+    m.ConnectionError = real_requests.ConnectionError
+    m.HTTPError = real_requests.HTTPError
+    return m
+
+
+def test_remote_http_infer_success_path_mocked():
+    """Happy path: JPEG-encode → multipart POST → JSON response →
+    Detection objects + latency_ms ≥ 0."""
+    response = MagicMock()
+    response.status_code = 200
+    response.raise_for_status = MagicMock()
+    response.json = MagicMock(return_value={
+        "detections": [
+            {"label": "person", "bbox": [10, 20, 30, 40], "score": 0.9},
+            {"label": "forklift", "bbox": [50, 60, 70, 80], "score": 0.8},
+        ],
+    })
+    with patch.dict("sys.modules", {
+        "cv2": _fake_cv2(),
+        "requests": _fake_requests_module(post_response=response),
+    }):
+        backend = RemoteHTTP("http://dev:8000/infer")
+        result = backend.infer(frame=MagicMock())
+
+    assert len(result.detections) == 2
+    assert result.detections[0].label == "person"
+    assert result.detections[0].bbox == (10, 20, 30, 40)
+    assert result.detections[1].score == 0.8
+    assert result.latency_ms >= 0
+
+
+def test_remote_http_infer_timeout_raises_clear_error():
+    """Timeout → RuntimeError mentioning QA_INFERENCE_TIMEOUT_S."""
+    import requests as real_requests
+    with patch.dict("sys.modules", {
+        "cv2": _fake_cv2(),
+        "requests": _fake_requests_module(
+            post_side_effect=real_requests.Timeout("simulated"),
+        ),
+    }):
+        backend = RemoteHTTP("http://slow-jetson/infer")
+        with pytest.raises(RuntimeError, match="QA_INFERENCE_TIMEOUT_S"):
+            backend.infer(frame=MagicMock())
+
+
+def test_remote_http_infer_connection_error_includes_url():
+    """ConnectionError → RuntimeError that names the unreachable URL
+    so the user knows where to look."""
+    import requests as real_requests
+    with patch.dict("sys.modules", {
+        "cv2": _fake_cv2(),
+        "requests": _fake_requests_module(
+            post_side_effect=real_requests.ConnectionError("nope"),
+        ),
+    }):
+        backend = RemoteHTTP("http://unreachable:8000/infer")
+        with pytest.raises(RuntimeError, match="http://unreachable:8000/infer"):
+            backend.infer(frame=MagicMock())
+
+
+def test_remote_http_infer_5xx_response_surfaces_status_code():
+    """5xx → response.raise_for_status fires inside the requests path
+    and we rethrow with the status code visible."""
+    import requests as real_requests
+    response = MagicMock()
+    response.status_code = 503
+    response.raise_for_status = MagicMock(
+        side_effect=real_requests.HTTPError("503 Service Unavailable"),
+    )
+    with patch.dict("sys.modules", {
+        "cv2": _fake_cv2(),
+        "requests": _fake_requests_module(post_response=response),
+    }):
+        backend = RemoteHTTP("http://overloaded/infer")
+        with pytest.raises(RuntimeError, match="503"):
+            backend.infer(frame=MagicMock())
+
+
+def test_remote_http_infer_malformed_json_includes_expected_shape():
+    """JSON decode failure surfaces a hint listing the expected shape
+    so the contributor wiring up a new inference service knows what
+    we expect."""
+    response = MagicMock()
+    response.status_code = 200
+    response.raise_for_status = MagicMock()
+    # response.json() raising ValueError (the actual JSONDecodeError
+    # parent class).
+    response.json = MagicMock(side_effect=ValueError("not json"))
+    with patch.dict("sys.modules", {
+        "cv2": _fake_cv2(),
+        "requests": _fake_requests_module(post_response=response),
+    }):
+        backend = RemoteHTTP("http://bad-json/infer")
+        with pytest.raises(RuntimeError, match="detections"):
+            backend.infer(frame=MagicMock())
+
+
+def test_remote_http_inference_timeout_env_var_respected(monkeypatch):
+    """QA_INFERENCE_TIMEOUT_S override propagates to requests.post(timeout=)."""
+    monkeypatch.setenv("QA_INFERENCE_TIMEOUT_S", "42")
+    response = MagicMock()
+    response.status_code = 200
+    response.raise_for_status = MagicMock()
+    response.json = MagicMock(return_value={"detections": []})
+    fake_requests = _fake_requests_module(post_response=response)
+    with patch.dict("sys.modules", {
+        "cv2": _fake_cv2(),
+        "requests": fake_requests,
+    }):
+        backend = RemoteHTTP("http://dev/infer")
+        backend.infer(frame=MagicMock())
+
+    # First call's kwargs should carry timeout=42.0.
+    _, post_kwargs = fake_requests.post.call_args
+    assert post_kwargs["timeout"] == 42.0

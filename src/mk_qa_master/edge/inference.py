@@ -83,24 +83,106 @@ class LocalYolo:
 
 
 class RemoteHTTP:
-    """Stub for v1.2 (Phase 3) — remote inference via HTTP POST.
+    """v1.2.0 — remote inference via HTTP POST.
 
-    Importable in v1.1 so make_backend's branches don't have to
-    runtime-check whether the class exists. Construction succeeds
-    (just stores the URL); the first `.infer(...)` call raises
-    NotImplementedError so a caller who set the env var prematurely
-    gets a clear signal rather than a silent 0-detection result.
+    Encodes one frame as JPEG (cv2.imencode, quality 85), POSTs as
+    multipart/form-data to `cfg.inference_url`, parses the JSON
+    response into the same InferResult shape LocalYolo produces.
+    Runner code is backend-agnostic — Phase 3's swap doesn't touch
+    the runner's setup → pytest → teardown path.
+
+    Expected response shape (PRD §11 #2 — strict contract):
+        {"detections": [
+            {"label": str, "bbox": [x, y, w, h], "score": float},
+            ...
+        ]}
+
+    Anything else raises RuntimeError with a clear remediation hint.
+    Timeouts read from QA_INFERENCE_TIMEOUT_S (default 10 s; separate
+    from QA_DEVICE_TIMEOUT_S which is setup-time only).
+
+    Imports of cv2 + requests are deferred to .infer() so the class
+    is constructable on a base install (importable without [edge]
+    extras); only failed inference calls surface the missing dep.
     """
 
     def __init__(self, url: str) -> None:
         self.url = url
 
+    @staticmethod
+    def _inference_timeout_s() -> float:
+        """Per-inference timeout, separate from the setup-time
+        device timeout. Re-read per call so monkeypatch.setenv works
+        in tests without instance refresh."""
+        import os
+        return float(os.environ.get("QA_INFERENCE_TIMEOUT_S", "10"))
+
     def infer(self, frame: Any) -> InferResult:
-        raise NotImplementedError(
-            "RemoteHTTP backend lands in v1.2 (Phase 3 of theme G). "
-            "For v1.1, unset QA_INFERENCE_ENDPOINT / QA_JETSON_HOST "
-            "and run the desktop LocalYolo backend."
-        )
+        try:
+            import cv2  # type: ignore[import-not-found]
+            import requests  # type: ignore[import-not-found]
+        except ImportError as e:  # pragma: no cover — install-time guidance
+            raise RuntimeError(
+                "RemoteHTTP backend requires the [edge] extras "
+                '(opencv-python + requests). Install with: '
+                'pip install "mk-qa-master[edge]". '
+                f"Underlying ImportError: {e}"
+            ) from e
+
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if not ok:
+            raise RuntimeError(
+                "cv2.imencode failed — frame may be empty or wrong dtype"
+            )
+
+        timeout_s = self._inference_timeout_s()
+        t = time.perf_counter()
+        try:
+            response = requests.post(
+                self.url,
+                files={"image": ("frame.jpg", buf.tobytes(), "image/jpeg")},
+                timeout=timeout_s,
+            )
+            response.raise_for_status()
+            data = response.json()
+        except requests.Timeout:
+            raise RuntimeError(
+                f"Inference timeout >{timeout_s}s against {self.url!r}. "
+                "Raise QA_INFERENCE_TIMEOUT_S or check device load."
+            )
+        except requests.ConnectionError as e:
+            raise RuntimeError(
+                f"Could not reach inference endpoint {self.url!r}: {e}"
+            )
+        except requests.HTTPError as e:
+            raise RuntimeError(
+                f"Inference endpoint {self.url!r} returned "
+                f"HTTP {response.status_code}: {e}"
+            )
+        except ValueError as e:  # JSONDecodeError subclasses ValueError
+            raise RuntimeError(
+                f"Malformed JSON from {self.url!r}: {e}. Expected "
+                '{"detections": [{"label", "bbox", "score"}, ...]}'
+            )
+
+        try:
+            raw_dets = data.get("detections", []) if isinstance(data, dict) else []
+            dets = [
+                Detection(
+                    label=str(d["label"]),
+                    bbox=tuple(d["bbox"]),
+                    score=float(d["score"]),
+                )
+                for d in raw_dets
+            ]
+        except (KeyError, TypeError) as e:
+            raise RuntimeError(
+                f"Malformed detection record from {self.url!r}: {e}. "
+                'Each detection requires `label` (str), `bbox` (4-tuple), '
+                "and `score` (float)."
+            )
+
+        return InferResult(dets, (time.perf_counter() - t) * 1000)
 
 
 def make_backend(cfg: Any) -> InferenceBackend:
