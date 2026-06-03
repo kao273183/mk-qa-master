@@ -113,4 +113,56 @@ PR #83 (the v1.1 `analyze_stream` addition) is the first real use of this mechan
 
 ---
 
-*Last updated: 2026-06-03 (v1.1.0 release PR-4). Cross-reference: [`MIGRATION-0.x-to-1.0.md`](MIGRATION-0.x-to-1.0.md), [`DEPRECATION-POLICY.md`](DEPRECATION-POLICY.md), [`prd-v1.1-edge-ai-runner.md`](prd-v1.1-edge-ai-runner.md).*
+*Last updated: 2026-06-03 (v1.2.0 release PR-4). Cross-reference: [`MIGRATION-0.x-to-1.0.md`](MIGRATION-0.x-to-1.0.md), [`DEPRECATION-POLICY.md`](DEPRECATION-POLICY.md), [`prd-v1.1-edge-ai-runner.md`](prd-v1.1-edge-ai-runner.md), [`prd-v1.2-edge-ai-phase-3.md`](prd-v1.2-edge-ai-phase-3.md).*
+
+---
+
+## Change log — v1.1 → v1.2
+
+### v1.1.2 → v1.2.0 (Edge AI Runner Phase 3 — Remote Inference)
+
+**No new MCP tools. No tool count change** (stays at 22). Phase 3 fills in stubs the v1.1 release deliberately left empty.
+
+**`RemoteHTTP.infer()` now actually works.** v1.1 raised `NotImplementedError("v1.2 / Phase 3")`. v1.2.0 ships the real implementation:
+
+- JPEG-encode the frame via `cv2.imencode(".jpg", frame, [IMWRITE_JPEG_QUALITY=85])`
+- POST as `multipart/form-data` to `cfg.inference_url` with `{"image": <bytes>}`
+- Parse JSON response: `{"detections": [{"label", "bbox", "score"}, ...]}`
+- Return `InferResult(detections=[...], latency_ms=...)` — same shape as `LocalYolo`
+
+Setting `QA_JETSON_HOST` or `QA_INFERENCE_ENDPOINT` against v1.2.0 now drives real remote inference. v1.1 users who got the `NotImplementedError` should drop the workaround.
+
+**`EdgeInferenceRunner._healthcheck_device()` now performs a real `GET /health` probe.** v1.1 only checked the URL shape; v1.2.0 actually hits the network. URL derivation:
+
+| Inference URL | Probed `/health` URL |
+|---|---|
+| `http://jetson:8000/infer` | `http://jetson:8000/health` |
+| `http://dev:9000/infer` | `http://dev:9000/health` |
+| `http://dev/myapi/predict` (non-conforming) | `http://dev/myapi/predict/health` |
+
+Trailing `/infer` swap is the Jetson convention; other endpoints get `/health` appended.
+
+**New optional env var `QA_INFERENCE_TIMEOUT_S`** — per-inference timeout (default 10s), separate from setup-time `QA_DEVICE_TIMEOUT_S` (default 60s). Tune the two independently:
+
+| Knob | Default | Used by |
+|---|---|---|
+| `QA_DEVICE_TIMEOUT_S` | 60s | `_healthcheck_device()` GET /health |
+| `QA_INFERENCE_TIMEOUT_S` | 10s | `RemoteHTTP.infer()` per-frame POST |
+
+**`init_qa_knowledge` response gains optional `runner_section_included: bool`.** When `QA_RUNNER=edge` (or `rtsp` alias), the field signals that the bundled "Edge Vision Inference Testing" methodology section is the runner-relevant starting point. The section was already in the v1.1.1 methodology — this is a discoverability hint, not a content change. The `next_step` message also gains a one-line pointer at the Edge section (EN + zh-tw both updated).
+
+| Runner | `runner_section_included` |
+|---|---|
+| Unset / `pytest` / `jest` / etc. | `false` |
+| `edge` or `rtsp` | `true` |
+
+Callers that ignore the new field keep working unchanged.
+
+**Side fix**: `init_qa_knowledge` now uses `.replace("{project_name}", ...)` instead of `.format()`. The pre-existing `.format()` call broke on the bundled methodology's JSON examples (RFC 7807 problem-details `{type, title, status, detail, instance}` and similar) — calls with the default body would `KeyError` out. Caught by v1.2.0 PR-4's new test coverage. Behavior identical for users who weren't hitting the bug.
+
+**Action required**: none. v1.1.x → v1.2.0 is additive. New env vars are optional. New response field is optional. The `RemoteHTTP` + `_healthcheck_device` upgrades only matter to users who'd already opted into remote inference via env vars.
+
+**Three carry-forward housekeeping items closed** (v0.11 / v1.0 / v1.1 postmortems):
+- `.github/workflows/ci.yml` gained a `stability-lock` job that fails when `BREAKING_CHANGE_ACK=true` is set but no `docs/MIGRATION-*.md` was edited in the PR
+- `.github/PULL_REQUEST_TEMPLATE/` gained four templates (`feat-runner`, `feat-tool`, `feat-bookend`, `release`)
+- v1.2 PRD §11 #5 response-shape lock expansion: `test_v1_schema_snapshot.py` now also asserts bookend tools' descriptions mention `plan_verification`
