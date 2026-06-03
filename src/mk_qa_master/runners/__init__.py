@@ -6,6 +6,7 @@ from .go_test import GoTestRunner
 from .maestro import MaestroRunner
 from .schemathesis import SchemathesisRunner
 from .newman import NewmanRunner
+from .edge_inference import EdgeInferenceRunner
 from ..config import RUNNER_NAME
 
 REGISTRY: dict[str, type[TestRunner]] = {
@@ -22,6 +23,10 @@ REGISTRY: dict[str, type[TestRunner]] = {
     "api": SchemathesisRunner,
     "newman": NewmanRunner,
     "postman": NewmanRunner,
+    # v1.1.0 — Edge AI Inference Runner (Theme G, Phase 1+2). Aliased
+    # `rtsp` for muscle memory; both names construct the same class.
+    "edge": EdgeInferenceRunner,
+    "rtsp": EdgeInferenceRunner,
 }
 
 
