@@ -62,17 +62,18 @@ def test_list_tools_returns_advertised_surface():
     assert not missing, f"Expected tools missing from list_tools(): {missing}"
 
 
-def test_list_tools_count_matches_advertised_21():
-    """If the count drifts, README and the family-site claim of '21 tools'
+def test_list_tools_count_matches_advertised_22():
+    """If the count drifts, README and the family-site claim of '22 tools'
     is stale. Catch that here before users do.
     v0.7.0 brought the count from 16 to 18 (visual challenge solver).
     v0.8.0 brought it from 18 to 19 (run_api_security_scan).
     v0.9.1 brought it from 19 to 21 (qa_plan + verify_plan).
+    v1.1.0 brought it from 21 to 22 (analyze_stream — Edge AI runner).
     """
     from mk_qa_master.server import list_tools
 
     declared = {t.name for t in asyncio.run(list_tools())}
-    assert len(declared) == 21, f"Expected 21 tools, got {len(declared)}: {sorted(declared)}"
+    assert len(declared) == 22, f"Expected 22 tools, got {len(declared)}: {sorted(declared)}"
 
 
 def test_visual_challenge_tools_registered():

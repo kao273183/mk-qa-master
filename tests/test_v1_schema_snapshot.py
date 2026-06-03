@@ -149,11 +149,14 @@ def test_v1_snapshot_has_expected_tool_count():
     locally with a different tool list but nobody updated the count
     references in README / SKILL.md."""
     snapshot_data = json.loads(TOOL_SURFACE_SNAPSHOT.read_text(encoding="utf-8"))
-    assert len(snapshot_data) == 21, (
-        f"v1.0 promises 21 tools; snapshot has {len(snapshot_data)}. "
+    # v1.1.0: tool count went 21 → 22 (added analyze_stream for Theme G).
+    # Bump explicitly here so the snapshot file size is locked alongside
+    # the surface contract.
+    assert len(snapshot_data) == 22, (
+        f"v1.1 promises 22 tools; snapshot has {len(snapshot_data)}. "
         "If you intentionally changed the surface, also update the "
         "tool-count references in README.md + skills/mk-qa-master/SKILL.md "
-        "(PR-2 will add an automated sync test for this)."
+        "(the v1.0 PR-2 doc-sync test catches misses automatically)."
     )
 
 

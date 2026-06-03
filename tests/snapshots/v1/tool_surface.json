@@ -225,6 +225,25 @@
   {
     "inputSchema": {
       "properties": {
+        "annotations_path": {
+          "description": "Optional. JSON sidecar with per-frame expected detections (format: {fps, frames: {frame_idx: [{label, bbox}, ...]}}). When supplied, candidate_tcs lists one entry per discovered label. Missing / malformed files are non-fatal — the tool falls back to label-free candidates.",
+          "type": "string"
+        },
+        "rtsp_url": {
+          "description": "Required. The stream to probe. Either an `rtsp://...` URL or a file path that the EdgeInferenceRunner will serve via mediamtx + ffmpeg at setup time.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rtsp_url"
+      ],
+      "type": "object"
+    },
+    "name": "analyze_stream"
+  },
+  {
+    "inputSchema": {
+      "properties": {
         "overwrite": {
           "default": false,
           "description": "強制覆蓋既存檔案（會丟失你已填的內容、請先備份）",
