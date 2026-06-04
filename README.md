@@ -125,6 +125,15 @@ Then point your client config at the same Python interpreter:
 "args": ["-m", "mk_qa_master.server"]
 ```
 
+### Verify the install (v1.4+)
+
+```bash
+mk-qa-master doctor          # human-readable check report
+mk-qa-master doctor --json   # for CI gates / host-LLM consumption
+```
+
+Walks Python version, ffmpeg + mediamtx on PATH, core deps, `[edge]` extras, runner registry, and MCP tool surface. Exits **0** when nothing critical is missing (warnings about unused features don't fail), **1** when mk-qa-master can't run cleanly. Run it after a fresh install or when an MCP tool returns `missing_extras`.
+
 ### Runner-specific prerequisites
 
 | `QA_RUNNER` | You also need |
@@ -631,7 +640,7 @@ When tests run under resilience mode, the emitted report carries an additive per
 |---|---|---|
 | `Could not open RTSP stream: rtsp://localhost:8554/cam` | ffmpeg or mediamtx not on PATH; readiness probe timed out at 10 s | Verify `which ffmpeg mediamtx`; if mediamtx lives elsewhere, set `QA_MEDIAMTX_BIN=/full/path/to/mediamtx`; slow first-run on Apple Silicon — re-run after the first mediamtx boot |
 | `[edge] setup failed: ConnectionError` | Port 8554 already in use by another mediamtx / RTSP server | Set `QA_RTSP_PORT=8555` (or any free port); the generated test reads `EDGE_RTSP_URL` so no test edit needed |
-| `{ "error": "missing_extras", "hint": ... }` from `analyze_stream` | Base install without `[edge]` extras | `pip install "mk-qa-master[edge]"` |
+| `{ "error": "missing_extras", "hint": ... }` from `analyze_stream` | Base install without `[edge]` extras | `pip install "mk-qa-master[edge]"` (or run `mk-qa-master doctor` to audit the full install) |
 | `{ "error": "forbidden_vendor_host", "blocked_host": "..." }` | Default-on blacklist (Dahua / Hikvision / etc.) | If it's your own camera: `export QA_EDGE_ALLOW_VENDOR_HOSTS=true`. If it isn't: leave the block in place |
 | `NotImplementedError: RemoteHTTP backend lands in v1.2 (Phase 3 of theme G)` | You set `QA_JETSON_HOST` or `QA_INFERENCE_ENDPOINT` against v1.1.x | v1.1 ships LocalYolo only. Unset the remote env vars to fall back to desktop YOLO. Phase 3 follows in v1.2 |
 | `ultralytics` taking forever to install | First-time torch download (~700 MB) | One-time cost. Cache `pip install` in CI; locally use `pip install --no-deps` once torch is in place |

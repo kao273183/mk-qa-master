@@ -1,4 +1,5 @@
 import asyncio
+import sys
 import json
 import time
 from mcp.server import Server
@@ -1421,6 +1422,27 @@ async def main():
 
 
 def run():
+    """Entry point. Default (no args) starts the MCP stdio server — this
+    is the path Claude Code / Codex / OpenClaw take when they wire us in
+    via `claude mcp add mk-qa-master /path/to/bin`, and must stay
+    bit-for-bit backward compatible.
+
+    `mk-qa-master doctor [--json]` dispatches to the v1.4 environment
+    diagnostic instead. Any unknown subcommand falls through to the
+    server with a hint, so a typo doesn't silently start a server that
+    the caller wasn't expecting.
+    """
+    argv = sys.argv[1:]
+    if argv and argv[0] == "doctor":
+        from .doctor import main as doctor_main
+        sys.exit(doctor_main(argv[1:]))
+    if argv and not argv[0].startswith("-"):
+        print(
+            f"mk-qa-master: unknown subcommand {argv[0]!r}. "
+            "Known: doctor. Run with no args to start the MCP server.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
     asyncio.run(main())
 
 

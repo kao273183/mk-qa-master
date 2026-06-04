@@ -239,3 +239,46 @@ Non-edge suites see no signal changes — `_analyze_edge_signals` returns `{}` w
 - Label names are HTML-escaped at render time — user-supplied annotation strings can't inject markup.
 
 **Action required**: none. Existing Edge users get fully-populated HTML reports on next `generate_html_report` call; web/mobile/API runners see no change.
+
+### v1.3.1 → v1.4.0 (`mk-qa-master doctor` subcommand — minor)
+
+**Additive only. No surface change** (MCP tool count stays at 22). Adds one new CLI subcommand to the `mk-qa-master` entry point.
+
+**New: `mk-qa-master doctor`** — diagnostic for installation + environment. Motivated by a recurring friction: users `pip install mk-qa-master` (no extras), call `analyze_stream`, and hit `missing_extras` because `[edge]` wasn't installed. The hint and README troubleshooting already covered the fix; doctor pulls it into one command:
+
+```
+$ mk-qa-master doctor
+mk-qa-master v1.4.0 — environment doctor
+
+System
+  ✓ Python ≥ 3.10: 3.12.10 (arm64)
+  ✓ ffmpeg: /opt/homebrew/bin/ffmpeg
+  ! mediamtx: not on PATH  — macOS: brew install mediamtx | Linux: ...
+Core deps
+  ✓ mcp: 1.27.1
+  ✓ jsonschema: 4.26.0
+Edge extras [edge]
+  ! cv2: not installed  — pip install "mk-qa-master[edge]"
+  ...
+Runners
+  ✓ pytest, playwright, edge, schemathesis, newman, ... (15 entries)
+MCP surface
+  ✓ tool count: 22 tools
+```
+
+**Severity model**:
+
+| Severity | When | Effect on exit code |
+|---|---|---|
+| `ok` | Check passed | 0 |
+| `warn` | Optional feature missing (e.g. `[edge]` extras not installed) | 0 — informational only |
+| `fail` | mk-qa-master can't function normally (Python < 3.10, mcp / jsonschema missing, registry import failure) | **1** |
+
+`--json` flag emits machine-readable output `{version, summary: {ok, warn, fail}, results: [...]}` for CI pre-flight gates and host-LLM consumption.
+
+**Dispatch wiring** in `mk_qa_master.server.run()`:
+- `mk-qa-master` (no args) → MCP stdio server (backward compatible — every existing host uses this)
+- `mk-qa-master doctor [--json]` → doctor CLI
+- `mk-qa-master <typo>` → error to stderr + exit 2 (prevents accidentally starting a server when the caller meant a subcommand)
+
+**Action required**: none. Existing MCP host integrations (Claude Code / Codex / OpenClaw / Hermes) continue to invoke `mk-qa-master` with no args and get the server. The doctor is purely a manual operator tool.
