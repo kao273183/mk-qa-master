@@ -3,6 +3,7 @@ __pycache__/
 *$py.class
 *.egg-info/
 .venv/
+.venv-*/
 venv/
 .pytest_cache/
 tests_project/report.json

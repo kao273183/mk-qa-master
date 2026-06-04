@@ -226,3 +226,16 @@ Non-edge suites see no signal changes — `_analyze_edge_signals` returns `{}` w
 **Action required**: none for v1.x users on web/mobile/API runners. Edge AI users can opt into resilience-mode tests by passing `resilience_mode='netem'` to `generate_test`; flake signals appear automatically once any test entry carries `edge_metrics`.
 
 **v1.3.0 → v2.0 timing**: per `docs/RELICENSING.md` strict cycle (PRD §11 #6 ratified) — v1.3 ships within 2 weeks of merge; v2.0 (the MIT → Apache 2.0 relicense) follows after **≥ 1 calendar month** of v1.3.0 being on PyPI. The v1.x bugfix line continues for ≥ 6 months after v2.0.0 ships per `docs/DEPRECATION-POLICY.md` §"License changes".
+
+### v1.3.0 → v1.3.1 (Edge AI HTML report parity — patch)
+
+**Pure bugfix patch.** No surface change, no new env vars, no new tools.
+
+**Bug**: `EdgeInferenceRunner` didn't override `get_all_test_details()` (defaults to `[]` on `TestRunner`). The HTML reporter (`mk_qa_master.reporters.html.render_report`) prefers that override and only falls back to `get_failure_details()` when it's empty — but `get_failure_details()` only yields failed tests. The combined effect: on an all-green Edge run (0 failures / 1 passed / 1 skipped), the report rendered only the top stat bar and the green "所有測試通過" placeholder, hiding every per-test row that operators actually need (nodeid, duration, latency, fps, labels).
+
+**Fix**:
+- `EdgeInferenceRunner.get_all_test_details()` now reads `report.json` and returns per-test dicts with `{nodeid, outcome, duration, message}` — and forwards the v1.3.0 additive `edge_metrics` block when present.
+- HTML reporter gains `_render_edge_metrics_html()` + `.edge-metrics` CSS block. Both pass-cards and fail-cards now surface `p95 latency`, `fps`, `iou (avg / n)`, and `labels` inline when the test entry carries the block. Non-edge runners pay zero HTML cost (helper returns `""` on missing block).
+- Label names are HTML-escaped at render time — user-supplied annotation strings can't inject markup.
+
+**Action required**: none. Existing Edge users get fully-populated HTML reports on next `generate_html_report` call; web/mobile/API runners see no change.
