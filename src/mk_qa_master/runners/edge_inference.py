@@ -240,6 +240,44 @@ class EdgeInferenceRunner(TestRunner):
             for t in failures
         ]
 
+    def get_all_test_details(self) -> list[dict]:
+        """Per-test details for the HTML reporter — covers both passes and
+        failures so cards render even on all-green Edge runs.
+
+        Without this override the reporter falls back to
+        `get_failure_details()` which only yields failures; a 0-failure /
+        1-passed / 1-skipped Edge run then renders zero cards (the empty
+        "所有測試通過" placeholder), masking the per-test latency / fps /
+        labels-covered numbers that operators rely on.
+
+        The v1.3.0 additive `edge_metrics` block is forwarded as-is so the
+        reporter can surface it inside each card.
+        """
+        if not REPORT_PATH.exists():
+            return []
+        try:
+            data = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return []
+        results: list[dict] = []
+        for t in data.get("tests", []) or []:
+            nodeid = t.get("nodeid")
+            outcome = t.get("outcome")
+            if not nodeid or outcome == "rerun":
+                continue
+            call = t.get("call") or {}
+            entry: dict = {
+                "nodeid": nodeid,
+                "outcome": outcome,
+                "duration": call.get("duration"),
+                "message": call.get("longrepr", "") if outcome == "failed" else "",
+            }
+            em = t.get("edge_metrics")
+            if isinstance(em, dict):
+                entry["edge_metrics"] = em
+            results.append(entry)
+        return results
+
     def generate_test(
         self,
         description: str,

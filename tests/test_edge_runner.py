@@ -414,6 +414,110 @@ def test_get_failure_details_filters_by_test_id_substring(_clean_edge_env, tmp_p
     assert failures[0]["nodeid"].endswith("test_detect_person")
 
 
+# ---- v1.3.1: HTML reporter parity (get_all_test_details) ----------------
+
+def test_get_all_test_details_returns_passes_and_failures(
+    _clean_edge_env, tmp_path, monkeypatch
+):
+    """v1.3.1 bugfix: without this override the HTML reporter falls back
+    to `get_failure_details()` and an all-green Edge run renders zero
+    cards. The override must surface BOTH passes and failures so the
+    reporter can build the Passed-tests group + the failure cards.
+    """
+    fixture = {
+        "tests": [
+            {"nodeid": "tests/test_edge.py::test_detect_forklift",
+             "outcome": "passed",
+             "call": {"duration": 0.42}},
+            {"nodeid": "tests/test_edge.py::test_detect_person",
+             "outcome": "failed",
+             "call": {"longrepr": "AssertionError: not detected",
+                      "duration": 0.81}},
+            {"nodeid": "tests/test_edge.py::test_throughput",
+             "outcome": "skipped",
+             "call": {"duration": 0.0}},
+            {"nodeid": "tests/test_edge.py::test_rerun",
+             "outcome": "rerun",
+             "call": {"duration": 0.1}},
+        ],
+    }
+    fake_report = tmp_path / "report.json"
+    fake_report.write_text(json.dumps(fixture))
+    monkeypatch.setattr(
+        "mk_qa_master.runners.edge_inference.REPORT_PATH", fake_report,
+    )
+    from mk_qa_master.runners.edge_inference import EdgeInferenceRunner
+    runner = EdgeInferenceRunner()
+
+    details = runner.get_all_test_details()
+    outcomes = {d["nodeid"]: d["outcome"] for d in details}
+    assert outcomes == {
+        "tests/test_edge.py::test_detect_forklift": "passed",
+        "tests/test_edge.py::test_detect_person": "failed",
+        "tests/test_edge.py::test_throughput": "skipped",
+    }
+    pass_entry = next(d for d in details if d["outcome"] == "passed")
+    assert pass_entry["duration"] == 0.42
+    assert pass_entry["message"] == ""
+    fail_entry = next(d for d in details if d["outcome"] == "failed")
+    assert "AssertionError" in fail_entry["message"]
+    assert fail_entry["duration"] == 0.81
+
+
+def test_get_all_test_details_forwards_edge_metrics_block(
+    _clean_edge_env, tmp_path, monkeypatch
+):
+    """The v1.3.0 additive `edge_metrics` block must reach the reporter
+    so per-test latency / fps / labels show up inside cards. Without
+    this forwarding the HTML report stays Edge-blind.
+    """
+    fixture = {
+        "tests": [
+            {"nodeid": "tests/test_edge.py::test_detect_forklift",
+             "outcome": "passed",
+             "call": {"duration": 0.42},
+             "edge_metrics": {
+                 "p95_latency_ms": 38.5,
+                 "fps": 27.3,
+                 "iou_per_frame": [0.71, 0.74, 0.68],
+                 "labels_covered": ["forklift"],
+             }},
+            {"nodeid": "tests/test_edge.py::test_no_metrics",
+             "outcome": "passed",
+             "call": {"duration": 0.1}},
+        ],
+    }
+    fake_report = tmp_path / "report.json"
+    fake_report.write_text(json.dumps(fixture))
+    monkeypatch.setattr(
+        "mk_qa_master.runners.edge_inference.REPORT_PATH", fake_report,
+    )
+    from mk_qa_master.runners.edge_inference import EdgeInferenceRunner
+    runner = EdgeInferenceRunner()
+
+    details = runner.get_all_test_details()
+    by_nodeid = {d["nodeid"]: d for d in details}
+    forklift = by_nodeid["tests/test_edge.py::test_detect_forklift"]
+    assert forklift["edge_metrics"]["p95_latency_ms"] == 38.5
+    assert forklift["edge_metrics"]["labels_covered"] == ["forklift"]
+    # Tests without the block omit the key (no None placeholder).
+    no_metrics = by_nodeid["tests/test_edge.py::test_no_metrics"]
+    assert "edge_metrics" not in no_metrics
+
+
+def test_get_all_test_details_returns_empty_when_no_report(
+    _clean_edge_env, tmp_path, monkeypatch
+):
+    """No report file → empty list (NOT an error dict). Mirrors
+    pytest_playwright behavior so the reporter falls back cleanly."""
+    monkeypatch.setattr(
+        "mk_qa_master.runners.edge_inference.REPORT_PATH",
+        tmp_path / "missing.json",
+    )
+    from mk_qa_master.runners.edge_inference import EdgeInferenceRunner
+    assert EdgeInferenceRunner().get_all_test_details() == []
+
+
 def test_generate_test_emits_working_pytest_with_iou_and_throughput(
     _clean_edge_env, tmp_path, monkeypatch
 ):

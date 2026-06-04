@@ -158,6 +158,41 @@ def _render_steps_html(steps: list[dict]) -> str:
     return f'<ol class="steps">{"".join(items)}</ol>'
 
 
+def _render_edge_metrics_html(em: dict | None) -> str:
+    """Render the v1.3.0 `edge_metrics` block as a compact key→value list.
+
+    Returns empty string when the block is missing, so non-edge runners
+    pay zero HTML cost. Only the four well-known scalar / list fields
+    documented in docs/MIGRATION-1.x.md v1.2.1 → v1.3.0 are rendered; any
+    future additive field is ignored here until it's intentionally surfaced.
+    """
+    if not isinstance(em, dict) or not em:
+        return ""
+    items: list[str] = []
+    p95 = em.get("p95_latency_ms")
+    if isinstance(p95, (int, float)):
+        items.append(f'<li><span class="em-key">p95 latency</span><span class="em-val">{p95:.1f} ms</span></li>')
+    fps = em.get("fps")
+    if isinstance(fps, (int, float)):
+        items.append(f'<li><span class="em-key">fps</span><span class="em-val">{fps:.1f}</span></li>')
+    iou = em.get("iou_per_frame")
+    if isinstance(iou, list) and iou:
+        nums = [v for v in iou if isinstance(v, (int, float))]
+        if nums:
+            avg = sum(nums) / len(nums)
+            items.append(
+                f'<li><span class="em-key">iou (avg / n)</span>'
+                f'<span class="em-val">{avg:.2f} / {len(nums)}</span></li>'
+            )
+    labels = em.get("labels_covered")
+    if isinstance(labels, list) and labels:
+        joined = escape(", ".join(str(l) for l in labels))
+        items.append(f'<li><span class="em-key">labels</span><span class="em-val">{joined}</span></li>')
+    if not items:
+        return ""
+    return f'<ul class="edge-metrics">{"".join(items)}</ul>'
+
+
 def _render_pass_section(passes: list[dict]) -> str:
     """Build the collapsed Passed-tests group with one detail card per test.
 
@@ -174,6 +209,7 @@ def _render_pass_section(passes: list[dict]) -> str:
         dur_str = f"{dur:.3f}s" if isinstance(dur, (int, float)) else ""
         steps_html = _render_steps_html(t.get("steps") or [])
         shot_html = _embed_screenshot(t.get("screenshot"))
+        edge_metrics_html = _render_edge_metrics_html(t.get("edge_metrics"))
         cards.append(
             f'<details class="pass">'
             f'<summary>'
@@ -181,6 +217,7 @@ def _render_pass_section(passes: list[dict]) -> str:
             f'{meta_html}'
             f'<span class="fail-dur">{dur_str}</span>'
             f'</summary>'
+            f'{edge_metrics_html}'
             f'{steps_html}'
             f'{shot_html}'
             f'</details>'
@@ -239,6 +276,10 @@ def render_report() -> str:
             shot_html = _embed_screenshot(f.get("screenshot") if isinstance(f, dict) else None)
             links_html = _artifact_links(f if isinstance(f, dict) else {})
             steps_html = _render_steps_html(f.get("steps") or []) if isinstance(f, dict) else ""
+            edge_metrics_html = (
+                _render_edge_metrics_html(f.get("edge_metrics"))
+                if isinstance(f, dict) else ""
+            )
             meta_html = _render_test_meta(
                 f.get("title") if isinstance(f, dict) else None,
                 f.get("nodeid", "unknown") if isinstance(f, dict) else "unknown",
@@ -251,6 +292,7 @@ def render_report() -> str:
                 f'<span class="fail-dur">{dur_str}</span>'
                 f'</summary>'
                 f'<pre>{message}</pre>'
+                f'{edge_metrics_html}'
                 f'{steps_html}'
                 f'{shot_html}'
                 f'{links_html}'
@@ -544,6 +586,22 @@ TEMPLATE = """<!DOCTYPE html>
     margin-right: 10px; display: inline-block; min-width: 100px;
   }
   .steps .step-title { color: var(--text-muted); }
+
+  /* Edge AI per-test metrics (v1.3.1) */
+  .edge-metrics {
+    margin: 0; padding: 10px 20px 12px 40px;
+    list-style: none;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    font-family: var(--mono); font-size: 12px;
+    line-height: 1.7; color: var(--text);
+  }
+  .edge-metrics li { display: flex; gap: 12px; }
+  .edge-metrics .em-key {
+    color: var(--text-muted);
+    min-width: 110px;
+  }
+  .edge-metrics .em-val { color: var(--accent); font-weight: 600; }
 
   /* Passed tests */
   .pass-group {
