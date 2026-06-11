@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/kao273183-mk-qa-master-badge.png)](https://mseep.ai/app/kao273183-mk-qa-master)
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/kao273183/mk-qa-master/main/assets/logo.png" alt="mk-qa-master logo" width="180" />
 </p>
