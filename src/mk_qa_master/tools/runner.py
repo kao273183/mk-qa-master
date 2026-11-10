@@ -32,8 +32,33 @@ def run_tests(filter=None, headed=False, browser="chromium",
         # — the run itself succeeded; only the verification step had a
         # problem. Mirrors the v0.9.4 api_security pattern exactly.
         result["plan_verification"] = verify_result
+    _attach_result_hooks("run_tests", result)
     return result
 
 
 def run_failed() -> dict:
-    return get_runner().run_failed()
+    result = get_runner().run_failed()
+    _attach_result_hooks("run_failed", result)
+    return result
+
+
+def _attach_result_hooks(tool: str, result: object) -> None:
+    """v1.5.0 — fan the finished run out to `mk_qa_master.result_hooks`
+    plugins (e.g. a private TCMS reporter). Adds `result_hooks` only when
+    at least one hook is installed, so plugin-free responses are unchanged.
+    Hook failures are reported per hook and never fail the run."""
+    if not isinstance(result, dict) or "error" in result:
+        return
+    from .. import plugins
+    from ..config import PROJECT_ROOT, REPORT_PATH
+
+    if not plugins.get_state().result_hooks:
+        return
+    event = {
+        "tool": tool,
+        "runner": get_runner().name,
+        "result": dict(result),
+        "report_path": str(REPORT_PATH),
+        "project_root": str(PROJECT_ROOT),
+    }
+    result["result_hooks"] = plugins.run_result_hooks(event)

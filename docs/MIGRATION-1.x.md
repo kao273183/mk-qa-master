@@ -282,3 +282,25 @@ MCP surface
 - `mk-qa-master <typo>` → error to stderr + exit 2 (prevents accidentally starting a server when the caller meant a subcommand)
 
 **Action required**: none. Existing MCP host integrations (Claude Code / Codex / OpenClaw / Hermes) continue to invoke `mk-qa-master` with no args and get the server. The doctor is purely a manual operator tool.
+
+### v1.4.0 → v1.5.0 (Plugin entry points — minor, unreleased)
+
+**Additive only. No core surface change** (the frozen core tool count stays at 22). Full guide: [`PLUGINS.md`](PLUGINS.md).
+
+**New: plugin discovery** via four Python entry-point groups — `mk_qa_master.runners`, `mk_qa_master.tools`, `mk_qa_master.knowledge`, `mk_qa_master.result_hooks`. Installing a plugin package next to mk-qa-master is enough; no fork required.
+
+- Plugin tools are appended **after** the 22 core tools and can be scoped to a runner (`PluginTool(runners=("flutterqa",))`). Names colliding with core tools are ignored.
+- Built-in runner names cannot be shadowed by plugins.
+- Import / registration failures never break the server; they are reported under `get_runner_info` → `plugins.errors`.
+- `MK_QA_PLUGINS=0` disables discovery. `tests/conftest.py` sets it by default so the v1 snapshot tests stay independent of locally installed plugins.
+
+**Additive response fields** (present only when a plugin is installed):
+
+| Tool | New field |
+|---|---|
+| `get_runner_info` | `plugins: {enabled, loaded[], errors[]}` |
+| `run_tests` / `run_failed` | `result_hooks: [{hook, ok, output \| error}]` |
+
+**Knowledge layer**: two new built-in methodology sections in both languages — *Risk, Severity and Priority* and *Defect Reports* (17 methodology sections per language). Plugin knowledge sections are inserted between the methodology and the `Your …` domain slots.
+
+**Action required**: none.
