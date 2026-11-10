@@ -283,7 +283,7 @@ MCP surface
 
 **Action required**: none. Existing MCP host integrations (Claude Code / Codex / OpenClaw / Hermes) continue to invoke `mk-qa-master` with no args and get the server. The doctor is purely a manual operator tool.
 
-### v1.4.0 → v1.5.0 (Plugin entry points — minor, unreleased)
+### v1.4.0 → v1.5.0 (Plugin entry points — minor)
 
 **Additive only. No core surface change** (the frozen core tool count stays at 22). Full guide: [`PLUGINS.md`](PLUGINS.md).
 
@@ -304,3 +304,5 @@ MCP surface
 **Knowledge layer**: two new built-in methodology sections in both languages — *Risk, Severity and Priority* and *Defect Reports* (17 methodology sections per language). Plugin knowledge sections are inserted between the methodology and the `Your …` domain slots.
 
 **Action required**: none.
+
+**Dependency pin**: `mcp>=1.0.0,<2`. mcp 2.x removed `Server.list_tools()` / `call_tool()` decorators, so an unpinned fresh install (which resolves mcp 2.x today) failed at import. Hosts already on mcp 1.x are unaffected.
