@@ -19,7 +19,7 @@ match) when it needs just one slice.
 
 Bilingual since v0.6.2: the built-in methodology ships in English
 (default, QA_LANG=en) and Traditional Chinese (QA_LANG=zh-tw). Each
-language carries the same 13 H2 sections. Adapted translation, not
+language carries the same 17 methodology H2 sections (v1.5.0 added risk / severity / priority and defect reports), plus any sections contributed by `mk_qa_master.knowledge` plugins. Adapted translation, not
 literal — code blocks / tool names / file paths are not translated.
 The user's own qa-knowledge.md is served back unchanged regardless of
 QA_LANG; only the built-in fallback and the starter template body
@@ -502,13 +502,58 @@ mk-qa-master 計劃中的 `solve_visual_challenge` tool：
 | 雲端 GPU 推論服務 | 60 | 16 | 0.6 |
 
 行數字當起點調，超出 SLA 第一次就 fail、不要等多次跌破才補測。
+
+## 風險、嚴重度與優先級 (v1.5.0+)
+### 風險導向測試
+風險 = 發生機率 × 影響程度，決定測試的深度與順序。
+| 影響 ＼ 機率 | 低 | 中 | 高 |
+|---|---|---|---|
+| **高**（金流、資料遺失、法規、無法登入） | 中 | 高 | **最高** |
+| **中**（主要功能有替代方案） | 低 | 中 | 高 |
+| **低**（外觀、少用功能） | 最低 | 低 | 中 |
+
+機率高的訊號：本次有改動、程式複雜、新技術、歷史 bug 多、多團隊共用、外部依賴。
+
+### 嚴重度（Severity）：對系統的影響
+| 等級 | 定義 | 例 |
+|---|---|---|
+| **S1 致命** | 閃退、資料遺失、資安、主流程完全不能用 | 無法登入、重複扣款 |
+| **S2 嚴重** | 主要功能錯誤且無替代方案 | 搜尋結果錯誤 |
+| **S3 一般** | 有替代方案或次要功能 | 排序錯誤 |
+| **S4 輕微** | 外觀、文字、體驗 | 錯字、間距 |
+
+### 優先級（Priority）：多快要修
+P0 立即（擋發版 / 緊急更新）· P1 本版必修 · P2 下版 · P3 有空再修。
+嚴重度 ≠ 優先級：首頁 logo 錯字是 S4 但可能 P0；冷門功能閃退是 S1 但可能 P2。
+
+### 發版標準（Exit Criteria）範例
+- P0 / P1 案例 100% 執行且通過
+- 無未解的 S1 / S2
+- 自動化 flaky 比例 < 3%
+- 效能、跑版、無障礙檢查無新增退步
+
+## 缺陷報告 (v1.5.0+)
+好的缺陷報告讓開發**不用回頭問**就能重現。
+```
+標題：[模組] 在什麼情況下 + 發生什麼問題
+環境：App / 網站版本、裝置 / 瀏覽器、OS、網路、帳號類型（不寫密碼）
+前置條件：…
+重現步驟：1. … 2. … 3. …（每步一個動作）
+預期結果：…
+實際結果：…
+重現機率：5/5
+嚴重度 / 優先級：S1 / P1
+證據：截圖、錄影、log、trace、對應的測試 nodeid / TCMS 案例
+```
+檢查：標題看得出功能和問題 · 預期與實際分開寫 · 偶發要寫「試 N 次出現 M 次」· 閃退必附 log · **不含密碼 / token / 真實個資** · 已查重。
+AI 產生的缺陷報告：標記為 AI 產生、重現步驟必須是**實際執行過**的步驟，經 QA 確認後才指派。
 """
 
 
 # ---------------------------------------------------------------------------
 # English methodology (NEW in v0.6.2 — default served when QA_LANG=en).
 # Adapted translation: idiomatic English, paragraphs reflowed for natural
-# reading. Code blocks / tool names / file paths kept verbatim. Same 13
+# reading. Code blocks / tool names / file paths kept verbatim. Same 17
 # H2 sections as the zh-TW version so the section-name lookup works
 # across languages, modulo translated section titles.
 # ---------------------------------------------------------------------------
@@ -980,6 +1025,51 @@ Not your site at all?            -> Don't run CAPTCHA bypass or solvers
 | Cloud GPU inference service | 60 | 16 | 0.6 |
 
 Take these as starting points and tune. Fail the very first time SLA is breached — don't wait until repeated regressions accumulate.
+
+## Risk, Severity and Priority (v1.5.0+)
+### Risk-based testing
+Risk = likelihood × impact; it decides how deep and how early you test.
+| Impact \\ Likelihood | Low | Medium | High |
+|---|---|---|---|
+| **High** (payments, data loss, compliance, cannot log in) | Medium | High | **Highest** |
+| **Medium** (core feature with a workaround) | Low | Medium | High |
+| **Low** (cosmetic, rarely used) | Lowest | Low | Medium |
+
+High-likelihood signals: changed in this release, complex code, new tech, bug-prone history, shared across teams, external dependencies.
+
+### Severity: impact on the system
+| Level | Definition | Example |
+|---|---|---|
+| **S1 Critical** | Crash, data loss, security, core flow unusable | Cannot log in, double charge |
+| **S2 Major** | Core feature wrong with no workaround | Wrong search results |
+| **S3 Moderate** | Workaround exists, or secondary feature | Wrong sort order |
+| **S4 Minor** | Cosmetic, copy, UX | Typo, spacing |
+
+### Priority: how soon to fix
+P0 now (blocks release / hotfix) · P1 this release · P2 next release · P3 when time allows.
+Severity ≠ priority: a typo in the home-page logo is S4 but may be P0; a crash in a rarely used feature is S1 but may be P2.
+
+### Example exit criteria
+- 100% of P0 / P1 cases executed and passing
+- No open S1 / S2 defects
+- Automated flaky rate < 3%
+- No new regressions in performance, layout or accessibility checks
+
+## Defect Reports (v1.5.0+)
+A good defect report lets a developer reproduce it **without asking a single question**.
+```
+Title: [Module] under which condition + what goes wrong
+Environment: app / site version, device / browser, OS, network, account type (never the password)
+Preconditions: …
+Steps to reproduce: 1. … 2. … 3. … (one action per step)
+Expected: …
+Actual: …
+Reproducibility: 5/5
+Severity / Priority: S1 / P1
+Evidence: screenshot, video, logs, trace, linked test nodeid / test-case ID
+```
+Checklist: title names the feature and the problem · expected and actual kept separate · intermittent issues state "seen M of N tries" · crashes always attach logs · **no passwords / tokens / real personal data** · searched for duplicates.
+AI-generated defect reports: label them as AI-generated; steps must be ones the agent **actually executed**; a human QA confirms before assignment.
 """
 
 
@@ -1029,9 +1119,15 @@ def _builtin_for_lang(lang: str) -> str:
     config.QA_LANG; we still defensively check for `zh-tw` and fall back
     to English so a bad runtime override doesn't crash the server.
     """
+    # v1.5.0 — sections contributed by `mk_qa_master.knowledge` plugins sit
+    # between the universal methodology and the domain TODO slots. Empty
+    # string when no plugin is installed, so the plugin-free output is
+    # unchanged apart from the two new core sections.
+    from ..plugins import knowledge_markdown
+
     if lang == "zh-tw":
-        return _UNIVERSAL_METHODOLOGY_ZH + _DOMAIN_TODO_SECTIONS_ZH
-    return _UNIVERSAL_METHODOLOGY_EN + _DOMAIN_TODO_SECTIONS_EN
+        return _UNIVERSAL_METHODOLOGY_ZH + knowledge_markdown("zh-tw") + _DOMAIN_TODO_SECTIONS_ZH
+    return _UNIVERSAL_METHODOLOGY_EN + knowledge_markdown("en") + _DOMAIN_TODO_SECTIONS_EN
 
 
 _BUILTIN_HEADER_ZH = (

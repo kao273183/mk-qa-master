@@ -8,7 +8,8 @@ from mcp.types import Tool, TextContent, ImageContent, Resource
 from pydantic import AnyUrl
 
 from .tools import runner, reporter, generator, analyzer, telemetry, optimizer, qa_context, visual_challenge
-from .runners import get_runner, REGISTRY
+from .runners import get_runner, REGISTRY, current_runner_name
+from . import plugins
 from .reporters import html as html_reporter
 from .config import REPORT_PATH, OPTIMIZATION_PATH
 
@@ -17,6 +18,58 @@ app = Server("mk-qa-master")
 
 @app.list_tools()
 async def list_tools() -> list[Tool]:
+    """Frozen v1 core surface, followed by any plugin tools (v1.5.0).
+
+    Plugin tools are always appended *after* the core list and are absent
+    when no plugin is installed (or MK_QA_PLUGINS=0), so the v1 snapshot
+    contract over the core tools is unaffected.
+    """
+    core = _core_tools()
+    return core + _plugin_tools({t.name for t in core})
+
+
+def _plugin_tools(core_names: set[str]) -> list[Tool]:
+    state = plugins.get_state()
+    runner_name = current_runner_name()
+    out: list[Tool] = []
+    for pt in state.tools:
+        if pt.name in core_names:
+            err = {"group": plugins.GROUP_TOOLS, "name": pt.name, "value": "",
+                   "error": f"tool name {pt.name!r} collides with a core tool; ignored"}
+            if err not in state.errors:
+                state.errors.append(err)
+            continue
+        if not pt.active_for(runner_name):
+            continue
+        out.append(Tool(name=pt.name, description=pt.description, inputSchema=pt.input_schema))
+    return out
+
+
+def _find_plugin_tool(name: str) -> "plugins.PluginTool | None":
+    if not plugins.plugins_enabled():
+        return None
+    runner_name = current_runner_name()
+    for pt in plugins.get_state().tools:
+        if pt.name == name and pt.active_for(runner_name):
+            return pt
+    return None
+
+
+async def _call_plugin_tool(pt: "plugins.PluginTool", args: dict) -> list:
+    result = await asyncio.to_thread(pt.handler, args or {})
+    if isinstance(result, str):
+        return [TextContent(type="text", text=result)]
+    b64 = result.pop("image_base64", None) if isinstance(result, dict) else None
+    blocks: list = []
+    if b64:
+        if isinstance(b64, str) and b64.startswith("data:"):
+            b64 = b64.split(",", 1)[1] if "," in b64 else b64
+        blocks.append(ImageContent(type="image", data=b64, mimeType="image/png"))
+    blocks.append(TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2, default=str)))
+    return blocks
+
+
+def _core_tools() -> list[Tool]:
     return [
         Tool(
             name="get_runner_info",
@@ -1102,10 +1155,19 @@ async def call_tool(name: str, args: dict) -> list[TextContent]:
 
 async def _dispatch(name: str, args: dict) -> list[TextContent]:
     if name == "get_runner_info":
+        # Read the registry through the module (not the name bound at import)
+        # so plugin runners merged after a config reload are visible too.
+        from . import runners as _runners
+        _runners._merge_plugin_runners()
         info = {
             "current": get_runner().name,
-            "available": sorted(set(r.name for r in REGISTRY.values())),
+            "available": sorted(set(r.name for r in _runners.REGISTRY.values())),
         }
+        # v1.5.0 — only present when at least one plugin loaded or failed,
+        # so the response stays byte-identical for plugin-free installs.
+        state = plugins.get_state()
+        if state.sources or state.errors:
+            info["plugins"] = state.summary()
         return [TextContent(type="text", text=json.dumps(info, ensure_ascii=False, indent=2))]
 
     if name == "list_tests":
@@ -1314,6 +1376,10 @@ async def _dispatch(name: str, args: dict) -> list[TextContent]:
             type="text",
             text=json.dumps(result, ensure_ascii=False, indent=2),
         )]
+
+    plugin_tool = _find_plugin_tool(name)
+    if plugin_tool is not None:
+        return await _call_plugin_tool(plugin_tool, args)
 
     return [TextContent(type="text", text=f"未知的 tool: {name}")]
 

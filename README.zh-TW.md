@@ -394,8 +394,12 @@ QA_PROJECT_ROOT = "/path/to/your-test-project"
 | `get_test_history` | 最近 N 次 run 摘要（看 flake 與趨勢） |
 | `analyze_url` | **Web**: DOM 探測 → modules + selectors + candidate TCs + API endpoints + 跑版偵測 |
 | `analyze_screen` | **Mobile**: `maestro hierarchy` → form / cta / tab_bar modules + candidate TCs（噪音過濾過） |
-| `init_qa_knowledge` / `get_qa_context` | 建立 + 讀取專案 QA 知識（內建方法論 + 你的領域）。**v0.6.2 起雙語**：方法論預設英文 (`QA_LANG=en`)，繁體中文設 `QA_LANG=zh-tw`；兩種語言共 13 個區段，最新 4 個涵蓋 API 測試方法論、Flaky 根因分類、測試替身（mock / stub / fake / spy）、測試資料管理。領域填法範例：[`docs/qa-knowledge.example.md`](docs/qa-knowledge.example.md)（English: [`docs/qa-knowledge-en.example.md`](docs/qa-knowledge-en.example.md)）。 |
+| `init_qa_knowledge` / `get_qa_context` | 建立 + 讀取專案 QA 知識（內建方法論 + 你的領域）。**v0.6.2 起雙語**：方法論預設英文 (`QA_LANG=en`)，繁體中文設 `QA_LANG=zh-tw`；兩種語言各 17 個方法論區段，包含 API 測試、Flaky 根因分類、測試替身、測試資料管理，以及 v1.5.0 新增的風險 / 嚴重度 / 優先級與缺陷報告；外掛可以再加區段（[`docs/PLUGINS.md`](docs/PLUGINS.md)）。領域填法範例：[`docs/qa-knowledge.example.md`](docs/qa-knowledge.example.md)（English: [`docs/qa-knowledge-en.example.md`](docs/qa-knowledge-en.example.md)）。 |
 | `get_optimization_plan` | 三層自我強化教練（測試品質 / MCP 使用 / AI 策略） |
+
+### 外掛（v1.5.0 起）
+
+不用 fork 就能擴充：和 mk-qa-master 裝在同一個環境的套件，可以透過 Python entry points 新增 **runner**、**MCP 工具**（排在 22 個凍結的核心工具之後）、**QA 知識區段**，以及**結果 hook**（例如把結果推到公司內部的 TCMS）。外掛壞掉不會影響 server；設定 `MK_QA_PLUGINS=0` 可以關閉。詳見 [`docs/PLUGINS.md`](docs/PLUGINS.md)。
 
 ### Resources
 

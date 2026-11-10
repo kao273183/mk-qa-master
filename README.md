@@ -845,10 +845,14 @@ Shared across all runners (some tools degrade gracefully on non-pytest runners):
 | `get_test_history` | Last N archived run summaries (for trend / flake debugging) |
 | `analyze_url` | **Web**: DOM probe → modules + selectors + candidate TCs + API endpoints + layout overflow warnings |
 | `analyze_screen` | **Mobile**: `maestro hierarchy` → form / cta / tab_bar modules + candidate TCs (noise-filtered) |
-| `init_qa_knowledge` / `get_qa_context` | Scaffold + read the project's QA knowledge layer (methodology + domain). **Bilingual since v0.6.2** — methodology ships in English by default (`QA_LANG=en`) or Traditional Chinese (`QA_LANG=zh-tw`); same 13 sections in both, the four newest cover API testing methodology, flakiness root-cause taxonomy, test doubles (mock / stub / fake / spy), and test data management. Domain example: [`docs/qa-knowledge-en.example.md`](docs/qa-knowledge-en.example.md) (zh-TW: [`docs/qa-knowledge.example.md`](docs/qa-knowledge.example.md)). |
+| `init_qa_knowledge` / `get_qa_context` | Scaffold + read the project's QA knowledge layer (methodology + domain). **Bilingual since v0.6.2** — methodology ships in English by default (`QA_LANG=en`) or Traditional Chinese (`QA_LANG=zh-tw`); same 17 methodology sections in both — including API testing, flakiness root-cause taxonomy, test doubles, test data management, and (v1.5.0) risk / severity / priority and defect reports. Plugins can add more sections ([`docs/PLUGINS.md`](docs/PLUGINS.md)). Domain example: [`docs/qa-knowledge-en.example.md`](docs/qa-knowledge-en.example.md) (zh-TW: [`docs/qa-knowledge.example.md`](docs/qa-knowledge.example.md)). |
 | `get_optimization_plan` | Three-layer self-improvement coach (suite / MCP / AI strategy) |
 | `inspect_visual_challenge` / `solve_visual_challenge` | **v0.7.0** AI Visual Challenge Solver — detect a reCAPTCHA v2 image-grid challenge, screenshot it, accept the AI client's tile selection, execute the click chain. Gated by `QA_VISUAL_CHALLENGE_CONSENT=true` + per-call `confirm=true`. See the dedicated section above. |
 | `run_api_security_scan` | **v0.8.0** OWASP API Security Top 10 (2023) rule-based scanner — load an OpenAPI 3.x spec, walk path × method, dispatch 5 in-scope rules (API1 BOLA, API2 Broken Auth, API3 Mass Assignment, API5 Function-Level Authz, API8 Misconfig). Gated by `QA_API_SECURITY_CONSENT=true` + `QA_API_SECURITY_AUTHORIZED_DOMAINS`. See the dedicated section above. |
+
+### Plugins (v1.5.0+)
+
+Extend mk-qa-master without forking: a package installed next to it can add **runners**, **MCP tools** (appended after the 22 frozen core tools), **QA knowledge sections**, and **result hooks** (e.g. push results to a private TCMS) through Python entry points. Broken plugins never break the server; `MK_QA_PLUGINS=0` turns discovery off. See [`docs/PLUGINS.md`](docs/PLUGINS.md).
 
 ### Resources
 
